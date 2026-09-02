@@ -51,15 +51,15 @@ declare
   v_take int;
   v_lot record;
 begin
-  if v_org is null then raise exception 'UsuÃ¡rio sem organizaÃ§Ã£o vinculada'; end if;
-  if not exists (select 1 from public.employees where id = p_employee_id and organization_id = v_org and status <> 'terminated') then raise exception 'FuncionÃ¡rio nÃ£o encontrado ou desligado'; end if;
+  if v_org is null then raise exception 'Usuário sem organização vinculada'; end if;
+  if not exists (select 1 from public.employees where id = p_employee_id and organization_id = v_org and status <> 'terminated') then raise exception 'Funcionário não encontrado ou desligado'; end if;
   if p_items is null or jsonb_array_length(p_items) = 0 then raise exception 'Adicione ao menos um material'; end if;
   insert into public.deliveries (organization_id, employee_id, delivered_at, reason, responsible_id, notes)
   values (v_org, p_employee_id, coalesce(p_delivered_at, current_date), p_reason, (select auth.uid()), nullif(trim(p_notes), '')) returning id into v_delivery;
   for v_item in select * from jsonb_array_elements(p_items) loop
     v_material := (v_item->>'material_id')::uuid;
     v_requested := (v_item->>'quantity')::int;
-    if v_requested is null or v_requested <= 0 then raise exception 'Quantidade invÃ¡lida para o material'; end if;
+    if v_requested is null or v_requested <= 0 then raise exception 'Quantidade inválida para o material'; end if;
     v_remaining := v_requested;
     for v_lot in select id, available_quantity from public.material_lots where organization_id = v_org and material_id = v_material and available_quantity > 0 and (expires_at is null or expires_at >= current_date) order by expires_at asc nulls last, entry_date asc, created_at asc for update loop
       exit when v_remaining = 0;
