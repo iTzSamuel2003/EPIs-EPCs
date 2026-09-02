@@ -31,6 +31,7 @@ alter table public.stock_movements enable row level security;
 alter table public.audit_logs enable row level security;
 
 create or replace function public.current_organization_id() returns uuid language sql stable security invoker set search_path=public as $$ select organization_id from public.profiles where id=(select auth.uid()) $$;
+create policy "organization members can access organization" on public.organizations for all to authenticated using (id=public.current_organization_id()) with check (id=public.current_organization_id());
 create policy "users can read their profile" on public.profiles for select to authenticated using (id=(select auth.uid()) or organization_id=public.current_organization_id());
 create policy "users can update their profile" on public.profiles for update to authenticated using (id=(select auth.uid())) with check (id=(select auth.uid()));
 do $$ declare t text; begin for t in select unnest(array['organizations','categories','materials','employees','suppliers','material_lots','stock_movements','audit_logs']) loop execute format('create policy "organization members can access" on public.%I for all to authenticated using (organization_id=public.current_organization_id()) with check (organization_id=public.current_organization_id())',t); end loop; end $$;
