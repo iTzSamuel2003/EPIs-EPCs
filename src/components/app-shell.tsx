@@ -6,7 +6,7 @@ import { usePathname } from "next/navigation";
 import { useState } from "react";
 
 const menu = [
-  ["Dashboard", LayoutDashboard, "/"], ["Materiais", Boxes, "/materials"], ["Funcionários", Users, "/employees"],
+  ["Dashboard", LayoutDashboard, "/"], ["Materiais", Boxes, "/materials"], ["Listas por função", ClipboardList, "/function-templates"], ["Funcionários", Users, "/employees"],
   ["Entregas", ArrowUpRight, "/deliveries"], ["Devoluções", ArrowDownToLine, "/returns"], ["Estoque", PackageCheck, "/stock"],
   ["Entradas", ClipboardList, "/entries"], ["Validades", CalendarClock, "/validities"], ["Ensaios", ClipboardCheck, "/tests"],
   ["CA", ShieldCheck, "/ca"], ["Relatórios", ClipboardList, "/reports"], ["Movimentações", SlidersHorizontal, "/movements"],
@@ -27,3 +27,4 @@ export function AppShell({ children }: { children: React.ReactNode }) {
     <main className="main-content"><header className="topbar"><button className="menu-toggle" onClick={() => setMobileMenu(true)} aria-label="Abrir menu"><Menu size={22} /></button><div className="breadcrumb"><span>Visão geral</span><span>/</span><strong>{pathname === "/" ? "Dashboard" : menu.find((item) => item[2] === pathname)?.[0] ?? "EPIS+"}</strong></div><div className="top-actions"><div className="search"><Search size={18} /><input placeholder="Buscar materiais, funcionários..." /></div><button className="icon-button notification" aria-label="Notificações"><Bell size={19} /><i /></button><div className="profile"><div className="avatar avatar-blue">SA</div><div><strong>Samuel Albuquerque</strong><small>Administrador</small></div><ChevronDown size={15} /></div></div></header>{children}</main>
   </div>;
 }
+
