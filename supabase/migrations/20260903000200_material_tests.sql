@@ -49,4 +49,3 @@ $$;
 
 revoke all on function public.register_material_test(uuid, date, int, text, text, text, text) from public;
 grant execute on function public.register_material_test(uuid, date, int, text, text, text, text) to authenticated;
-

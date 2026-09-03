@@ -28,8 +28,7 @@ for (const file of [...new Set(files)]) {
 }
 
 if (failures.length) {
-  console.error(`PossÃ­vel codificaÃ§Ã£o incorreta em: ${failures.join(", ")}`);
+  console.error(`Possível codificação incorreta em: ${failures.join(", ")}`);
   process.exit(1);
 }
-console.log("CodificaÃ§Ã£o UTF-8 validada: nenhum texto corrompido encontrado.");
-
+console.log("Codificação UTF-8 validada: nenhum texto corrompido encontrado.");

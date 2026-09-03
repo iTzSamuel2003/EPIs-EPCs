@@ -63,4 +63,3 @@ begin
     ('aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaa2', v_org, '22222222-2222-4222-8222-222222222222', '2026-06-15', 12, '2027-06-15', 'approved', 'Engenharia Segura Ltda.', 'LAUDO-2026-062', 'Ensaio periódico aprovado.', v_admin)
   on conflict (id) do nothing;
 end $$;
-

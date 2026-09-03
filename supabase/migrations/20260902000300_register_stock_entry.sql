@@ -19,13 +19,13 @@ declare
 begin
   v_organization_id := private.current_organization_id();
   if v_organization_id is null then
-    raise exception 'UsuÃ¡rio sem organizaÃ§Ã£o vinculada';
+    raise exception 'Usuário sem organização vinculada';
   end if;
   if p_quantity is null or p_quantity <= 0 then
     raise exception 'A quantidade deve ser maior que zero';
   end if;
   if not exists (select 1 from public.materials where id = p_material_id and organization_id = v_organization_id) then
-    raise exception 'Material nÃ£o encontrado na organizaÃ§Ã£o';
+    raise exception 'Material não encontrado na organização';
   end if;
 
   insert into public.material_lots (organization_id, material_id, lot_number, received_quantity, available_quantity, entry_date, manufactured_at, expires_at, invoice_number, notes)
@@ -40,4 +40,3 @@ $$;
 
 revoke all on function public.register_stock_entry(uuid, text, integer, date, date, date, text, text) from public;
 grant execute on function public.register_stock_entry(uuid, text, integer, date, date, date, text, text) to authenticated;
-

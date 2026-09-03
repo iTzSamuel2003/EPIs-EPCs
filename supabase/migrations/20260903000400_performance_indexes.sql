@@ -1,5 +1,5 @@
--- Ãndices para as consultas mais frequentes das listas e filtros do sistema.
--- Todos comeÃ§am pela organizaÃ§Ã£o porque o RLS restringe os dados por organizaÃ§Ã£o.
+-- Índices para as consultas mais frequentes das listas e filtros do sistema.
+-- Todos começam pela organização porque o RLS restringe os dados por organização.
 create index if not exists materials_org_name_idx
   on public.materials(organization_id, name);
 
@@ -21,4 +21,3 @@ create index if not exists delivery_items_delivery_created_idx
 
 create index if not exists returns_items_delivery_item_idx
   on public.return_items(delivery_item_id);
-

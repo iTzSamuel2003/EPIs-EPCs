@@ -30,4 +30,3 @@ Preencha `NEXT_PUBLIC_SUPABASE_URL` e `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY` no 
 ## Validação
 
 `npm run lint` e `npm run build` devem passar antes de cada entrega.
-

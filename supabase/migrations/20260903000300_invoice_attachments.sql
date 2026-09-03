@@ -51,4 +51,3 @@ end;
 $$;
 revoke all on function public.register_stock_entry(uuid, text, integer, date, date, date, text, text, text) from public;
 grant execute on function public.register_stock_entry(uuid, text, integer, date, date, date, text, text, text) to authenticated;
-

@@ -6,4 +6,3 @@ export interface Material { id: string; internalCode: string; name: string; type
 export interface Employee { id: string; registration: string; fullName: string; cpf: string; role?: string; department?: string; status: EmployeeStatus; }
 export interface StockLot { id: string; materialId: string; lotNumber: string; receivedQuantity: number; availableQuantity: number; entryDate: string; expiresAt?: string; }
 export interface StockMovement { id: string; materialId: string; lotId?: string; movementType: "entry" | "delivery" | "return" | "adjustment" | "discard"; quantity: number; createdAt: string; createdBy: string; }
-

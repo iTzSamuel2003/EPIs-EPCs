@@ -37,4 +37,3 @@ do $$ declare t text; begin
     execute format('create policy "organization members can access" on public.%I for all to authenticated using (organization_id=private.current_organization_id()) with check (organization_id=private.current_organization_id())', t);
   end loop;
 end $$;
-

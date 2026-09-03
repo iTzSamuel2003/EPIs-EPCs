@@ -35,4 +35,3 @@ create policy "organization members can access organization" on public.organizat
 create policy "users can read their profile" on public.profiles for select to authenticated using (id=(select auth.uid()) or organization_id=public.current_organization_id());
 create policy "users can update their profile" on public.profiles for update to authenticated using (id=(select auth.uid())) with check (id=(select auth.uid()));
 do $$ declare t text; begin for t in select unnest(array['categories','materials','employees','suppliers','material_lots','stock_movements','audit_logs']) loop execute format('create policy "organization members can access" on public.%I for all to authenticated using (organization_id=public.current_organization_id()) with check (organization_id=public.current_organization_id())',t); end loop; end $$;
-

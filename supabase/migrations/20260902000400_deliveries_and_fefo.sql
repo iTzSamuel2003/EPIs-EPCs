@@ -77,4 +77,3 @@ $$;
 
 revoke all on function public.register_delivery(uuid, text, date, jsonb, text) from public;
 grant execute on function public.register_delivery(uuid, text, date, jsonb, text) to authenticated;
-
