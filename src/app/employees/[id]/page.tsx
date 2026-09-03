@@ -1,7 +1,25 @@
-Get-Content : Não é possível localizar um parâmetro que coincida com o nome de parâmetro 'Raw'.
-No linha:2 caractere:13
-+ Get-Content -Raw -Encoding UTF8 'src/app/employees/[id]/page.tsx'
-+             ~~~~
-    + CategoryInfo          : InvalidArgument: (:) [Get-Content], ParameterBindingException
-    + FullyQualifiedErrorId : NamedParameterNotFound,Microsoft.PowerShell.Commands.GetContentCommand
- 
+"use client";
+
+import { useEffect, useState } from "react";
+import { ArrowLeft, Download, LoaderCircle, Printer, ShieldCheck, X } from "lucide-react";
+import Link from "next/link";
+import { useParams } from "next/navigation";
+import { createClient } from "@/lib/supabase/client";
+
+type Employee = { id: string; registration: string; full_name: string; cpf: string; job_title: string | null; department: string | null; company: string | null; unit: string | null; status: string };
+type Item = { id: string; quantity: number; expected_replacement_at: string | null; material: { name: string; internal_code: string; unit: string } | null; lot: { lot_number: string } | null; delivery: { delivered_at: string; reason: string } | null };
+
+const reasonLabels: Record<string, string> = { admission: "Admissão", periodic_change: "Troca periódica", damaged: "Equipamento danificado", lost: "Equipamento perdido", role_change: "Alteração de função", replacement: "Substituição", other: "Outro" };
+function date(value: string | null) { return value ? new Date(`${value}T00:00:00`).toLocaleDateString("pt-BR") : "—"; }
+
+export default function EmployeeMaterialsPage() {
+  const params = useParams<{ id: string }>(); const [employee, setEmployee] = useState<Employee | null>(null); const [items, setItems] = useState<Item[]>([]); const [loading, setLoading] = useState(true); const [error, setError] = useState("");
+  // eslint-disable-next-line react-hooks/immutability, react-hooks/exhaustive-deps
+  useEffect(() => { const timer = window.setTimeout(() => { void load(); }, 0); return () => window.clearTimeout(timer); }, []);
+  async function load() { const supabase = createClient(); const [{ data: employeeData, error: employeeError }, { data: deliveryData, error: deliveryError }] = await Promise.all([supabase.from("employees").select("id, registration, full_name, cpf, job_title, department, company, unit, status").eq("id", params.id).single(), supabase.from("delivery_items").select("id, quantity, expected_replacement_at, materials(name, internal_code, unit), material_lots(lot_number), deliveries!inner(delivered_at, reason, employee_id)").eq("deliveries.employee_id", params.id).order("created_at", { ascending: false })]); if (employeeError || deliveryError) setError(employeeError?.message ?? deliveryError?.message ?? "Não foi possível carregar a ficha."); else { setEmployee(employeeData as Employee); setItems(((deliveryData ?? []) as unknown[]).map((row) => { const value = row as Record<string, unknown>; return { id: String(value.id), quantity: Number(value.quantity), expected_replacement_at: value.expected_replacement_at as string | null, material: value.materials as Item["material"], lot: value.material_lots as Item["lot"], delivery: value.deliveries as Item["delivery"] }; })); } setLoading(false); }
+  function print() { window.print(); }
+  if (loading) return <main className="module-shell"><div className="module-loading"><LoaderCircle className="spin" size={22} /> Carregando ficha...</div></main>;
+  if (error || !employee) return <main className="module-shell"><div className="feedback error-feedback"><X size={17} /> {error || "Funcionário não encontrado."}</div><Link className="secondary-button" href="/employees"><ArrowLeft size={16} /> Funcionários</Link></main>;
+  return <main className="module-shell employee-sheet"><header className="module-header no-print"><div><p className="eyebrow">CONTROLE INDIVIDUAL</p><h1>Ficha de materiais</h1><p className="module-subtitle">Equipamentos entregues, lotes e próximas trocas de {employee.full_name}.</p></div><div className="header-actions"><Link className="secondary-button" href="/employees"><ArrowLeft size={16} /> Funcionários</Link><button className="secondary-button" onClick={print}><Printer size={16} /> Imprimir</button><button className="primary-button" onClick={print}><Download size={16} /> Baixar PDF</button></div></header><section className="panel sheet-card"><div className="sheet-brand"><div className="brand-mark"><ShieldCheck size={22} /></div><div><strong>EPIS<span>+</span></strong><small>Ficha de controle de materiais</small></div><span className="sheet-date">Emitida em {new Date().toLocaleDateString("pt-BR")}</span></div><div className="employee-summary"><div><span>Funcionário</span><strong>{employee.full_name}</strong></div><div><span>Matrícula</span><strong>{employee.registration}</strong></div><div><span>CPF</span><strong>{employee.cpf}</strong></div><div><span>Setor / função</span><strong>{employee.department || "—"} {employee.job_title ? `· ${employee.job_title}` : ""}</strong></div></div><div className="panel-header"><div><h2>Materiais sob responsabilidade</h2><p>{items.length} item(ns) registrado(s) em entregas</p></div></div>{items.length ? <div className="table-wrap"><table><thead><tr><th>MATERIAL</th><th>LOTE</th><th>QTD.</th><th>ENTREGA</th><th>TROCA PREVISTA</th><th>MOTIVO</th></tr></thead><tbody>{items.map((item) => <tr key={item.id}><td><strong>{item.material?.name || "Material"}</strong><small>{item.material?.internal_code} · {item.material?.unit}</small></td><td>{item.lot?.lot_number || "—"}</td><td>{item.quantity}</td><td>{date(item.delivery?.delivered_at ?? null)}</td><td>{date(item.expected_replacement_at)}</td><td>{reasonLabels[item.delivery?.reason ?? ""] || "—"}</td></tr>)}</tbody></table></div> : <div className="empty-state"><ShieldCheck size={27} /><strong>Nenhum material entregue</strong><span>Este funcionário ainda não possui entregas registradas.</span></div>}<div className="sheet-signatures"><div>Assinatura do funcionário</div><div>Responsável pelo controle</div></div></section></main>;
+}
+
