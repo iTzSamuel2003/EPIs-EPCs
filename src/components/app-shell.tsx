@@ -1,6 +1,6 @@
 "use client";
 
-import { ArrowDownToLine, ArrowUpRight, Boxes, CalendarClock, ClipboardList, LayoutDashboard, PackageCheck, Settings, ShieldCheck, SlidersHorizontal, Users, X, Menu, ChevronDown, CircleHelp, Search, Bell } from "lucide-react";
+import { ArrowDownToLine, ArrowUpRight, Boxes, CalendarClock, ClipboardCheck, ClipboardList, LayoutDashboard, PackageCheck, Settings, ShieldCheck, SlidersHorizontal, Users, X, Menu, ChevronDown, CircleHelp, Search, Bell } from "lucide-react";
 import { usePathname } from "next/navigation";
 import { useState } from "react";
 
@@ -13,6 +13,7 @@ const menu = [
   ["Estoque", PackageCheck, "/stock"],
   ["Entradas", ClipboardList, "/entries"],
   ["Validades", CalendarClock, "/validities"],
+  ["Ensaios", ClipboardCheck, "/tests"],
   ["CA", ShieldCheck, "#"],
   ["Relatórios", ClipboardList, "#"],
   ["Movimentações", SlidersHorizontal, "#"],
