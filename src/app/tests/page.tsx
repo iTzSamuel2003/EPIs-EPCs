@@ -4,7 +4,7 @@ import { FormEvent, useEffect, useMemo, useState } from "react";
 import { CalendarCheck, Check, ClipboardCheck, LoaderCircle, Plus, Search, X } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 
-type Material = { id: string; name: string; internal_code: string; type: "EPI" | "EPC"; unit: string };
+type Material = { id: string; name: string; internal_code: string; type: "EPI" | "EPC" | "FERRAMENTAL"; unit: string };
 type MaterialTest = { id: string; performed_at: string; interval_months: number; next_due_at: string; result: "approved" | "approved_with_restrictions" | "failed" | "pending"; examiner: string | null; certificate_number: string | null; material: Material | null };
 const results = [["approved", "Aprovado"], ["approved_with_restrictions", "Aprovado com restrições"], ["failed", "Reprovado"], ["pending", "Pendente"]];
 function daysUntil(value: string) { return Math.ceil((new Date(`${value}T00:00:00`).getTime() - new Date(new Date().toDateString()).getTime()) / 86400000); }

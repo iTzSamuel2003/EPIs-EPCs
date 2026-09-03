@@ -4,7 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import { CalendarClock, LoaderCircle, Search, ShieldCheck, X } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 
-type Lot = { id: string; lot_number: string; available_quantity: number; expires_at: string | null; material: { name: string; internal_code: string; type: "EPI" | "EPC"; unit: string } | null };
+type Lot = { id: string; lot_number: string; available_quantity: number; expires_at: string | null; material: { name: string; internal_code: string; type: "EPI" | "EPC" | "FERRAMENTAL"; unit: string } | null };
 function daysUntil(value: string | null) { if (!value) return null; return Math.ceil((new Date(`${value}T00:00:00`).getTime() - new Date(new Date().toDateString()).getTime()) / 86400000); }
 
 export default function ValiditiesPage() { const [lots, setLots] = useState<Lot[]>([]); const [query, setQuery] = useState(""); const [filter, setFilter] = useState("all"); const [loading, setLoading] = useState(true); const [error, setError] = useState("");

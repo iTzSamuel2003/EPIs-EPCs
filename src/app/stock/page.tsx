@@ -5,7 +5,7 @@ import { Boxes, ChevronDown, LoaderCircle, Search, X } from "lucide-react";
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/client";
 
-type StockMaterial = { id: string; internal_code: string; name: string; type: "EPI" | "EPC"; unit: string; minimum_stock: number; location: string | null; status: "active" | "inactive" };
+type StockMaterial = { id: string; internal_code: string; name: string; type: "EPI" | "EPC" | "FERRAMENTAL"; unit: string; minimum_stock: number; location: string | null; status: "active" | "inactive" };
 export default function StockPage() {
   const [materials, setMaterials] = useState<StockMaterial[]>([]); const [totals, setTotals] = useState<Record<string, number>>({}); const [query, setQuery] = useState(""); const [filter, setFilter] = useState("all"); const [loading, setLoading] = useState(true); const [error, setError] = useState("");
   async function load() { const supabase = createClient(); const [{ data, error: materialError }, { data: lots, error: lotError }] = await Promise.all([supabase.from("materials").select("id, internal_code, name, type, unit, minimum_stock, location, status").order("name"), supabase.from("material_lots").select("material_id, available_quantity")]); if (materialError || lotError) setError((materialError ?? lotError)?.message ?? "Não foi possível carregar o estoque."); else { setMaterials((data ?? []) as StockMaterial[]); setTotals((lots ?? []).reduce<Record<string, number>>((acc, lot) => { acc[lot.material_id] = (acc[lot.material_id] ?? 0) + (lot.available_quantity ?? 0); return acc; }, {})); } setLoading(false); }
