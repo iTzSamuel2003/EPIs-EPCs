@@ -1,5 +1,5 @@
 -- Complementos operacionais do MVP: variantes, perfil do colaborador,
--- custos, responsabilizaÃ§Ã£o de devoluÃ§Ãµes e auditoria.
+-- custos, responsabilização de devoluções e auditoria.
 
 create table if not exists public.material_variants (
   id uuid primary key default gen_random_uuid(),
@@ -99,7 +99,7 @@ declare
   v_id uuid;
 begin
   select employee_id into v_employee from public.returns where id = p_return_id and organization_id = v_org;
-  if v_employee is null then raise exception 'DevoluÃ§Ã£o nÃ£o encontrada'; end if;
+  if v_employee is null then raise exception 'Devolução não encontrada'; end if;
   insert into public.return_accountability (organization_id, return_id, employee_id, incident_type, incident_description, employee_signature_name, signed_at, deduction_requested, deduction_amount, created_by)
   values (v_org, p_return_id, v_employee, coalesce(nullif(p_incident_type, ''), 'normal'), nullif(trim(p_incident_description), ''), nullif(trim(p_employee_signature_name), ''), case when nullif(trim(p_employee_signature_name), '') is not null then now() end, coalesce(p_deduction_requested, false), case when p_deduction_requested then p_deduction_amount else null end, auth.uid())
   on conflict (return_id) do update set incident_type = excluded.incident_type, incident_description = excluded.incident_description, employee_signature_name = excluded.employee_signature_name, signed_at = excluded.signed_at, deduction_requested = excluded.deduction_requested, deduction_amount = excluded.deduction_amount
@@ -126,4 +126,3 @@ drop trigger if exists material_lots_audit on public.material_lots;
 create trigger material_lots_audit after insert or update or delete on public.material_lots for each row execute function public.audit_row_change();
 drop trigger if exists return_accountability_audit on public.return_accountability;
 create trigger return_accountability_audit after insert or update or delete on public.return_accountability for each row execute function public.audit_row_change();
-
