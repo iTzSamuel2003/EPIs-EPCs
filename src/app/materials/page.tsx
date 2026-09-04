@@ -6,7 +6,7 @@ import { createClient } from "@/lib/supabase/client";
 import type { MaterialType } from "@/types/domain";
 
 type MaterialRow = {
-  id: string; internal_code: string; name: string; type: MaterialType; unit: string;
+  id: string; internal_code: string | null; name: string; type: MaterialType; unit: string;
   description: string | null; brand: string | null; manufacturer: string | null; model: string | null;
   ca_number: string | null; ca_expires_at: string | null; useful_life_months: number | null;
   minimum_stock: number; location: string | null; notes: string | null; status: "active" | "inactive";
@@ -32,7 +32,7 @@ function statusFor(material: MaterialRow, stock: number) {
 
 function formFromMaterial(material: MaterialRow): MaterialForm {
   return {
-    internal_code: material.internal_code, name: material.name, type: material.type, unit: material.unit,
+    internal_code: material.internal_code ?? "", name: material.name, type: material.type, unit: material.unit,
     description: material.description ?? "", brand: material.brand ?? "", manufacturer: material.manufacturer ?? "",
     model: material.model ?? "", ca_number: material.ca_number ?? "", ca_expires_at: material.ca_expires_at ?? "",
     useful_life_months: material.useful_life_months?.toString() ?? "", minimum_stock: material.minimum_stock.toString(),
@@ -101,7 +101,7 @@ export default function MaterialsPage() {
     const { data: profile } = await supabase.from("profiles").select("organization_id").eq("id", auth.user.id).single();
     if (!profile?.organization_id) { setError("Não foi possível identificar a organização do usuário."); setSaving(false); return; }
     const payload = {
-      internal_code: form.internal_code.trim(), name: form.name.trim(), type: form.type, unit: form.unit.trim() || "un.",
+      internal_code: form.internal_code.trim() || null, name: form.name.trim(), type: form.type, unit: form.unit.trim() || "un.",
       description: form.description.trim() || null, brand: form.brand.trim() || null, manufacturer: form.manufacturer.trim() || null,
       model: form.model.trim() || null, ca_number: form.type === "EPI" ? form.ca_number.trim() : null,
       ca_expires_at: form.type === "EPI" ? form.ca_expires_at || null : null,
