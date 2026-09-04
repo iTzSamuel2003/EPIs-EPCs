@@ -5,6 +5,14 @@ declare
   v_org uuid;
   v_admin uuid := '6d3667d5-eba6-4c0e-b8ec-7ae8f96f5fcb';
 begin
+  insert into auth.users (id, aud, role, email, encrypted_password, email_confirmed_at, raw_app_meta_data, raw_user_meta_data, created_at, updated_at)
+  values (v_admin, 'authenticated', 'authenticated', 'admin.demo@example.com', crypt('demo-local-only', gen_salt('bf')), now(), '{"provider":"email","providers":["email"]}'::jsonb, '{"full_name":"Administrador demonstrativo"}'::jsonb, now(), now())
+  on conflict (id) do nothing;
+
+  insert into public.profiles (id, organization_id, full_name, role)
+  values (v_admin, '4dc792c1-5087-4eea-a806-e2957cd0d09d', 'Administrador demonstrativo', 'admin')
+  on conflict (id) do nothing;
+
   select id into v_org from public.organizations where name = 'EPIS+ - Organização principal' limit 1;
   if v_org is null then raise exception 'Organização principal não encontrada'; end if;
 

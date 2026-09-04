@@ -32,6 +32,10 @@ declare
   v_template uuid;
   v_item jsonb;
 begin
+  insert into public.organizations (id, name)
+  values (v_org, 'EPIS+ - Organização principal')
+  on conflict (id) do nothing;
+
   insert into public.function_templates (organization_id, name, source_document) values (v_org, 'Ajudante de poda', 'FICHA DE EPI -Ajudante de PODA.docx') returning id into v_template;
   for v_item in select * from jsonb_array_elements('[
     {"name":"Conjunto anti-chamas","quantity":5,"type":"EPI"},{"name":"Capacete aba total","quantity":1,"type":"EPI"},{"name":"Perneira","quantity":1,"type":"EPI"},{"name":"Óculos de proteção","quantity":1,"type":"EPI"},{"name":"Calçado de segurança","quantity":2,"type":"EPI"},{"name":"Luva de vaqueta","quantity":1,"type":"EPI"},{"name":"Balaclava","quantity":2,"type":"EPI"},{"name":"Óculos incolor","quantity":1,"type":"EPI"},{"name":"Capa de chuva","quantity":1,"type":"EPI"},{"name":"Bota de borracha","quantity":1,"type":"EPI"},{"name":"Protetor solar","quantity":1,"type":"EPI"}

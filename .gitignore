@@ -1,0 +1,10 @@
+.vercel/
+.env*
+!.env.example
+node_modules/
+.next/
+out/
+build/
+.worktrees/
+supabase/.temp/
+supabase/.branches/

@@ -1,6 +1,6 @@
 import Link from "next/link";
 
-type EmployeeSection = "sheet" | "edit" | "profile" | "courses";
+type EmployeeSection = "sheet" | "edit" | "profile" | "courses" | "history";
 
 type EmployeeNavigationProps = {
   id: string;
@@ -13,6 +13,7 @@ export function EmployeeNavigation({ id, current }: EmployeeNavigationProps) {
     { key: "edit" as const, label: "Editar", href: `/employees/${id}/edit` },
     { key: "profile" as const, label: "Medidas", href: `/employees/${id}/profile` },
     { key: "courses" as const, label: "Cursos", href: `/employees/${id}/courses` },
+    { key: "history" as const, label: "Histórico", href: `/employees/${id}/history` },
   ];
 
   return (
