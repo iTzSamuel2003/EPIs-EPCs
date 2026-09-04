@@ -48,7 +48,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
     return () => window.clearTimeout(timer);
   }, [query]);
 
-  if (pathname === "/login" || pathname === "/reset-password") return <>{children}</>;
+  if (pathname === "/login" || pathname === "/reset-password" || pathname.startsWith("/medidas/")) return <>{children}</>;
   function closeSearch() { setQuery(""); setResults([]); }
 
   return <div className="app-shell">

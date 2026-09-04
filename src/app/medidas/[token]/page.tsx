@@ -1,0 +1,19 @@
+"use client";
+
+import { FormEvent, useEffect, useState } from "react";
+import { Check, LoaderCircle, Ruler, ShieldCheck, X } from "lucide-react";
+import { useParams } from "next/navigation";
+import { createClient } from "@/lib/supabase/client";
+
+type Form = { shirt: string; pants: string; shoe: string; helmet: string; glove: string; notes: string };
+const empty: Form = { shirt: "", pants: "", shoe: "", helmet: "", glove: "", notes: "" };
+
+export default function PublicMeasurementsPage() {
+  const { token } = useParams<{ token: string }>(); const [name, setName] = useState(""); const [form, setForm] = useState<Form>(empty); const [loading, setLoading] = useState(true); const [saving, setSaving] = useState(false); const [success, setSuccess] = useState(false); const [error, setError] = useState("");
+  useEffect(() => { async function load() { const { data, error: requestError } = await createClient().rpc("get_measurement_request", { p_token: token }); const row = data?.[0]; if (requestError || !row) setError("Este link Ã© invÃ¡lido ou expirou. Solicite um novo link ao responsÃ¡vel."); else setName(row.employee_name); setLoading(false); } void load(); }, [token]);
+  function update(field: keyof Form, value: string) { setForm((current) => ({ ...current, [field]: value })); }
+  async function submit(event: FormEvent) { event.preventDefault(); setSaving(true); setError(""); const { error: saveError } = await createClient().rpc("submit_measurement_request", { p_token: token, p_shirt_size: form.shirt, p_pants_size: form.pants, p_shoe_size: form.shoe, p_helmet_size: form.helmet, p_glove_size: form.glove, p_notes: form.notes }); if (saveError) setError("NÃ£o foi possÃ­vel registrar as medidas. Solicite um novo link ao responsÃ¡vel."); else setSuccess(true); setSaving(false); }
+  return <main className="public-measurements"><section className="public-measurement-card"><div className="public-brand"><ShieldCheck size={22} /><strong>EPIS<span>+</span></strong></div>{loading ? <div className="module-loading"><LoaderCircle className="spin" size={22} /> Carregando formulÃ¡rio...</div> : error && !name ? <div className="public-feedback error-feedback"><X size={18} /> {error}</div> : success ? <div className="public-success"><Check size={36} /><h1>Medidas enviadas!</h1><p>Obrigado, {name}. Seus dados foram encaminhados para o controle de equipamentos.</p></div> : <><div className="public-title"><Ruler size={26} /><p>PERFIL DE EQUIPAMENTOS</p><h1>OlÃ¡, {name}</h1><span>Informe suas medidas para que os equipamentos e uniformes sejam separados corretamente.</span></div><form className="material-form public-form" onSubmit={submit}><div className="form-grid two"><label>Camiseta / uniforme<input value={form.shirt} onChange={(e) => update("shirt", e.target.value)} placeholder="Ex.: M" /></label><label>CalÃ§a<input value={form.pants} onChange={(e) => update("pants", e.target.value)} placeholder="Ex.: 42" /></label></div><div className="form-grid three"><label>CalÃ§ado / botina<input value={form.shoe} onChange={(e) => update("shoe", e.target.value)} placeholder="Ex.: 40" /></label><label>Capacete<input value={form.helmet} onChange={(e) => update("helmet", e.target.value)} placeholder="Ex.: 58" /></label><label>Luvas<input value={form.glove} onChange={(e) => update("glove", e.target.value)} placeholder="Ex.: 9 / G" /></label></div><label>ObservaÃ§Ãµes<textarea value={form.notes} onChange={(e) => update("notes", e.target.value)} rows={3} placeholder="PreferÃªncias ou medidas especiais" /></label>{error && <div className="public-feedback error-feedback"><X size={17} /> {error}</div>}<button className="primary-button" disabled={saving}>{saving ? "Enviando..." : "Enviar minhas medidas"}<Check size={16} /></button></form></>}</section></main>;
+}
+
+
