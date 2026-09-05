@@ -6,7 +6,8 @@ import { createClient } from "@/lib/supabase/client";
 
 type ItemType = "EPI" | "EPC" | "FERRAMENTAL";
 type TemplateItem = { id?: string; material_name: string; quantity: number; item_type: ItemType };
-type Template = { id: string; name: string; source_document: string | null; function_template_items: TemplateItem[] };
+type ContractScenario = { id: string; code: string; name: string; source_annex: string };
+type Template = { id: string; name: string; source_document: string | null; function_group: string | null; contract_scenario_id: string | null; contract_scenario: ContractScenario | null; function_template_items: TemplateItem[] };
 type MaterialOption = { id: string; name: string; type: ItemType; unit: string };
 type DraftItem = { material_name: string; quantity: string; item_type: ItemType };
 
@@ -15,6 +16,7 @@ const emptyItem = (): DraftItem => ({ material_name: "", quantity: "1", item_typ
 export default function FunctionTemplatesPage() {
   const [templates, setTemplates] = useState<Template[]>([]);
   const [materials, setMaterials] = useState<MaterialOption[]>([]);
+  const [scenarios, setScenarios] = useState<ContractScenario[]>([]);
   const [selectedId, setSelectedId] = useState("");
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -22,6 +24,7 @@ export default function FunctionTemplatesPage() {
   const [editingId, setEditingId] = useState<string | null>(null);
   const [name, setName] = useState("");
   const [sourceDocument, setSourceDocument] = useState("");
+  const [scenarioId, setScenarioId] = useState("");
   const [items, setItems] = useState<DraftItem[]>([emptyItem()]);
   const [error, setError] = useState("");
   const [success, setSuccess] = useState("");
@@ -30,15 +33,17 @@ export default function FunctionTemplatesPage() {
   async function load(preferredId?: string) {
     setLoading(true);
     const supabase = createClient();
-    const [{ data: templateData, error: templateError }, { data: materialData, error: materialError }] = await Promise.all([
-      supabase.from("function_templates").select("id, name, source_document, function_template_items(id, material_name, quantity, item_type)").order("name"),
+    const [{ data: templateData, error: templateError }, { data: materialData, error: materialError }, { data: scenarioData, error: scenarioError }] = await Promise.all([
+      supabase.from("function_templates").select("id, name, source_document, function_group, contract_scenario_id, contract_scenario:contract_scenarios(id, code, name, source_annex), function_template_items(id, material_name, quantity, item_type)").order("name"),
       supabase.from("materials").select("id, name, type, unit").eq("status", "active").order("name"),
+      supabase.from("contract_scenarios").select("id, code, name, source_annex").order("name"),
     ]);
     if (templateError || materialError) setError((templateError ?? materialError)?.message ?? "Não foi possível carregar as listas.");
     else {
       const rows = (templateData ?? []) as unknown as Template[];
       setTemplates(rows);
       setMaterials((materialData ?? []) as MaterialOption[]);
+      setScenarios((scenarioData ?? []) as ContractScenario[]);
       setSelectedId(preferredId && rows.some((template) => template.id === preferredId) ? preferredId : rows[0]?.id ?? "");
     }
     setLoading(false);
@@ -47,12 +52,12 @@ export default function FunctionTemplatesPage() {
   useEffect(() => { void Promise.resolve().then(() => load()); }, []);
 
   function openNew() {
-    setEditingId(null); setName(""); setSourceDocument("Cadastro interno"); setItems([emptyItem()]); setError(""); setSuccess(""); setShowForm(true);
+    setEditingId(null); setName(""); setSourceDocument("Cadastro interno"); setScenarioId(""); setItems([emptyItem()]); setError(""); setSuccess(""); setShowForm(true);
   }
 
   function openEdit() {
     if (!selected) return;
-    setEditingId(selected.id); setName(selected.name); setSourceDocument(selected.source_document ?? "");
+    setEditingId(selected.id); setName(selected.name); setSourceDocument(selected.source_document ?? ""); setScenarioId(selected.contract_scenario_id ?? "");
     setItems(selected.function_template_items.map((item) => ({ material_name: item.material_name, quantity: String(item.quantity), item_type: item.item_type })));
     setError(""); setSuccess(""); setShowForm(true);
   }
@@ -84,12 +89,12 @@ export default function FunctionTemplatesPage() {
 
     let templateId = editingId;
     if (templateId) {
-      const { error: updateError } = await supabase.from("function_templates").update({ name: name.trim(), source_document: sourceDocument.trim() || null }).eq("id", templateId);
+      const { error: updateError } = await supabase.from("function_templates").update({ name: name.trim(), source_document: sourceDocument.trim() || null, contract_scenario_id: scenarioId || null }).eq("id", templateId);
       if (updateError) { setError(updateError.message); setSaving(false); return; }
       const { error: deleteError } = await supabase.from("function_template_items").delete().eq("template_id", templateId);
       if (deleteError) { setError(deleteError.message); setSaving(false); return; }
     } else {
-      const { data, error: insertError } = await supabase.from("function_templates").insert({ organization_id: profile.organization_id, name: name.trim(), source_document: sourceDocument.trim() || null }).select("id").single();
+      const { data, error: insertError } = await supabase.from("function_templates").insert({ organization_id: profile.organization_id, name: name.trim(), source_document: sourceDocument.trim() || null, contract_scenario_id: scenarioId || null }).select("id").single();
       if (insertError || !data) { setError(insertError?.message ?? "Não foi possível criar a função."); setSaving(false); return; }
       templateId = data.id;
     }
