@@ -59,6 +59,7 @@
 .delete-confirm-modal p{color:#7b879f;font-size:12px;line-height:1.6;margin:0 auto 7px;max-width:350px}
 .delete-confirm-modal p strong{color:#344057}
 .delete-confirm-warning{color:#d87061!important;font-weight:600}
+.delete-confirm-stock-warning{color:#b45309!important;font-weight:700;background:#fff8e8;border:1px solid #f6dfac;border-radius:8px;padding:9px 12px}
 .delete-confirm-modal .modal-actions{justify-content:center;margin-top:24px}
 .danger-button{background:#d87061;color:#fff;display:inline-flex;align-items:center;gap:8px;padding:11px 16px;border-radius:8px;font-weight:600;box-shadow:0 5px 12px #d8706133}
 .danger-button:hover{background:#c85e50}.danger-button:disabled{opacity:.55;cursor:not-allowed}
