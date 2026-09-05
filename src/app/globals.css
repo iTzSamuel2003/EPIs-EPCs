@@ -53,3 +53,12 @@
 .stock-entry-edit-item input{border:1px solid #e2e6ee;border-radius:8px;padding:9px 10px;color:var(--ink);font-size:12px}
 @media(max-width:900px){.stock-entry-edit-item{grid-template-columns:1fr 1fr}.stock-entry-edit-item>div{grid-column:1/-1}}
 .danger-action{background:#fff0ee;color:#d87061}.danger-action:hover{background:#ffe3df}.danger-action:disabled{opacity:.55;cursor:not-allowed}
+.delete-confirm-modal{width:min(100% - 32px,460px);padding:30px;text-align:center}
+.delete-confirm-icon{width:54px;height:54px;margin:0 auto 17px;display:grid;place-items:center;border-radius:16px;background:#fff0ee;color:#d87061}
+.delete-confirm-modal h2{font-family:'Plus Jakarta Sans';font-size:18px;margin:0 0 10px;color:var(--ink)}
+.delete-confirm-modal p{color:#7b879f;font-size:12px;line-height:1.6;margin:0 auto 7px;max-width:350px}
+.delete-confirm-modal p strong{color:#344057}
+.delete-confirm-warning{color:#d87061!important;font-weight:600}
+.delete-confirm-modal .modal-actions{justify-content:center;margin-top:24px}
+.danger-button{background:#d87061;color:#fff;display:inline-flex;align-items:center;gap:8px;padding:11px 16px;border-radius:8px;font-weight:600;box-shadow:0 5px 12px #d8706133}
+.danger-button:hover{background:#c85e50}.danger-button:disabled{opacity:.55;cursor:not-allowed}
