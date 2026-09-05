@@ -10,7 +10,6 @@ import { EmployeeNavigation } from "@/components/employee-navigation";
 
 type Employee = { id: string; registration: string | null; full_name: string; cpf: string; job_title: string | null; department: string | null; unit: string | null };
 type Item = { id: string; quantity: number; expected_replacement_at: string | null; material: { name: string; internal_code: string | null; unit: string } | null; lot: { lot_number: string } | null; delivery: { id: string; delivered_at: string; reason: string; term_file_path: string | null; term_uploaded_at: string | null } | null };
-type Profile = { shirt_size: string | null; pants_size: string | null; shoe_size: string | null; helmet_size: string | null; glove_size: string | null };
 type Course = { id: string; name: string; provider: string | null; expires_at: string | null };
 
 const reasonLabels: Record<string, string> = { admission: "Admissão", periodic_change: "Troca periódica", damaged: "Equipamento danificado", lost: "Equipamento perdido", role_change: "Alteração de função", replacement: "Substituição", other: "Outro" };
@@ -27,7 +26,6 @@ export default function EmployeeMaterialsPage() {
   const { id } = useParams<{ id: string }>();
   const [employee, setEmployee] = useState<Employee | null>(null);
   const [items, setItems] = useState<Item[]>([]);
-  const [profile, setProfile] = useState<Profile | null>(null);
   const [courses, setCourses] = useState<Course[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
@@ -36,15 +34,13 @@ export default function EmployeeMaterialsPage() {
   useEffect(() => {
     async function load() {
       const supabase = createClient();
-      const [{ data: employeeData, error: employeeError }, { data: deliveryData, error: deliveryError }, { data: profileData }, { data: courseData }] = await Promise.all([
+      const [{ data: employeeData, error: employeeError }, { data: deliveryData, error: deliveryError }, { data: courseData }] = await Promise.all([
         supabase.from("employees").select("id,registration,full_name,cpf,job_title,department,unit").eq("id", id).single(),
         supabase.from("delivery_items").select("id,quantity,expected_replacement_at,materials(name,internal_code,unit),material_lots(lot_number),deliveries!inner(id,delivered_at,reason,employee_id,term_file_path,term_uploaded_at)").eq("deliveries.employee_id", id).order("created_at", { ascending: false }),
-        supabase.from("employee_profiles").select("shirt_size,pants_size,shoe_size,helmet_size,glove_size").eq("employee_id", id).maybeSingle(),
         supabase.from("employee_courses").select("id,name,provider,expires_at").eq("employee_id", id).order("expires_at", { ascending: true, nullsFirst: false }),
       ]);
       if (employeeError || deliveryError) setError(employeeError?.message ?? deliveryError?.message ?? "Não foi possível carregar a ficha.");
       setEmployee(employeeData as Employee);
-      setProfile(profileData as Profile | null);
       setCourses((courseData ?? []) as Course[]);
       setItems(((deliveryData ?? []) as unknown[]).map((row) => {
         const value = row as Record<string, unknown>;
@@ -123,11 +119,8 @@ export default function EmployeeMaterialsPage() {
       <section className="sheet-metrics"><div><PackageCheck size={18} /><span><strong>{items.length}</strong> materiais distintos</span></div><div><PackageCheck size={18} /><span><strong>{summary.totalQuantity}</strong> itens entregues</span></div><div className={summary.pending ? "attention" : ""}><CalendarClock size={18} /><span><strong>{summary.pending}</strong> troca(s) a acompanhar</span></div></section>
       <section className="sheet-section employee-delivery-sheets"><div className="sheet-section-heading"><div><p>FICHAS DE ENTREGA</p><h2>Termos vinculados ao colaborador</h2><span>{deliverySheets.length} ficha(s) registrada(s)</span></div></div>{deliverySheets.length ? <div className="table-wrap"><table><thead><tr><th>DATA</th><th>MOTIVO</th><th>ITENS</th><th>DOCUMENTO</th><th>AÇÕES</th></tr></thead><tbody>{deliverySheets.map((sheet) => <tr key={sheet.id}><td>{date(sheet.delivered_at)}</td><td>{reasonLabels[sheet.reason] || sheet.reason}</td><td>{sheet.items}</td><td><span className={`status-pill ${sheet.term_file_path ? "success" : "warning"}`}>{sheet.term_file_path ? <><Check size={11} /> Anexado</> : "Pendente"}</span></td><td><div className="employee-sheet-actions"><button type="button" className="action-button" onClick={() => downloadTerm(sheet)}><Download size={14} /> PDF</button><label className="action-button upload-term-button"><Upload size={14} /> {uploadingId === sheet.id ? "Enviando..." : sheet.term_file_path ? "Trocar" : "Anexar termo"}<input type="file" accept="application/pdf,image/jpeg,image/png,image/webp" onChange={(event) => void uploadTerm(sheet, event)} disabled={uploadingId === sheet.id} /></label></div></td></tr>)}</tbody></table></div> : <div className="empty-state"><ShieldCheck size={27} /><strong>Nenhuma ficha registrada</strong><span>As fichas aparecerão após cada entrega.</span></div>}</section>
 
-      {profile && <section className="sheet-section measurements-section"><div className="sheet-section-heading"><div><p>MEDIDAS INDIVIDUAIS</p><h2>Referência para equipamentos e uniformes</h2></div></div><div className="sheet-measurements"><div><span>Uniforme</span><strong>{profile.shirt_size || "Não informado"}</strong></div><div><span>Calça</span><strong>{profile.pants_size || "Não informado"}</strong></div><div><span>Botina</span><strong>{profile.shoe_size || "Não informado"}</strong></div><div><span>Capacete</span><strong>{profile.helmet_size || "Não informado"}</strong></div><div><span>Luvas</span><strong>{profile.glove_size || "Não informado"}</strong></div></div></section>}
       <section className="sheet-section"><div className="sheet-section-heading"><div><p>MATERIAIS EM RESPONSABILIDADE</p><h2>Entregas registradas</h2><span>{items.length} registro(s) vinculado(s) ao colaborador</span></div></div>{items.length ? <div className="table-wrap sheet-table-wrap"><table><thead><tr><th>MATERIAL</th><th>LOTE</th><th>QTD.</th><th>ENTREGA</th><th>PREVISÃO DE TROCA</th><th>STATUS</th><th>MOTIVO</th></tr></thead><tbody>{items.map((item) => { const status = replacementStatus(item.expected_replacement_at); return <tr key={item.id}><td><strong>{item.material?.name || "Material"}</strong><small>{item.material?.internal_code ? `${item.material.internal_code} · ${item.material.unit}` : item.material?.unit}</small></td><td>{item.lot?.lot_number || "—"}</td><td><strong>{item.quantity}</strong></td><td>{date(item.delivery?.delivered_at ?? null)}</td><td>{date(item.expected_replacement_at)}</td><td><span className={`status-pill ${status.tone}`}>{status.tone !== "success" && status.tone !== "neutral" && <AlertTriangle size={11} />}{status.label}</span></td><td>{reasonLabels[item.delivery?.reason ?? ""] || "—"}</td></tr>; })}</tbody></table></div> : <div className="empty-state"><ShieldCheck size={27} /><strong>Nenhum material entregue</strong><span>Este colaborador ainda não possui entregas registradas.</span></div>}</section>
       {courses.length > 0 && <section className="sheet-courses"><div className="sheet-section-heading"><div><p>CAPACITAÇÕES</p><h2>Cursos e treinamentos</h2></div></div>{courses.map((course) => <div key={course.id}><strong>{course.name}</strong><span>{course.provider || "Instituição não informada"}{course.expires_at ? ` · validade ${date(course.expires_at)}` : ""}</span></div>)}</section>}
-      <section className="sheet-declaration"><ShieldCheck size={19} /><p>Declaro que recebi os materiais relacionados nesta ficha, em condições adequadas de uso, e que fui orientado sobre sua utilização, guarda e devolução.</p></section>
-      <div className="sheet-signatures"><div><strong>Assinatura do colaborador</strong><span>{employee.full_name}</span></div><div><strong>Responsável pela entrega / controle</strong><span>EPIS+ Gestão de equipamentos</span></div></div>
     </section>
   </main>;
 }
