@@ -37,6 +37,7 @@ export function RecentStockEntries({ refreshKey = 0 }: Props) {
     setLoading(false);
   }
   useEffect(() => { void load(); }, [refreshKey]);
+  useEffect(() => { if (!success) return; const timer = window.setTimeout(() => setSuccess(""), 4500); return () => window.clearTimeout(timer); }, [success]);
   function openEdit(entry: Entry) { setEditing(entry); setInvoiceNumber(entry.invoice_number); setEntryDate(entry.issued_at ?? ""); setNotes(entry.notes ?? ""); setItems(entry.items.map((item) => ({ ...item }))); setError(""); setSuccess(""); }
   function updateItem(index: number, field: keyof EntryItem, value: string) { setItems((current) => current.map((item, itemIndex) => itemIndex === index ? { ...item, [field]: value } : item)); }
   async function save(event: FormEvent) { event.preventDefault(); if (!editing) return; setSaving(true); setError(""); setSuccess(""); const { error: saveError } = await createClient().rpc("update_stock_entry_invoice", { p_invoice_id: editing.id, p_invoice_number: invoiceNumber, p_entry_date: entryDate || null, p_notes: notes || null, p_items: items.map((item) => ({ lot_id: item.lot_id, lot_number: item.lot_number, quantity: Number(item.quantity), unit_cost: Number(item.unit_cost) || 0, manufactured_at: item.manufactured_at || null, expires_at: item.expires_at || null })) }); if (saveError) setError(saveError.message); else { setSuccess("Entrada corrigida e estoque atualizado."); setEditing(null); await load(); } setSaving(false); }

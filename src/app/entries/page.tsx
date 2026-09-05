@@ -21,6 +21,7 @@ export default function EntriesPage() {
 
   async function loadMaterials() { const { data, error: loadError } = await createClient().from("materials").select("id, name, internal_code, unit").eq("status", "active").order("name"); if (loadError) setError(loadError.message); else setMaterials((data ?? []) as MaterialOption[]); setLoading(false); }
   useEffect(() => { void Promise.resolve().then(() => loadMaterials()); }, []);
+  useEffect(() => { if (!success) return; const timer = window.setTimeout(() => setSuccess(""), 4500); return () => window.clearTimeout(timer); }, [success]);
   function updateItem(index: number, field: keyof EntryItem, value: string) { setItems((current) => current.map((item, itemIndex) => itemIndex === index ? { ...item, [field]: value } : item)); }
   function chooseFile(event: React.ChangeEvent<HTMLInputElement>) { const file = event.target.files?.[0] ?? null; setError(""); if (file && file.size > 10 * 1024 * 1024) { setError("A nota fiscal deve ter no máximo 10 MB."); setInvoiceFile(null); return; } setInvoiceFile(file); }
   async function submit(event: FormEvent) {
