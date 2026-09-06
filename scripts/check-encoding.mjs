@@ -7,11 +7,11 @@ const extensions = new Set([".ts", ".tsx", ".js", ".mjs", ".css", ".md", ".sql",
 const mojibake = ["\u00c3\u00a3", "\u00c3\u00a7", "\u00c3\u00a1", "\u00c3\u00a9", "\u00c3\u00ad", "\u00c3\u00b3", "\u00c3\u00ba", "\u00c2\u00b7", "\u00e2\u0080", "\u00f0\u009f", "\ufffd"];
 const files = [];
 const ignoredFiles = new Set([
-  "supabase\\migrations\\20260906005707_seed_contract_annex04_full.sql",
-  "supabase\\migrations\\20260906005809_seed_contract_annex05_full.sql",
-  "supabase\\migrations\\20260906005929_seed_contract_annex06_full.sql",
-  "supabase\\migrations\\20260906010009_seed_contract_annex07_full.sql",
-  "supabase\\migrations\\20260906010429_repair_contract_catalog_text.sql",
+  "supabase/migrations/20260906005707_seed_contract_annex04_full.sql",
+  "supabase/migrations/20260906005809_seed_contract_annex05_full.sql",
+  "supabase/migrations/20260906005929_seed_contract_annex06_full.sql",
+  "supabase/migrations/20260906010009_seed_contract_annex07_full.sql",
+  "supabase/migrations/20260906010429_repair_contract_catalog_text.sql",
 ]);
 
 async function collect(directory) {
@@ -30,9 +30,10 @@ for (const file of ["CLAUDE.md", "AGENTS.md", "README.md"]) files.push(path.reso
 
 const failures = [];
 for (const file of [...new Set(files)]) {
-  if (ignoredFiles.has(path.relative(process.cwd(), file))) continue;
+  const relativePath = path.relative(process.cwd(), file).replaceAll(path.sep, "/");
+  if (ignoredFiles.has(relativePath)) continue;
   const text = await readFile(file, "utf8");
-  if (mojibake.some((sequence) => text.includes(sequence))) failures.push(path.relative(process.cwd(), file));
+  if (mojibake.some((sequence) => text.includes(sequence))) failures.push(relativePath);
 }
 
 if (failures.length) {
