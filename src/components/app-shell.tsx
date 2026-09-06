@@ -13,7 +13,7 @@ import { createClient } from "@/lib/supabase/client";
 
 const menu = [
   ["Dashboard", LayoutDashboard, "/"], ["Materiais", Boxes, "/materials"],
-  ["Variações", Boxes, "/variants"], ["Listas por função", ClipboardList, "/function-templates"], ["Requisitos contratuais", ClipboardCheck, "/contract-requirements"], ["Treinamentos", ClipboardCheck, "/training-compliance"], ["Equipes", Users, "/teams"], ["Unidades físicas", Boxes, "/units"],
+  ["Variações", Boxes, "/variants"], ["Listas por função", ClipboardList, "/function-templates"], ["Requisitos contratuais", ClipboardCheck, "/contract-requirements"], ["Conformidade", ClipboardCheck, "/compliance"], ["Treinamentos", ClipboardCheck, "/training-compliance"], ["Equipes", Users, "/teams"], ["Unidades físicas", Boxes, "/units"],
   ["Funcionários", Users, "/employees"], ["Entregas", ArrowUpRight, "/deliveries"],
   ["Devoluções", ArrowDownToLine, "/returns"], ["Estoque", PackageCheck, "/stock"],
   ["Entradas", ClipboardList, "/entries"], ["Validades", CalendarClock, "/validities"],
