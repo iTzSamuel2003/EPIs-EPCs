@@ -23,7 +23,7 @@ export default function StockPage() {
   async function load() {
     const supabase = createClient();
     const [{ data, error: materialError }, { data: lots, error: lotError }] = await Promise.all([
-      supabase.from("materials").select("id,internal_code,name,type,unit,minimum_stock,location,status").order("name"),
+      supabase.from("materials").select("id,internal_code,name,type,unit,minimum_stock,location,status").eq("status", "active").order("name"),
       supabase.from("material_lots").select("material_id,received_quantity,available_quantity,unit_cost"),
     ]);
     if (materialError || lotError) setError((materialError ?? lotError)?.message ?? "Não foi possível carregar o estoque.");
