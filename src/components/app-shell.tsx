@@ -29,6 +29,13 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   const [mobileMenu, setMobileMenu] = useState(false);
   const [query, setQuery] = useState("");
   const [results, setResults] = useState<SearchResult[]>([]);
+  const [validityCount, setValidityCount] = useState(0);
+
+  useEffect(() => {
+    void createClient().from("material_lots").select("material_id").gt("available_quantity", 0).then(({ data }) => {
+      setValidityCount(new Set((data ?? []).map((lot) => lot.material_id)).size);
+    });
+  }, []);
 
   useEffect(() => {
     const term = query.trim();
@@ -55,7 +62,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
     <aside className={`sidebar ${mobileMenu ? "open" : ""}`}>
       <div className="brand"><div className="brand-mark"><ShieldCheck size={22} /></div><div><strong>EPIS<span>+</span></strong><small>Gestão inteligente</small></div><button className="close-menu" onClick={() => setMobileMenu(false)} aria-label="Fechar menu"><X size={20} /></button></div>
       <div className="workspace-label">MENU PRINCIPAL</div>
-      <nav>{menu.map(([label, Icon, href]) => <Link className={pathname === href || (href !== "/" && pathname.startsWith(`${href}/`)) ? "active" : ""} href={href} key={label} onClick={() => setMobileMenu(false)}><Icon size={18} /><span>{label}</span>{label === "Validades" && <b className="nav-count">5</b>}</Link>)}</nav>
+      <nav>{menu.map(([label, Icon, href]) => <Link className={pathname === href || (href !== "/" && pathname.startsWith(`${href}/`)) ? "active" : ""} href={href} key={label} onClick={() => setMobileMenu(false)}><Icon size={18} /><span>{label}</span>{label === "Validades" && validityCount > 0 && <b className="nav-count">{validityCount}</b>}</Link>)}</nav>
       <div className="sidebar-bottom"><Link href="/settings"><Settings size={18} /><span>Configurações</span></Link><Link href="/help"><CircleHelp size={18} /><span>Central de ajuda</span></Link><div className="user-mini"><div className="avatar avatar-dark">SA</div><div><strong>Samuel Albuquerque</strong><small>Administrador</small></div><ChevronDown size={15} /></div></div>
     </aside>
     <main className="main-content">
