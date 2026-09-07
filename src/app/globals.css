@@ -95,3 +95,15 @@
 @media (max-width: 600px){.module-table-card .table-wrap table{min-width:0;width:100%;white-space:normal}.module-table-card th,.module-table-card td{padding:9px 6px;overflow-wrap:anywhere}.module-table-card th:first-child,.module-table-card td:first-child{padding-left:0}.module-table-card td:nth-child(2){min-width:0;max-width:none}.material-cell{min-width:0;max-width:none}.material-cell strong,.module-table-card td:nth-child(2)>strong{overflow-wrap:anywhere}.request-confirm-modal{padding:22px 17px}.request-confirm-modal .modal-actions{flex-direction:column-reverse}.request-confirm-modal .modal-actions button{width:100%;justify-content:center}}
 .material-type-icon.ferramental,td:has(.type-badge.ferramental) .material-type-icon{background:#fff1e8;color:#d48759}.type-badge.ferramental{color:#d48759;background:#fff1e8}
 .module-table-card td>small{display:block;margin-top:4px;color:#9ca6b5;font-size:9px;line-height:1.35}
+@media (max-width: 1024px) and (min-width: 761px){
+  .module-toolbar,.module-header,.delivery-items-header{flex-wrap:wrap}
+  .module-toolbar>*{min-width:0;flex:1 1 240px}
+  .entry-item-row{grid-template-columns:28px minmax(0,1fr) 32px;align-items:end}
+  .entry-item-row label{grid-column:2!important}
+  .entry-item-row .remove-item{grid-column:3!important;grid-row:1!important}
+}
+@media (max-width: 600px){
+  .employees-table-card .row-actions{display:flex;flex-wrap:wrap;gap:5px;max-width:150px}
+  .employees-table-card .row-actions .action-button{flex:0 0 30px}
+  .module-header .header-actions,.module-header>.secondary-button{width:100%;justify-content:center}
+}
