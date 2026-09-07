@@ -7,6 +7,9 @@ on conflict (id) do update set public = false, file_size_limit = 10485760, allow
 drop policy if exists "portal users can upload course documents" on storage.objects;
 create policy "portal users can upload course documents" on storage.objects for insert to anon
 with check (bucket_id = 'employee-course-documents' and name like 'portal/%');
+drop policy if exists portal_auth_upload_course_documents on storage.objects;
+create policy portal_auth_upload_course_documents on storage.objects for insert to authenticated
+with check (bucket_id = 'employee-course-documents' and name like 'portal/%');
 drop policy if exists "organization members can read course documents" on storage.objects;
 create policy "organization members can read course documents" on storage.objects for select to authenticated
 using (bucket_id = 'employee-course-documents' and exists (select 1 from public.employee_courses c where c.certificate_file_path = name and c.organization_id = private.current_organization_id()));
