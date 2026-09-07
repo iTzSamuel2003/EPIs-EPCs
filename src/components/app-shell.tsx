@@ -11,16 +11,16 @@ import { usePathname } from "next/navigation";
 import { useEffect, useState } from "react";
 import { createClient } from "@/lib/supabase/client";
 
-const menu = [
-  ["Dashboard", LayoutDashboard, "/"], ["Materiais", Boxes, "/materials"],
-  ["Variações", Boxes, "/variants"], ["Listas por função", ClipboardList, "/function-templates"], ["Requisitos contratuais", ClipboardCheck, "/contract-requirements"], ["Conformidade", ClipboardCheck, "/compliance"], ["Treinamentos", ClipboardCheck, "/training-compliance"], ["Equipes", Users, "/teams"], ["Unidades físicas", Boxes, "/units"],
-  ["Funcionários", Users, "/employees"], ["Entregas", ArrowUpRight, "/deliveries"],
-  ["Devoluções", ArrowDownToLine, "/returns"], ["Estoque", PackageCheck, "/stock"],
-  ["Entradas", ClipboardList, "/entries"], ["Validades", CalendarClock, "/validities"],
-  ["Ensaios", ClipboardCheck, "/tests"], ["Custos", Wallet, "/costs"], ["CA", ShieldCheck, "/ca"],
-  ["Relatórios", ClipboardList, "/reports"], ["Movimentações", SlidersHorizontal, "/movements"],
-  ["Auditoria", ClipboardList, "/audit"],
+type MenuItem = readonly [string, typeof LayoutDashboard, string];
+type MenuSection = { label: string; items: readonly MenuItem[] };
+const menuSections: readonly MenuSection[] = [
+  { label: "Visão geral", items: [["Dashboard", LayoutDashboard, "/"]] },
+  { label: "Cadastros", items: [["Materiais", Boxes, "/materials"], ["Variações", Boxes, "/variants"], ["Funcionários", Users, "/employees"], ["Equipes", Users, "/teams"], ["Unidades físicas", Boxes, "/units"], ["Listas por função", ClipboardList, "/function-templates"]] },
+  { label: "Operações", items: [["Entradas", ClipboardList, "/entries"], ["Entregas", ArrowUpRight, "/deliveries"], ["Devoluções", ArrowDownToLine, "/returns"], ["Estoque", PackageCheck, "/stock"], ["Validades", CalendarClock, "/validities"]] },
+  { label: "Conformidade", items: [["Requisitos contratuais", ClipboardCheck, "/contract-requirements"], ["Ensaios", ClipboardCheck, "/tests"], ["Treinamentos", ClipboardCheck, "/training-compliance"], ["Conformidade", ClipboardCheck, "/compliance"], ["CA", ShieldCheck, "/ca"]] },
+  { label: "Gestão e análises", items: [["Custos", Wallet, "/costs"], ["Relatórios", ClipboardList, "/reports"], ["Movimentações", SlidersHorizontal, "/movements"], ["Auditoria", ClipboardList, "/audit"]] },
 ] as const;
+const menu = menuSections.flatMap((section) => section.items);
 
 type SearchResult = { id: string; label: string; detail: string; href: string; kind: "Material" | "Funcionário" };
 
@@ -62,7 +62,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
     <aside className={`sidebar ${mobileMenu ? "open" : ""}`}>
       <div className="brand"><div className="brand-mark"><ShieldCheck size={22} /></div><div><strong>EPIS<span>+</span></strong><small>Gestão inteligente</small></div><button className="close-menu" onClick={() => setMobileMenu(false)} aria-label="Fechar menu"><X size={20} /></button></div>
       <div className="workspace-label">MENU PRINCIPAL</div>
-      <nav>{menu.map(([label, Icon, href]) => <Link className={pathname === href || (href !== "/" && pathname.startsWith(`${href}/`)) ? "active" : ""} href={href} key={label} onClick={() => setMobileMenu(false)}><Icon size={18} /><span>{label}</span>{label === "Validades" && validityCount > 0 && <b className="nav-count">{validityCount}</b>}</Link>)}</nav>
+      <div className="sidebar-sections">{menuSections.map((section) => <section className="sidebar-section" key={section.label}><h2>{section.label}</h2><nav>{section.items.map(([label, Icon, href]) => <Link className={pathname === href || (href !== "/" && pathname.startsWith(`${href}/`)) ? "active" : ""} href={href} key={label} onClick={() => setMobileMenu(false)}><Icon size={18} /><span>{label}</span>{label === "Validades" && validityCount > 0 && <b className="nav-count">{validityCount}</b>}</Link>)}</nav></section>)}</div>
       <div className="sidebar-bottom"><Link href="/settings"><Settings size={18} /><span>Configurações</span></Link><Link href="/help"><CircleHelp size={18} /><span>Central de ajuda</span></Link><div className="user-mini"><div className="avatar avatar-dark">SA</div><div><strong>Samuel Albuquerque</strong><small>Administrador</small></div><ChevronDown size={15} /></div></div>
     </aside>
     <main className="main-content">
