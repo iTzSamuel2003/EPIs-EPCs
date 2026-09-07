@@ -5,13 +5,13 @@ import { Boxes, Check, ClipboardList, LoaderCircle, Pencil, Plus, ShieldCheck, T
 import { createClient } from "@/lib/supabase/client";
 
 type ItemType = "EPI" | "EPC" | "FERRAMENTAL";
-type TemplateItem = { id?: string; material_name: string; quantity: number; item_type: ItemType };
+type TemplateItem = { id?: string; material_id?: string | null; material_name: string; quantity: number; item_type: ItemType };
 type ContractScenario = { id: string; code: string; name: string; source_annex: string; active: boolean };
 type Template = { id: string; name: string; source_document: string | null; function_group: string | null; contract_scenario_id: string | null; contract_scenario: ContractScenario | null; function_template_items: TemplateItem[] };
 type MaterialOption = { id: string; name: string; type: ItemType; unit: string };
-type DraftItem = { material_name: string; quantity: string; item_type: ItemType };
+type DraftItem = { material_id: string; material_name: string; quantity: string; item_type: ItemType };
 
-const emptyItem = (): DraftItem => ({ material_name: "", quantity: "1", item_type: "EPI" });
+const emptyItem = (): DraftItem => ({ material_id: "", material_name: "", quantity: "1", item_type: "EPI" });
 
 export default function FunctionTemplatesPage() {
   const [templates, setTemplates] = useState<Template[]>([]);
@@ -34,7 +34,7 @@ export default function FunctionTemplatesPage() {
     setLoading(true);
     const supabase = createClient();
     const [{ data: templateData, error: templateError }, { data: materialData, error: materialError }, { data: scenarioData, error: scenarioError }] = await Promise.all([
-      supabase.from("function_templates").select("id, name, source_document, function_group, contract_scenario_id, contract_scenario:contract_scenarios(id, code, name, source_annex), function_template_items(id, material_name, quantity, item_type)").order("name"),
+      supabase.from("function_templates").select("id, name, source_document, function_group, contract_scenario_id, contract_scenario:contract_scenarios(id, code, name, source_annex), function_template_items(id, material_id, material_name, quantity, item_type)").order("name"),
       supabase.from("materials").select("id, name, type, unit").eq("status", "active").order("name"),
       supabase.from("contract_scenarios").select("id, code, name, source_annex, active").eq("active", true).order("name"),
     ]);
@@ -58,7 +58,7 @@ export default function FunctionTemplatesPage() {
   function openEdit() {
     if (!selected) return;
     setEditingId(selected.id); setName(selected.name); setSourceDocument(selected.source_document ?? ""); setScenarioId(selected.contract_scenario_id ?? "");
-    setItems(selected.function_template_items.map((item) => ({ material_name: item.material_name, quantity: String(item.quantity), item_type: item.item_type })));
+    setItems(selected.function_template_items.map((item) => ({ material_id: item.material_id ?? "", material_name: item.material_name, quantity: String(item.quantity), item_type: item.item_type })));
     setError(""); setSuccess(""); setShowForm(true);
   }
 
@@ -69,13 +69,13 @@ export default function FunctionTemplatesPage() {
   function chooseMaterial(index: number, materialId: string) {
     const material = materials.find((item) => item.id === materialId);
     if (!material) return;
-    setItems((current) => current.map((item, itemIndex) => itemIndex === index ? { ...item, material_name: material.name, item_type: material.type } : item));
+    setItems((current) => current.map((item, itemIndex) => itemIndex === index ? { ...item, material_id: material.id, material_name: material.name, item_type: material.type } : item));
   }
 
   async function save(event: FormEvent) {
     event.preventDefault();
     setError(""); setSuccess("");
-    const validItems = items.map((item) => ({ material_name: item.material_name.trim(), quantity: Number(item.quantity), item_type: item.item_type }))
+    const validItems = items.map((item) => ({ material_id: item.material_id || null, material_name: item.material_name.trim(), quantity: Number(item.quantity), item_type: item.item_type }))
       .filter((item) => item.material_name && Number.isInteger(item.quantity) && item.quantity > 0);
     if (!name.trim()) { setError("Informe o nome da função."); return; }
     if (!validItems.length || validItems.length !== items.length) { setError("Informe o material e uma quantidade maior que zero em todos os itens."); return; }
@@ -108,6 +108,9 @@ export default function FunctionTemplatesPage() {
     if (missingCatalogItems.length) {
       const { error: materialError } = await supabase.from("materials").insert(missingCatalogItems);
       if (materialError) { setError(materialError.message); setSaving(false); return; }
+      const { data: refreshedMaterials } = await supabase.from("materials").select("id,name,type,unit").eq("organization_id", profile.organization_id).eq("status", "active");
+      const byName = new Map((refreshedMaterials ?? []).map((material) => [material.name.trim().toLocaleLowerCase("pt-BR"), material.id]));
+      validItems.forEach((item) => { if (!item.material_id) item.material_id = byName.get(item.material_name.toLocaleLowerCase("pt-BR")) ?? null; });
     }
 
     const { error: itemError } = await supabase.from("function_template_items").insert(validItems.map((item) => ({ ...item, organization_id: profile.organization_id, template_id: templateId })));
