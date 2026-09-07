@@ -81,7 +81,8 @@ Deno.serve(async (req) => {
   if (attachment) {
     extension = allowedTypes.get(attachment.type) ?? "";
     const filenameExtension = attachment.name.toLowerCase().match(/\.[a-z0-9]+$/)?.[0] ?? "";
-    if (!extension || filenameExtension !== extension || attachment.size > maxFileSize) return response({ error: "Anexo inválido: use PDF, JPG, PNG ou WEBP de até 10 MB" }, 400);
+    const validJpegExtension = extension === ".jpg" && (filenameExtension === ".jpg" || filenameExtension === ".jpeg");
+    if (!extension || (!validJpegExtension && filenameExtension !== extension) || attachment.size > maxFileSize) return response({ error: "Anexo inválido: use PDF, JPG, JPEG, PNG ou WEBP de até 10 MB" }, 400);
   }
 
   const { data: requestId, error: requestError } = await admin.rpc("create_employee_material_request", { p_registration: registration, p_cpf: cpf, p_delivery_item_id: deliveryItemId, p_description: description });
