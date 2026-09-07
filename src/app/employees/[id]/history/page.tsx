@@ -52,7 +52,7 @@ export default function EmployeeHistoryPage() {
       const deliveryIds = deliveryRows.map((item) => item.id);
       const returnIds = returnRows.map((item) => item.id);
       const [{ data: deliveryItems, error: itemError }, { data: returnItems, error: returnItemError }, { data: accountabilityData }] = await Promise.all([
-        deliveryIds.length ? supabase.from("delivery_items").select("id,delivery_id,quantity,materials(name,internal_code,unit),material_lots(lot_number)").in("delivery_id", deliveryIds) : Promise.resolve({ data: [], error: null }),
+        deliveryIds.length ? supabase.from("delivery_items").select("id,delivery_id,quantity,material:materials(name,internal_code,unit),lot:material_lots(lot_number)").in("delivery_id", deliveryIds) : Promise.resolve({ data: [], error: null }),
         returnIds.length ? supabase.from("return_items").select("return_id,delivery_item_id,quantity,equipment_condition,destination").in("return_id", returnIds) : Promise.resolve({ data: [], error: null }),
         returnIds.length ? supabase.from("return_accountability").select("return_id,incident_type,incident_description,employee_signature_name,deduction_requested,deduction_amount").in("return_id", returnIds) : Promise.resolve({ data: [], error: null }),
       ]);
