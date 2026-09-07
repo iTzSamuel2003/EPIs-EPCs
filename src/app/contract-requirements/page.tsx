@@ -4,7 +4,7 @@ import { ClipboardCheck, FileText, LoaderCircle, PackageCheck, ShieldAlert } fro
 import { useEffect, useMemo, useState } from "react";
 import { createClient } from "@/lib/supabase/client";
 
-type Scenario = { id: string; code: string; name: string; source_annex: string; team_size: number | null; composition: string | null };
+type Scenario = { id: string; code: string; name: string; source_annex: string; team_size: number | null; composition: string | null; active: boolean };
 type Requirement = { id: string; scenario_id: string; source_annex: string; quantity: number; unit: string; usage_scope: "individual" | "coletivo"; notes: string | null; materials: { id: string; name: string; type: "EPI" | "EPC" | "FERRAMENTAL"; contract_item_code: string | null; contract_category: string; contract_specification: string | null; ca_required: boolean; ca_number: string | null; ca_expires_at: string | null; test_required: boolean } | null };
 type Lot = { material_id: string; available_quantity: number };
 
@@ -23,7 +23,7 @@ export default function ContractRequirementsPage() {
     async function load() {
       const supabase = createClient();
       const [{ data: scenarioData, error: scenarioError }, { data: requirementData, error: requirementError }, { data: lotData, error: lotError }] = await Promise.all([
-        supabase.from("contract_scenarios").select("id, code, name, source_annex, team_size, composition").order("name"),
+        supabase.from("contract_scenarios").select("id, code, name, source_annex, team_size, composition, active").eq("active", true).order("name"),
         supabase.from("contract_requirements").select("id, scenario_id, source_annex, quantity, unit, usage_scope, notes, materials(id, name, type, contract_item_code, contract_category, contract_specification, ca_required, ca_number, ca_expires_at, test_required)"),
         supabase.from("material_lots").select("material_id, available_quantity"),
       ]);

@@ -6,7 +6,7 @@ import { createClient } from "@/lib/supabase/client";
 
 type ItemType = "EPI" | "EPC" | "FERRAMENTAL";
 type TemplateItem = { id?: string; material_name: string; quantity: number; item_type: ItemType };
-type ContractScenario = { id: string; code: string; name: string; source_annex: string };
+type ContractScenario = { id: string; code: string; name: string; source_annex: string; active: boolean };
 type Template = { id: string; name: string; source_document: string | null; function_group: string | null; contract_scenario_id: string | null; contract_scenario: ContractScenario | null; function_template_items: TemplateItem[] };
 type MaterialOption = { id: string; name: string; type: ItemType; unit: string };
 type DraftItem = { material_name: string; quantity: string; item_type: ItemType };
@@ -36,7 +36,7 @@ export default function FunctionTemplatesPage() {
     const [{ data: templateData, error: templateError }, { data: materialData, error: materialError }, { data: scenarioData, error: scenarioError }] = await Promise.all([
       supabase.from("function_templates").select("id, name, source_document, function_group, contract_scenario_id, contract_scenario:contract_scenarios(id, code, name, source_annex), function_template_items(id, material_name, quantity, item_type)").order("name"),
       supabase.from("materials").select("id, name, type, unit").eq("status", "active").order("name"),
-      supabase.from("contract_scenarios").select("id, code, name, source_annex").order("name"),
+      supabase.from("contract_scenarios").select("id, code, name, source_annex, active").eq("active", true).order("name"),
     ]);
     if (templateError || materialError) setError((templateError ?? materialError)?.message ?? "Não foi possível carregar as listas.");
     else {
