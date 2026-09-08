@@ -6,6 +6,8 @@ import { useEffect, useState } from "react";
 import QRCode from "qrcode";
 import jsPDF from "jspdf";
 
+const permanentPortalUrl = "https://epis-epcs.vercel.app/portal";
+
 export default function PortalQrPage() {
   const [portalUrl, setPortalUrl] = useState("");
   const [qrDataUrl, setQrDataUrl] = useState("");
@@ -37,9 +39,8 @@ export default function PortalQrPage() {
   }
 
   useEffect(() => {
-    const url = `${window.location.origin}/portal`;
-    setPortalUrl(url);
-    void generateQr(url);
+    setPortalUrl(permanentPortalUrl);
+    void generateQr(permanentPortalUrl);
   }, []);
 
   return <main className="module-shell portal-qr-page">
