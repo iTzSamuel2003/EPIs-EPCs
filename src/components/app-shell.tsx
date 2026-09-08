@@ -1,6 +1,6 @@
 "use client";
 
-import { ArrowDownToLine, ArrowUpRight, Bell, Boxes, CalendarClock, ChevronDown, CircleHelp, ClipboardCheck, ClipboardList, LayoutDashboard, Menu, PackageCheck, Search, Settings, SlidersHorizontal, ShieldCheck, Users, Wallet, X } from "lucide-react";
+import { ArrowDownToLine, ArrowUpRight, Bell, Boxes, CalendarClock, ChevronDown, CircleHelp, ClipboardCheck, ClipboardList, LayoutDashboard, Menu, PackageCheck, QrCode, Search, Settings, SlidersHorizontal, ShieldCheck, Users, Wallet, X } from "lucide-react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useEffect, useState } from "react";
