@@ -75,6 +75,44 @@ export default function FunctionTemplatesPage() {
   async function save(event: FormEvent) {
     event.preventDefault();
     setError(""); setSuccess("");
+    let atomicItems = items.map((item) => ({ material_id: item.material_id || null, material_name: item.material_name.trim(), quantity: Number(item.quantity), item_type: item.item_type }))
+      .filter((item) => item.material_name && Number.isInteger(item.quantity) && item.quantity > 0);
+    if (!name.trim()) { setError("Informe o nome da função."); return; }
+    if (!atomicItems.length || atomicItems.length !== items.length) { setError("Informe o material e uma quantidade maior que zero em todos os itens."); return; }
+    if (new Set(atomicItems.map((item) => item.material_name.toLocaleLowerCase("pt-BR"))).size !== atomicItems.length) { setError("Não repita o mesmo material na lista."); return; }
+    setSaving(true);
+    const supabase = createClient();
+    const { data: auth } = await supabase.auth.getUser();
+    const { data: profile } = auth.user ? await supabase.from("profiles").select("organization_id").eq("id", auth.user.id).single() : { data: null };
+    if (!profile?.organization_id) { setError("Não foi possível identificar a organização do usuário."); setSaving(false); return; }
+    const materialByName = new Map(materials.map((material) => [material.name.trim().toLocaleLowerCase("pt-BR"), material.id]));
+    const missingCatalogItems = atomicItems.filter((item) => !materialByName.has(item.material_name.toLocaleLowerCase("pt-BR"))).map((item) => ({
+      organization_id: profile.organization_id, internal_code: null, name: item.material_name, type: item.item_type, unit: "un.",
+      ca_number: item.item_type === "EPI" ? "PENDENTE" : null, minimum_stock: 0, status: "active",
+      notes: "Cadastro criado a partir de Lista por função. Conferir CA, marca, modelo, custos e estoque mínimo.",
+    }));
+    if (missingCatalogItems.length) {
+      const { error: materialError } = await supabase.from("materials").insert(missingCatalogItems);
+      if (materialError) { setError(materialError.message); setSaving(false); return; }
+      const { data: refreshedMaterials, error: refreshError } = await supabase.from("materials").select("id,name,type,unit").eq("organization_id", profile.organization_id).eq("status", "active");
+      if (refreshError) { setError(refreshError.message); setSaving(false); return; }
+      refreshedMaterials?.forEach((material) => materialByName.set(material.name.trim().toLocaleLowerCase("pt-BR"), material.id));
+    }
+    atomicItems = atomicItems.map((item) => ({ ...item, material_id: item.material_id ?? materialByName.get(item.material_name.toLocaleLowerCase("pt-BR")) ?? null }));
+    const { data: savedTemplateId, error: saveError } = await supabase.rpc("save_function_template", {
+      p_template_id: editingId,
+      p_name: name.trim(),
+      p_source_document: sourceDocument.trim() || null,
+      p_contract_scenario_id: scenarioId || null,
+      p_items: atomicItems,
+    });
+    if (saveError || !savedTemplateId) { setError(saveError?.message ?? "Não foi possível salvar a lista."); setSaving(false); return; }
+    setSuccess(editingId ? "Lista por função atualizada." : "Nova função e sua lista foram cadastradas.");
+    setShowForm(false); await load(savedTemplateId); setSaving(false);
+    return;
+    /*
+    event.preventDefault();
+    setError(""); setSuccess("");
     const validItems = items.map((item) => ({ material_id: item.material_id || null, material_name: item.material_name.trim(), quantity: Number(item.quantity), item_type: item.item_type }))
       .filter((item) => item.material_name && Number.isInteger(item.quantity) && item.quantity > 0);
     if (!name.trim()) { setError("Informe o nome da função."); return; }
@@ -117,6 +155,7 @@ export default function FunctionTemplatesPage() {
     if (itemError) { setError(itemError.message); setSaving(false); return; }
     setSuccess(editingId ? "Lista por função atualizada." : "Nova função e sua lista foram cadastradas.");
     setShowForm(false); await load(templateId ?? undefined); setSaving(false);
+    */
   }
 
   return <main className="module-shell">
