@@ -10,7 +10,8 @@ import { EmployeeNavigation } from "@/components/employee-navigation";
 import { DeliverySignatureModal } from "@/components/delivery-signature-modal";
 
 type Employee = { id: string; registration: string | null; full_name: string; cpf: string; job_title: string | null; department: string | null; unit: string | null };
-type Item = { id: string; quantity: number; expected_replacement_at: string | null; material: { name: string; internal_code: string | null; unit: string } | null; lot: { lot_number: string } | null; delivery: { id: string; delivered_at: string; reason: string; term_file_path: string | null; term_uploaded_at: string | null; term_signature_method: string | null } | null };
+type MaterialUnit = { unit_identifier: string; delivered_at: string | null; valid_until: string | null };
+type Item = { id: string; quantity: number; expected_replacement_at: string | null; material: { name: string; internal_code: string | null; unit: string } | null; lot: { lot_number: string } | null; units: MaterialUnit[]; delivery: { id: string; delivered_at: string; reason: string; term_file_path: string | null; term_uploaded_at: string | null; term_signature_method: string | null } | null };
 type Course = { id: string; name: string; provider: string | null; expires_at: string | null };
 
 const reasonLabels: Record<string, string> = { admission: "Admissão", periodic_change: "Troca periódica", damaged: "Equipamento danificado", lost: "Equipamento perdido", role_change: "Alteração de função", replacement: "Substituição", other: "Outro" };
@@ -37,7 +38,7 @@ export default function EmployeeMaterialsPage() {
       const supabase = createClient();
       const [{ data: employeeData, error: employeeError }, { data: deliveryData, error: deliveryError }, { data: courseData }] = await Promise.all([
         supabase.from("employees").select("id,registration,full_name,cpf,job_title,department,unit").eq("id", id).single(),
-        supabase.from("delivery_items").select("id,quantity,expected_replacement_at,materials(name,internal_code,unit),material_lots(lot_number),deliveries!inner(id,delivered_at,reason,employee_id,term_file_path,term_uploaded_at,term_signature_method)").eq("deliveries.employee_id", id).order("created_at", { ascending: false }),
+        supabase.from("delivery_items").select("id,quantity,expected_replacement_at,materials(name,internal_code,unit),material_lots(lot_number),material_units(unit_identifier,delivered_at,valid_until),deliveries!inner(id,delivered_at,reason,employee_id,term_file_path,term_uploaded_at,term_signature_method)").eq("deliveries.employee_id", id).order("created_at", { ascending: false }),
         supabase.from("employee_courses").select("id,name,provider,expires_at").eq("employee_id", id).order("expires_at", { ascending: true, nullsFirst: false }),
       ]);
       if (employeeError || deliveryError) setError(employeeError?.message ?? deliveryError?.message ?? "Não foi possível carregar a ficha.");
@@ -45,7 +46,10 @@ export default function EmployeeMaterialsPage() {
       setCourses((courseData ?? []) as Course[]);
       setItems(((deliveryData ?? []) as unknown[]).map((row) => {
         const value = row as Record<string, unknown>;
-        return { id: String(value.id), quantity: Number(value.quantity), expected_replacement_at: value.expected_replacement_at as string | null, material: value.materials as Item["material"], lot: value.material_lots as Item["lot"], delivery: value.deliveries as Item["delivery"] };
+        const units = (value.material_units ?? []) as MaterialUnit[];
+        const material = value.materials as Item["material"];
+        const identifiers = units.map((unit) => `${unit.unit_identifier}${unit.valid_until ? ` (válido até ${date(unit.valid_until)})` : ""}`).join(", ");
+        return { id: String(value.id), quantity: Number(value.quantity), expected_replacement_at: value.expected_replacement_at as string | null, material: material && identifiers ? { ...material, name: `${material.name} · ID: ${identifiers}` } : material, lot: value.material_lots as Item["lot"], units, delivery: value.deliveries as Item["delivery"] };
       }));
       setLoading(false);
     }

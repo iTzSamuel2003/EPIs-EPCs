@@ -6,7 +6,8 @@ import { jsPDF } from "jspdf";
 import { createClient } from "@/lib/supabase/client";
 import { DeliverySignatureModal } from "@/components/delivery-signature-modal";
 
-type Delivery = { id: string; delivered_at: string; reason: string; notes: string | null; term_file_path: string | null; term_uploaded_at: string | null; term_signature_method: string | null; employee: { full_name: string; registration: string | null; cpf: string } | null; delivery_items: Array<{ quantity: number; expected_replacement_at: string | null; material: { name: string; unit: string; internal_code: string | null } | null }> };
+type DeliveryUnit = { unit_identifier: string; employee_id: string | null; delivered_at: string | null; valid_until: string | null };
+type Delivery = { id: string; delivered_at: string; reason: string; notes: string | null; term_file_path: string | null; term_uploaded_at: string | null; term_signature_method: string | null; employee: { full_name: string; registration: string | null; cpf: string } | null; delivery_items: Array<{ quantity: number; expected_replacement_at: string | null; material: { name: string; unit: string; internal_code: string | null } | null; material_units?: DeliveryUnit[] }> };
 const reasons: Record<string, string> = { admission: "Admissão", periodic_change: "Troca periódica", damaged: "Equipamento danificado", lost: "Equipamento perdido", role_change: "Alteração de função", replacement: "Substituição", other: "Outro" };
 const date = (value: string) => new Date(`${value}T00:00:00`).toLocaleDateString("pt-BR");
 const safeFileName = (value: string) => value.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "");
@@ -23,7 +24,7 @@ export function RecentDeliveries() {
     async function load() {
       const supabase = createClient();
       const [{ data, error: loadError }, { data: profileData }] = await Promise.all([
-        supabase.from("deliveries").select("id,delivered_at,reason,notes,term_file_path,term_uploaded_at,term_signature_method,employee:employees(full_name,registration,cpf),delivery_items(quantity,expected_replacement_at,material:materials(name,unit,internal_code))").order("delivered_at", { ascending: false }).order("created_at", { ascending: false }).limit(10),
+        supabase.from("deliveries").select("id,delivered_at,reason,notes,term_file_path,term_uploaded_at,term_signature_method,employee:employees(full_name,registration,cpf),delivery_items(quantity,expected_replacement_at,material:materials(name,unit,internal_code),material_units(unit_identifier,employee_id,delivered_at,valid_until))").order("delivered_at", { ascending: false }).order("created_at", { ascending: false }).limit(10),
         supabase.from("profiles").select("organization_id").single(),
       ]);
       if (loadError) setError(loadError.message); else setDeliveries((data ?? []) as unknown as Delivery[]);
