@@ -1,6 +1,6 @@
 "use client";
 
-import { ArrowDownToLine, ArrowUpRight, Bell, Boxes, CalendarClock, ChevronDown, CircleHelp, ClipboardCheck, ClipboardList, LayoutDashboard, Menu, PackageCheck, QrCode, Search, Settings, SlidersHorizontal, ShieldCheck, Users, Wallet, X } from "lucide-react";
+import { ArrowDownToLine, ArrowUpRight, Bell, Boxes, CalendarClock, ChevronDown, CircleHelp, ClipboardCheck, ClipboardList, LayoutDashboard, Menu, PackageCheck, Search, Settings, SlidersHorizontal, ShieldCheck, Users, Wallet, X } from "lucide-react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useEffect, useState } from "react";
@@ -10,7 +10,7 @@ type MenuItem = readonly [string, typeof LayoutDashboard, string];
 type MenuSection = { label: string; items: readonly MenuItem[] };
 const menuSections: readonly MenuSection[] = [
   { label: "Visão geral", items: [["Dashboard", LayoutDashboard, "/"]] },
-  { label: "Cadastros", items: [["Materiais", Boxes, "/materials"], ["QR Code do Portal", QrCode, "/portal-qr"], ["Funcionários", Users, "/employees"], ["Equipes", Users, "/teams"], ["Unidades físicas", Boxes, "/units"], ["Listas por função", ClipboardList, "/function-templates"]] },
+  { label: "Cadastros", items: [["Materiais", Boxes, "/materials"], ["Funcionários", Users, "/employees"], ["Equipes", Users, "/teams"], ["Unidades físicas", Boxes, "/units"], ["Listas por função", ClipboardList, "/function-templates"]] },
   { label: "Operações", items: [["Entradas", ClipboardList, "/entries"], ["Entregas", ArrowUpRight, "/deliveries"], ["Devoluções", ArrowDownToLine, "/returns"], ["Solicitações", ClipboardList, "/requests"], ["Estoque", PackageCheck, "/stock"], ["Validades", CalendarClock, "/validities"]] },
   { label: "Conformidade", items: [["Requisitos contratuais", ClipboardCheck, "/contract-requirements"], ["Ensaios", ClipboardCheck, "/tests"], ["Treinamentos", ClipboardCheck, "/training-compliance"], ["Conformidade", ClipboardCheck, "/compliance"], ["CA", ShieldCheck, "/ca"]] },
   { label: "Gestão e análises", items: [["Custos", Wallet, "/costs"], ["Relatórios", ClipboardList, "/reports"], ["Movimentações", SlidersHorizontal, "/movements"], ["Auditoria", ClipboardList, "/audit"]] },
