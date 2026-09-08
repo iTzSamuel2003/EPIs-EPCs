@@ -4,10 +4,10 @@ import { useEffect, useMemo, useState } from "react";
 import { Check, ClipboardList, Download, LoaderCircle, Search, X } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 
-type RequestRow = { id: string; request_type: string; description: string; status: string; review_notes: string | null; attachment_path: string | null; created_at: string; updated_at: string; employee: { full_name: string; registration: string | null } | null; delivery_item: { material: { name: string; unit: string } | null; lot: { lot_number: string } | null } | null };
+type RequestRow = { id: string; request_type: string; description: string; status: string; review_notes: string | null; attachment_path: string | null; created_at: string; updated_at: string; delivered_at: string | null; employee: { full_name: string; registration: string | null } | null; delivery_item: { material: { name: string; unit: string } | null; lot: { lot_number: string } | null } | null };
 type Confirmation = { item: RequestRow; status: string };
 const requestLabels: Record<string, string> = { replacement: "Troca de material", return: "Devolução", new_material: "Novo material", course: "Curso", other: "Outra" };
-const statusLabels: Record<string, string> = { pending: "Pendente", in_review: "Em análise", approved: "Aprovada", rejected: "Recusada", completed: "Concluída" };
+const statusLabels: Record<string, string> = { pending: "Pendente", in_review: "Em análise", approved: "Aprovada", rejected: "Recusada", completed: "Entregue" };
 const statusTone: Record<string, string> = { pending: "warning", in_review: "warning", approved: "success", completed: "success", rejected: "danger" };
 
 function date(value: string) { return new Date(value).toLocaleString("pt-BR", { dateStyle: "short", timeStyle: "short" }); }
@@ -24,6 +24,7 @@ export default function RequestsPage() {
   const [success, setSuccess] = useState("");
   const [confirming, setConfirming] = useState<Confirmation | null>(null);
   const [noteDraft, setNoteDraft] = useState("");
+  const [deliveredAtDraft, setDeliveredAtDraft] = useState("");
 
   useEffect(() => { void load(); }, []);
 
@@ -39,14 +40,14 @@ export default function RequestsPage() {
     return text.includes(query.toLowerCase()) && (typeFilter === "all" || item.request_type === typeFilter) && (statusFilter === "all" || item.status === statusFilter);
   }), [requests, query, typeFilter, statusFilter]);
 
-  function beginUpdate(item: RequestRow, status: string) { setNoteDraft(item.review_notes ?? ""); setConfirming({ item, status }); }
+  function beginUpdate(item: RequestRow, status: string) { setNoteDraft(item.review_notes ?? ""); setDeliveredAtDraft(item.delivered_at ?? new Date().toISOString().slice(0, 10)); setConfirming({ item, status }); }
   function closeConfirmation() { if (!savingId) setConfirming(null); }
 
   async function updateRequest(item: RequestRow, status: string, note: string) {
     setSavingId(item.id); setError(""); setSuccess("");
-    const { error: updateError } = await createClient().from("employee_portal_requests").update({ status, review_notes: note.trim() || null }).eq("id", item.id);
+    const { error: updateError } = await createClient().from("employee_portal_requests").update({ status, review_notes: note.trim() || null, delivered_at: status === "completed" ? deliveredAtDraft || new Date().toISOString().slice(0, 10) : null }).eq("id", item.id);
     if (updateError) setError(updateError.message); else {
-      setRequests((current) => current.map((currentItem) => currentItem.id === item.id ? { ...currentItem, status, review_notes: note.trim() || null, updated_at: new Date().toISOString() } : currentItem));
+      setRequests((current) => current.map((currentItem) => currentItem.id === item.id ? { ...currentItem, status, review_notes: note.trim() || null, delivered_at: status === "completed" ? deliveredAtDraft || new Date().toISOString().slice(0, 10) : null, updated_at: new Date().toISOString() } : currentItem));
       setSuccess("Solicitação atualizada."); setConfirming(null);
     }
     setSavingId("");
