@@ -1,7 +1,7 @@
 "use client";
 
 import Image from "next/image";
-import { Printer, QrCode, RefreshCw } from "lucide-react";
+import { Printer, QrCode } from "lucide-react";
 import { useEffect, useState } from "react";
 import QRCode from "qrcode";
 import jsPDF from "jspdf";
@@ -9,7 +9,6 @@ import jsPDF from "jspdf";
 const permanentPortalUrl = "https://epis-epcs.vercel.app/portal";
 
 export default function PortalQrPage() {
-  const [portalUrl, setPortalUrl] = useState("");
   const [qrDataUrl, setQrDataUrl] = useState("");
 
   async function generateQr(url: string) {
@@ -39,12 +38,11 @@ export default function PortalQrPage() {
   }
 
   useEffect(() => {
-    setPortalUrl(permanentPortalUrl);
     void generateQr(permanentPortalUrl);
   }, []);
 
   return <main className="module-shell portal-qr-page">
     <header className="module-header"><div><p className="eyebrow">ACESSO DO COLABORADOR</p><h1>QR Code do Portal</h1><p className="module-subtitle">Imprima este código para facilitar o acesso à tela de matrícula e CPF.</p></div><div className="header-actions no-print"><button className="secondary-button" type="button" onClick={downloadPdf}><QrCode size={16} /> Baixar PDF</button><button className="primary-button" type="button" onClick={() => window.print()}><Printer size={16} /> Imprimir</button></div></header>
-    <section className="panel portal-qr-card"><div className="portal-qr-heading"><div className="entry-icon"><QrCode size={24} /></div><div><h2>Acesse o Portal do Colaborador</h2><p>Ao escanear, o colaborador será direcionado para informar a própria matrícula e CPF. Nenhum dado pessoal fica gravado no QR Code.</p></div></div>{qrDataUrl && <Image className="portal-qr-image" src={qrDataUrl} alt="QR Code para acessar o Portal do Colaborador" width={520} height={520} unoptimized /> }<strong className="portal-qr-label">Aponte a câmera do celular para acessar</strong><div className="portal-qr-actions no-print"><button className="secondary-button" type="button" onClick={() => void generateQr(portalUrl)}><RefreshCw size={15} /> Atualizar código</button><span>Para imprimir sem data, URL e título, desative “Cabeçalhos e rodapés” na janela de impressão.</span></div></section>
+    <section className="panel portal-qr-card"><div className="portal-qr-heading"><div className="entry-icon"><QrCode size={24} /></div><div><h2>Acesse o Portal do Colaborador</h2><p>Ao escanear, o colaborador será direcionado para informar a própria matrícula e CPF. Nenhum dado pessoal fica gravado no QR Code.</p></div></div>{qrDataUrl && <Image className="portal-qr-image" src={qrDataUrl} alt="QR Code para acessar o Portal do Colaborador" width={520} height={520} unoptimized /> }<strong className="portal-qr-label">Aponte a câmera do celular para acessar</strong><div className="portal-qr-actions no-print"><span>Para imprimir sem data, URL e título, desative “Cabeçalhos e rodapés” na janela de impressão.</span></div></section>
   </main>;
 }
