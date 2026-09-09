@@ -55,6 +55,7 @@ begin
     if v_material_row.contract_item_code is not null then
       if v_material_row.ca_required and (v_material_row.ca_number is null or upper(trim(v_material_row.ca_number)) in ('PENDENTE', 'N/A')) then raise exception 'Material bloqueado: CA não cadastrado (%)', v_material_row.name; end if;
       if v_material_row.ca_required and v_material_row.ca_expires_at is not null and v_material_row.ca_expires_at < coalesce(p_delivered_at, current_date) then raise exception 'Material bloqueado: CA vencido (%)', v_material_row.name; end if;
+      if v_material_row.test_required and nullif(v_item->>'expected_replacement_at', '') is null then raise exception 'Informe a data de validade do ensaio (%)', v_material_row.name; end if;
       if v_material_row.test_required and not exists (select 1 from public.material_tests mt where mt.organization_id = v_org and mt.material_id = v_material and mt.result in ('approved', 'approved_with_restrictions') and mt.next_due_at >= coalesce(p_delivered_at, current_date)) then raise exception 'Material bloqueado: ensaio vencido ou ausente (%)', v_material_row.name; end if;
     end if;
   end loop;
