@@ -8,14 +8,14 @@ import { RecentDeliveries } from "@/components/recent-deliveries";
 import { uploadTransactionPhotos } from "@/lib/transaction-attachments";
 
 type Employee = { id: string; full_name: string; registration: string; department: string | null; job_title?: string | null; function_name?: string | null };
-type Material = { id: string; name: string; internal_code: string; unit: string; available_quantity: number; replacement_interval_days: number | null };
+type Material = { id: string; name: string; internal_code: string; unit: string; available_quantity: number; replacement_interval_days: number | null; test_required: boolean };
 type MaterialVariant = { id: string; material_id: string; name: string; size: string | null; active: boolean };
 type DeliveryItem = { material_id: string; materialQuery: string; variant_id: string; quantity: string; expected_replacement_at: string };
 type FunctionTemplate = { id: string; name: string; items: Array<{ material_name: string; material_id: string | null; quantity: number }> };
 const newDeliveryItem = (): DeliveryItem => ({ material_id: "", materialQuery: "", variant_id: "", quantity: "1", expected_replacement_at: "" });
 function calculateReplacementDate(deliveredAt: string, intervalDays: number | null) { if (!deliveredAt || !intervalDays) return ""; const date = new Date(`${deliveredAt}T00:00:00`); date.setDate(date.getDate() + intervalDays); return date.toISOString().slice(0, 10); }
 function normalize(value: string) { return value.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().trim(); }
-function materialLabel(material: Pick<Material, "internal_code" | "name">) { return material.internal_code ? `${material.internal_code} · ${material.name}` : material.name; }
+function materialLabel(material: Pick<Material, "name">) { return material.name; }
 function functionKey(value: string) { return normalize(value).replace(/\s+(vi|v|iv|iii|ii|i)$/, "").replace(/\beletricista\s+lm\b/g, "eletricista de linha morta").replace(/\beletricista\s+lv\b/g, "eletricista de linha viva").replace(/\beletricista\s+linha\s+morta\b/g, "eletricista de linha morta").replace(/\beletricista\s+linha\s+viva\b/g, "eletricista de linha viva").replace(/\bmotorista\s+operador\s+munck\b/g, "motorista operador de munck"); }
 const reasons = [["admission", "Admissão"], ["periodic_change", "Troca periódica"], ["damaged", "Equipamento danificado"], ["lost", "Equipamento perdido"], ["role_change", "Alteração de função"], ["replacement", "Substituição"], ["other", "Outro"]];
 
