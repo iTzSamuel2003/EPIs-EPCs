@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { Boxes, Download, FileText, LoaderCircle, Search, ShieldCheck, X } from "lucide-react";
+import { Boxes, Download, LoaderCircle, Search, ShieldCheck, X } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 
 type Material = { id: string; internal_code: string; name: string; type: "EPI" | "EPC" | "FERRAMENTAL"; minimum_stock: number; unit: string; location: string | null; status: string };

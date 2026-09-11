@@ -1,7 +1,7 @@
 "use client";
 
 import { ChangeEvent, FormEvent, useEffect, useMemo, useState } from "react";
-import { ArrowLeft, Check, ClipboardCheck, Download, X } from "lucide-react";
+import { ArrowLeft, Check, ClipboardCheck, X } from "lucide-react";
 import Link from "next/link";
 import { jsPDF } from "jspdf";
 import { createClient } from "@/lib/supabase/client";
