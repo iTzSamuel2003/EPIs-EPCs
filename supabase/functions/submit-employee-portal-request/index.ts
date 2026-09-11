@@ -1,11 +1,17 @@
 import "@supabase/functions-js/edge-runtime.d.ts";
 import { createClient } from "@supabase/supabase-js";
 
-const corsHeaders = {
-  "Access-Control-Allow-Origin": "*",
+const allowedOrigins = new Set(["https://epis-epcs.vercel.app", "http://localhost:3000"]);
+
+function corsHeaders(origin: string | null) {
+  const allowedOrigin = origin && allowedOrigins.has(origin) ? origin : "https://epis-epcs.vercel.app";
+  return {
+  "Access-Control-Allow-Origin": allowedOrigin,
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
   "Access-Control-Allow-Methods": "POST, OPTIONS",
-};
+  "Vary": "Origin",
+  };
+}
 const bucket = "employee-request-attachments";
 const maxFileSize = 10 * 1024 * 1024;
 const allowedTypes = new Map([
@@ -16,8 +22,8 @@ const allowedTypes = new Map([
 ]);
 const attempts = new Map<string, { count: number; resetAt: number }>();
 
-function response(body: unknown, status = 200) {
-  return new Response(JSON.stringify(body), { status, headers: { ...corsHeaders, "Content-Type": "application/json" } });
+function response(body: unknown, status = 200, origin: string | null = null) {
+  return new Response(JSON.stringify(body), { status, headers: { ...corsHeaders(origin), "Content-Type": "application/json" } });
 }
 
 function cleanText(value: FormDataEntryValue | null) {
@@ -57,9 +63,11 @@ async function removeAttachment(path: string, requestId: string, originalError: 
 }
 
 Deno.serve(async (req) => {
-  if (req.method === "OPTIONS") return new Response("ok", { headers: corsHeaders });
-  if (req.method !== "POST") return response({ error: "Método não permitido" }, 405);
-  if (!supabaseUrl || !serviceKey) return response({ error: "Configuração do servidor indisponível" }, 500);
+  const origin = req.headers.get("origin");
+  if (origin && !allowedOrigins.has(origin)) return response({ error: "Origem não autorizada" }, 403, origin);
+  if (req.method === "OPTIONS") return new Response("ok", { headers: corsHeaders(origin) });
+  if (req.method !== "POST") return response({ error: "Método não permitido" }, 405, origin);
+  if (!supabaseUrl || !serviceKey) return response({ error: "Configuração do servidor indisponível" }, 500, origin);
   const ip = req.headers.get("cf-connecting-ip") ?? req.headers.get("x-forwarded-for")?.split(",")[0]?.trim() ?? "unknown";
   if (!allowAttempt(ip)) return response({ error: "Tente novamente mais tarde" }, 429);
   const contentLength = Number(req.headers.get("content-length") ?? 0);
