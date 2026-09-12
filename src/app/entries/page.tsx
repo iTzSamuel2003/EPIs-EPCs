@@ -23,15 +23,17 @@ export default function EntriesPage() {
   useEffect(() => { void Promise.resolve().then(() => loadMaterials()); }, []);
   useEffect(() => { if (!success) return; const timer = window.setTimeout(() => setSuccess(""), 4500); return () => window.clearTimeout(timer); }, [success]);
   function updateItem(index: number, field: keyof EntryItem, value: string) { setItems((current) => current.map((item, itemIndex) => itemIndex === index ? { ...item, [field]: value } : item)); }
-  function chooseFile(event: React.ChangeEvent<HTMLInputElement>) { const file = event.target.files?.[0] ?? null; setError(""); if (file && file.size > 10 * 1024 * 1024) { setError("A nota fiscal deve ter no máximo 10 MB."); setInvoiceFile(null); return; } setInvoiceFile(file); }
+  function chooseFile(event: React.ChangeEvent<HTMLInputElement>) { const file = event.target.files?.[0] ?? null; setError(""); if (file && !["application/pdf", "image/jpeg", "image/png", "image/webp"].includes(file.type)) { setError("Anexe a nota em PDF, JPG, PNG ou WEBP."); setInvoiceFile(null); return; } if (file && file.size > 10 * 1024 * 1024) { setError("A nota fiscal deve ter no máximo 10 MB."); setInvoiceFile(null); return; } setInvoiceFile(file); }
   async function submit(event: FormEvent) {
     event.preventDefault(); setError(""); setSuccess("");
     if (items.some((item) => !item.material_id || !item.lot_number.trim() || Number(item.quantity) <= 0)) { setError("Preencha material, lote e quantidade de todos os itens."); return; }
     if (invoiceFile && !invoiceNumber.trim()) { setError("Informe o número da nota fiscal antes de anexar o arquivo."); return; }
     setSaving(true); const supabase = createClient(); let uploadedPath = "";
     if (invoiceFile) {
-      const { data: auth } = await supabase.auth.getUser();
-      const { data: profile } = auth.user ? await supabase.from("profiles").select("organization_id").eq("id", auth.user.id).single() : { data: null };
+      const { data: auth, error: authError } = await supabase.auth.getUser();
+      if (authError || !auth.user) { setError(authError?.message ?? "Sua sessão expirou. Entre novamente."); setSaving(false); return; }
+      const { data: profile, error: profileError } = await supabase.from("profiles").select("organization_id").eq("id", auth.user.id).single();
+      if (profileError) { setError(profileError.message); setSaving(false); return; }
       if (!profile?.organization_id) { setError("Não foi possível identificar a organização do usuário."); setSaving(false); return; }
       uploadedPath = `${profile.organization_id}/${crypto.randomUUID()}-${invoiceFile.name.replace(/[^a-zA-Z0-9._-]/g, "_")}`;
       const { error: uploadError } = await supabase.storage.from("invoice-attachments").upload(uploadedPath, invoiceFile, { contentType: invoiceFile.type, upsert: false });
