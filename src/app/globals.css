@@ -127,3 +127,18 @@
 @media (prefers-reduced-motion:reduce){.loading-spinner{animation:none}}
  .type-badge.ferramental{color:#b2763b;background:#fff1e3}.material-type-icon.ferramental{background:#fff1e3;color:#c47f3d}
  .pagination-controls{display:flex;align-items:center;justify-content:space-between;gap:14px;padding:14px 4px 2px;color:#8995aa;font-size:11px}.pagination-controls>div{display:flex;align-items:center;gap:10px}.pagination-controls strong{color:#536078;white-space:nowrap}.pagination-controls .secondary-button{padding:7px 10px;font-size:11px}.pagination-controls button:disabled{cursor:not-allowed;opacity:.5}@media(max-width:600px){.pagination-controls{align-items:stretch;flex-direction:column}.pagination-controls>div{justify-content:space-between}.pagination-controls .secondary-button{padding:9px 11px}}@media(prefers-reduced-motion:reduce){*,*::before,*::after{animation-duration:.01ms!important;animation-iteration-count:1!important;scroll-behavior:auto!important;transition-duration:.01ms!important}.spin{animation:none!important}}
+.module-table-card .table-wrap{overflow-x:auto;overscroll-behavior-inline:contain}
+.module-table-card .table-wrap table{table-layout:auto}
+.module-table-card td strong,.module-table-card .material-cell strong{overflow-wrap:anywhere;line-height:1.35}
+.module-shell>.edit-employee-card,.module-shell>.module-table-card{width:min(100%,1400px);margin-left:auto;margin-right:auto}
+.module-shell>.edit-employee-card{margin-bottom:20px}
+.module-shell:has(.form-grid.four)>.edit-employee-card{max-width:1400px}
+@media (min-width:761px){.module-shell>.module-table-card{padding-left:24px;padding-right:24px}}
+@media (max-width:600px){
+  .module-table-card{overflow:hidden}
+  .module-table-card .table-wrap{margin-right:-2px;padding-bottom:8px}
+  .module-table-card .table-wrap table{min-width:720px;width:max-content;white-space:normal}
+  .module-table-card td:first-child{min-width:240px}
+  .module-table-card th,.module-table-card td{vertical-align:middle}
+  .module-shell>.edit-employee-card,.module-shell>.module-table-card{width:100%}
+}
