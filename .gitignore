@@ -3,6 +3,7 @@
 !.env.example
 node_modules/
 .next/
+tsconfig.tsbuildinfo
 out/
 build/
 .worktrees/
