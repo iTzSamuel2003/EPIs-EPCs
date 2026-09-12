@@ -133,6 +133,7 @@
 .module-shell>.edit-employee-card,.module-shell>.module-table-card{width:min(100%,1400px);margin-left:auto;margin-right:auto}
 .module-shell>.edit-employee-card{margin-bottom:20px}
 .module-shell:has(.form-grid.four)>.edit-employee-card{max-width:1400px}
+.module-shell:has(.recent-entries-card)>.entry-card{max-width:1400px}
 @media (min-width:761px){.module-shell>.module-table-card{padding-left:24px;padding-right:24px}}
 @media (max-width:600px){
   .module-table-card{overflow:hidden}
