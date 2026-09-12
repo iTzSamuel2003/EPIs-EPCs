@@ -96,9 +96,11 @@ export default function MaterialsPage() {
     if (form.type === "EPI" && !form.ca_number.trim()) { setError("O número do CA é obrigatório para materiais do tipo EPI."); return; }
     setSaving(true);
     const supabase = createClient();
-    const { data: auth } = await supabase.auth.getUser();
+    const { data: auth, error: authError } = await supabase.auth.getUser();
+    if (authError) { setError(authError.message); setSaving(false); return; }
     if (!auth.user) { setError("Sua sessão expirou. Entre novamente."); setSaving(false); return; }
-    const { data: profile } = await supabase.from("profiles").select("organization_id").eq("id", auth.user.id).single();
+    const { data: profile, error: profileError } = await supabase.from("profiles").select("organization_id").eq("id", auth.user.id).single();
+    if (profileError) { setError(profileError.message); setSaving(false); return; }
     if (!profile?.organization_id) { setError("Não foi possível identificar a organização do usuário."); setSaving(false); return; }
     const payload = {
       internal_code: form.internal_code.trim() || null, name: form.name.trim(), type: form.type, unit: form.unit.trim() || "un.", size: form.size.trim() || null,
