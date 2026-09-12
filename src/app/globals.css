@@ -125,3 +125,4 @@
 .loading-spinner{width:24px;height:24px;border:3px solid #e7e3fa;border-top-color:#7762d6;border-radius:50%;animation:spin 1s linear infinite}
 @media (prefers-reduced-motion:reduce){.loading-spinner{animation:none}}
  .type-badge.ferramental{color:#b2763b;background:#fff1e3}.material-type-icon.ferramental{background:#fff1e3;color:#c47f3d}
+ .pagination-controls{display:flex;align-items:center;justify-content:space-between;gap:14px;padding:14px 4px 2px;color:#8995aa;font-size:11px}.pagination-controls>div{display:flex;align-items:center;gap:10px}.pagination-controls strong{color:#536078;white-space:nowrap}.pagination-controls .secondary-button{padding:7px 10px;font-size:11px}.pagination-controls button:disabled{cursor:not-allowed;opacity:.5}@media(max-width:600px){.pagination-controls{align-items:stretch;flex-direction:column}.pagination-controls>div{justify-content:space-between}.pagination-controls .secondary-button{padding:9px 11px}}
