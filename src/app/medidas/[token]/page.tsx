@@ -3,9 +3,10 @@
 import { FormEvent, useEffect, useState } from "react";
 import { Check, LoaderCircle, Ruler, ShieldCheck, X } from "lucide-react";
 import { useParams } from "next/navigation";
-const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL ?? "https://uedqxkzprueezjarhzql.supabase.co";
-const supabasePublishableKey = "sb_publishable_9l2tSpFY9qHdAysv4P4ECw_rzqqgDbY";
+const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
+const supabasePublishableKey = process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY;
 async function publicRpc<T>(functionName: string, body: Record<string, unknown>) {
+  if (!supabaseUrl || !supabasePublishableKey) throw new Error("O formulário não está configurado. Solicite ao responsável a correção das variáveis do Supabase.");
   const response = await fetch(`${supabaseUrl}/rest/v1/rpc/${functionName}`, { method: "POST", headers: { apikey: supabasePublishableKey, Authorization: `Bearer ${supabasePublishableKey}`, "Content-Type": "application/json" }, body: JSON.stringify(body) });
   if (!response.ok) throw new Error(`RPC ${response.status}`);
   return response.json() as Promise<T>;
