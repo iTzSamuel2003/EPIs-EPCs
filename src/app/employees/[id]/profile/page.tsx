@@ -16,10 +16,10 @@ export default function EmployeeProfilePage() {
   const [name, setName] = useState(""); const [profile, setProfile] = useState<Profile>(emptyProfile); const [request, setRequest] = useState<MeasurementRequest | null>(null); const [loading, setLoading] = useState(true); const [saving, setSaving] = useState(false); const [sharing, setSharing] = useState(false); const [error, setError] = useState(""); const [success, setSuccess] = useState("");
   const load = useCallback(async () => {
     const supabase = createClient();
-    const [{ data: employee }, { data: profileData }, { data: requestData, error: requestError }] = await Promise.all([
+    const [{ data: employee, error: employeeError }, { data: profileData, error: profileDataError }, { data: requestData, error: requestError }] = await Promise.all([
       supabase.from("employees").select("full_name").eq("id", id).single(), supabase.from("employee_profiles").select("shirt_size,pants_size,shoe_size,helmet_size,glove_size,uniform_notes,completed_by_employee").eq("employee_id", id).maybeSingle(), supabase.from("employee_measurement_requests").select("token,expires_at,completed_at").eq("employee_id", id).maybeSingle(),
     ]);
-    if (requestError) setError(requestError.message ?? "N\u00e3o foi poss\u00edvel carregar a ficha.");
+    if (employeeError || profileDataError || requestError) setError((employeeError ?? profileDataError ?? requestError)?.message ?? "Não foi possível carregar a ficha.");
     setName(employee?.full_name ?? ""); setProfile({ ...emptyProfile, ...(profileData ?? {}) }); setRequest(requestData as MeasurementRequest | null); setLoading(false);
   }, [id]);
   useEffect(() => { void load(); }, [load]);

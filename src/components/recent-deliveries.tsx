@@ -23,11 +23,11 @@ export function RecentDeliveries() {
   useEffect(() => {
     async function load() {
       const supabase = createClient();
-      const [{ data, error: loadError }, { data: profileData }] = await Promise.all([
+      const [{ data, error: loadError }, { data: profileData, error: profileError }] = await Promise.all([
         supabase.from("deliveries").select("id,delivered_at,reason,notes,term_file_path,term_uploaded_at,term_signature_method,employee:employees(full_name,registration,cpf),delivery_items(quantity,expected_replacement_at,material:materials(name,unit,internal_code),material_units(unit_identifier,employee_id,delivered_at,valid_until))").order("delivered_at", { ascending: false }).order("created_at", { ascending: false }).limit(10),
         supabase.from("profiles").select("organization_id").single(),
       ]);
-      if (loadError) setError(loadError.message); else setDeliveries((data ?? []) as unknown as Delivery[]);
+      if (loadError || profileError) setError((loadError ?? profileError)?.message ?? "Não foi possível carregar as entregas."); else setDeliveries((data ?? []) as unknown as Delivery[]);
       if (profileData?.organization_id) { const { data: organization, error: organizationError } = await supabase.from("organizations").select("name").eq("id", profileData.organization_id).single(); if (organizationError) setError(organizationError.message); else setCompanyName(organization?.name ?? ""); }
       setLoading(false);
     }

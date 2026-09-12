@@ -36,12 +36,12 @@ export default function EmployeeMaterialsPage() {
   useEffect(() => {
     async function load() {
       const supabase = createClient();
-      const [{ data: employeeData, error: employeeError }, { data: deliveryData, error: deliveryError }, { data: courseData }] = await Promise.all([
+      const [{ data: employeeData, error: employeeError }, { data: deliveryData, error: deliveryError }, { data: courseData, error: courseError }] = await Promise.all([
         supabase.from("employees").select("id,registration,full_name,cpf,job_title,function_name,function_classification,department,unit").eq("id", id).single(),
         supabase.from("delivery_items").select("id,quantity,expected_replacement_at,materials(name,internal_code,unit),material_lots(lot_number),material_units(unit_identifier,delivered_at,valid_until),deliveries!inner(id,delivered_at,reason,employee_id,term_file_path,term_uploaded_at,term_signature_method)").eq("deliveries.employee_id", id).order("created_at", { ascending: false }),
         supabase.from("employee_courses").select("id,name,provider,expires_at").eq("employee_id", id).order("expires_at", { ascending: true, nullsFirst: false }),
       ]);
-      if (employeeError || deliveryError) setError(employeeError?.message ?? deliveryError?.message ?? "Não foi possível carregar a ficha.");
+      if (employeeError || deliveryError || courseError) setError(employeeError?.message ?? deliveryError?.message ?? courseError?.message ?? "Não foi possível carregar a ficha.");
       setEmployee(employeeData as Employee);
       setCourses((courseData ?? []) as Course[]);
       setItems(((deliveryData ?? []) as unknown[]).map((row) => {
