@@ -20,7 +20,46 @@ type SearchResult = { id: string; label: string; detail: string | null; href: st
 
 export function AppShell({ children }: { children: React.ReactNode }) {
   const pathname = usePathname(); const [mobileMenu, setMobileMenu] = useState(false); const [query, setQuery] = useState(""); const [results, setResults] = useState<SearchResult[]>([]); const [validityCount, setValidityCount] = useState(0);
-  useEffect(() => { void Promise.resolve().then(async () => { const supabase = createClient(); const [{ data: lots, error: lotError }, { data: deliveryItems, error: itemError }, { data: returns, error: returnError }] = await Promise.all([supabase.from("material_lots").select("id,material_id,expires_at,available_quantity"), supabase.from("delivery_items").select("id,lot_id,quantity"), supabase.from("return_items").select("delivery_item_id,quantity")]); if (lotError || itemError || returnError) { setValidityCount(0); return; } const today = new Date(); today.setHours(0, 0, 0, 0); const isAlert = (expiresAt: string | null) => { if (!expiresAt) return false; const days = Math.ceil((new Date(`${expiresAt}T00:00:00`).getTime() - today.getTime()) / 86400000); return days <= 30; }; const lotMap = new Map((lots ?? []).map((lot) => [lot.id, { materialId: lot.material_id, expiresAt: lot.expires_at }])); const returned = new Map<string, number>(); for (const item of returns ?? []) returned.set(item.delivery_item_id, (returned.get(item.delivery_item_id) ?? 0) + Number(item.quantity)); const alertMaterialIds = new Set<string>(); for (const lot of lots ?? []) if (Number(lot.available_quantity) > 0 && isAlert(lot.expires_at)) alertMaterialIds.add(lot.material_id); for (const item of deliveryItems ?? []) { const lot = item.lot_id ? lotMap.get(item.lot_id) : null; if (Number(item.quantity) > (returned.get(item.id) ?? 0) && lot && isAlert(lot.expiresAt)) alertMaterialIds.add(lot.materialId); } setValidityCount(alertMaterialIds.size); }); }, []);
+  useEffect(() => {
+    let cancelled = false;
+    const supabase = createClient();
+    async function loadValidityCount() {
+      const [{ data: lots, error: lotError }, { data: deliveryItems, error: itemError }, { data: returns, error: returnError }] = await Promise.all([
+        supabase.from("material_lots").select("id,material_id,expires_at,available_quantity"),
+        supabase.from("delivery_items").select("id,lot_id,quantity"),
+        supabase.from("return_items").select("delivery_item_id,quantity"),
+      ]);
+      if (cancelled) return;
+      if (lotError || itemError || returnError) { setValidityCount(0); return; }
+      const today = new Date(); today.setHours(0, 0, 0, 0);
+      const isAlert = (expiresAt: string | null) => {
+        if (!expiresAt) return false;
+        const days = Math.ceil((new Date(`${expiresAt}T00:00:00`).getTime() - today.getTime()) / 86400000);
+        return days <= 30;
+      };
+      const lotMap = new Map((lots ?? []).map((lot) => [lot.id, { materialId: lot.material_id, expiresAt: lot.expires_at }]));
+      const returned = new Map<string, number>();
+      for (const item of returns ?? []) returned.set(item.delivery_item_id, (returned.get(item.delivery_item_id) ?? 0) + Number(item.quantity));
+      const alertMaterialIds = new Set<string>();
+      for (const lot of lots ?? []) if (Number(lot.available_quantity) > 0 && isAlert(lot.expires_at)) alertMaterialIds.add(lot.material_id);
+      for (const item of deliveryItems ?? []) {
+        const lot = item.lot_id ? lotMap.get(item.lot_id) : null;
+        if (Number(item.quantity) > (returned.get(item.id) ?? 0) && lot && isAlert(lot.expiresAt)) alertMaterialIds.add(lot.materialId);
+      }
+      setValidityCount(alertMaterialIds.size);
+    }
+    void loadValidityCount();
+    const refresh = () => void loadValidityCount();
+    const channel = supabase.channel("validity-count").on("postgres_changes", { event: "*", schema: "public", table: "material_lots" }, refresh).on("postgres_changes", { event: "*", schema: "public", table: "delivery_items" }, refresh).on("postgres_changes", { event: "*", schema: "public", table: "return_items" }, refresh).subscribe();
+    ["delivery-created", "return-created", "stock-entry-created", "stock-entry-updated", "stock-entry-deleted"].forEach((eventName) => window.addEventListener(eventName, refresh));
+    window.addEventListener("focus", refresh);
+    return () => {
+      cancelled = true;
+      void supabase.removeChannel(channel);
+      ["delivery-created", "return-created", "stock-entry-created", "stock-entry-updated", "stock-entry-deleted"].forEach((eventName) => window.removeEventListener(eventName, refresh));
+      window.removeEventListener("focus", refresh);
+    };
+  }, []);
   useEffect(() => { const term = query.trim(); if (term.length < 2) { setResults([]); return; } const timer = window.setTimeout(async () => { const supabase = createClient(); const pattern = `%${term.replaceAll("%", "\\%").replaceAll("_", "\\_")}%`; const [{ data: materialData }, { data: employeeData }] = await Promise.all([supabase.from("materials").select("id,name,internal_code").or(`name.ilike.${pattern},internal_code.ilike.${pattern}`).limit(5), supabase.from("employees").select("id,full_name,registration").or(`full_name.ilike.${pattern},registration.ilike.${pattern}`).limit(5)]); setResults([...((materialData ?? []).map((item) => ({ id: item.id, label: item.name, detail: item.internal_code || "Código não informado", href: "/materials", kind: "Material" as const }))), ...((employeeData ?? []).map((item) => ({ id: item.id, label: item.full_name, detail: item.registration, href: `/employees/${item.id}`, kind: "Funcionario" as const })))]); }, 220); return () => window.clearTimeout(timer); }, [query]);
   if (pathname === "/login" || pathname === "/reset-password" || pathname.startsWith("/medidas/") || pathname === "/portal") return <>{children}</>;
   function closeSearch() { setQuery(""); setResults([]); }
