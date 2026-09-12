@@ -124,3 +124,4 @@
 .success-feedback{animation:success-feedback-dismiss 4.5s ease forwards;overflow:hidden}@keyframes success-feedback-dismiss{0%,88%{opacity:1;max-height:120px;margin-bottom:16px}100%{opacity:0;max-height:0;margin-bottom:0;padding-top:0;padding-bottom:0;border-width:0;pointer-events:none}}@media (prefers-reduced-motion:reduce){.success-feedback{animation:none}}
 .loading-spinner{width:24px;height:24px;border:3px solid #e7e3fa;border-top-color:#7762d6;border-radius:50%;animation:spin 1s linear infinite}
 @media (prefers-reduced-motion:reduce){.loading-spinner{animation:none}}
+ .type-badge.ferramental{color:#b2763b;background:#fff1e3}.material-type-icon.ferramental{background:#fff1e3;color:#c47f3d}
