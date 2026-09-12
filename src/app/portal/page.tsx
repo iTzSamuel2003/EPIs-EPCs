@@ -18,9 +18,9 @@ const emptyMeasures: MeasureForm = { shirt: "", pants: "", shoe: "", helmet: "",
 const portalSessionKey = "epis-portal-session-v1";
 const portalSessionDuration = 30 * 60 * 1000;
 type PortalSession = { registration: string; cpf: string; expiresAt: number };
-function readPortalSession(): PortalSession | null { try { const raw = window.localStorage.getItem(portalSessionKey); if (!raw) return null; const session = JSON.parse(raw) as PortalSession; if (!session.registration || !session.cpf || !session.expiresAt || session.expiresAt <= Date.now()) { window.localStorage.removeItem(portalSessionKey); return null; } return session; } catch { window.localStorage.removeItem(portalSessionKey); return null; } }
-function savePortalSession(registration: string, cpf: string) { window.localStorage.setItem(portalSessionKey, JSON.stringify({ registration, cpf, expiresAt: Date.now() + portalSessionDuration } satisfies PortalSession)); }
-function clearPortalSession() { window.localStorage.removeItem(portalSessionKey); }
+function readPortalSession(): PortalSession | null { try { const raw = window.sessionStorage.getItem(portalSessionKey); if (!raw) return null; const session = JSON.parse(raw) as PortalSession; if (!session.registration || !session.cpf || !session.expiresAt || session.expiresAt <= Date.now()) { window.sessionStorage.removeItem(portalSessionKey); return null; } return session; } catch { window.sessionStorage.removeItem(portalSessionKey); return null; } }
+function savePortalSession(registration: string, cpf: string) { window.sessionStorage.setItem(portalSessionKey, JSON.stringify({ registration, cpf, expiresAt: Date.now() + portalSessionDuration } satisfies PortalSession)); }
+function clearPortalSession() { window.sessionStorage.removeItem(portalSessionKey); }
 const requestLabels: Record<string, string> = { replacement: "Troca de material", return: "Devolução", new_material: "Solicitar material", course: "Solicitar curso", other: "Outra solicitação" };
 const statusLabels: Record<string, string> = { pending: "Pendente", in_review: "Em análise", approved: "Aprovada", rejected: "Recusada", completed: "Concluída" };
 function normalize(value: string) { return value.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase(); }
