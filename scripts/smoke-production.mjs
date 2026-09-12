@@ -20,6 +20,10 @@ try {
     });
     const expected = publicRoutes.has(route) ? 200 : 307;
     if (response.status !== expected) failures.push(`${response.status} ${route} (esperado ${expected})`);
+    if (response.headers.get("strict-transport-security")?.includes("max-age=") !== true) failures.push(`header HSTS ausente em ${route}`);
+    if (response.headers.get("x-content-type-options") !== "nosniff") failures.push(`header nosniff ausente em ${route}`);
+    if (response.headers.get("x-frame-options") !== "DENY") failures.push(`header anti-frame ausente em ${route}`);
+    if (!publicRoutes.has(route) && response.headers.get("cache-control")?.includes("private") !== true) failures.push(`cache privado ausente em ${route}`);
   }
 } finally {
   clearTimeout(timeout);
