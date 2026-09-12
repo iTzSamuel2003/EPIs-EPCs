@@ -22,19 +22,30 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   const pathname = usePathname(); const [mobileMenu, setMobileMenu] = useState(false); const [query, setQuery] = useState(""); const [results, setResults] = useState<SearchResult[]>([]); const [validityCount, setValidityCount] = useState(0);
   useEffect(() => {
     let cancelled = false;
+    let loading = false;
+    let refreshTimer: number | undefined;
     const supabase = createClient();
     async function loadValidityCount() {
-      const { data, error } = await supabase.rpc("get_validity_alert_count");
-      if (cancelled) return;
-      setValidityCount(error ? 0 : Number(data ?? 0));
+      if (loading) return;
+      loading = true;
+      try {
+        const { data, error } = await supabase.rpc("get_validity_alert_count");
+        if (!cancelled) setValidityCount(error ? 0 : Number(data ?? 0));
+      } finally {
+        loading = false;
+      }
     }
     void loadValidityCount();
-    const refresh = () => void loadValidityCount();
+    const refresh = () => {
+      if (refreshTimer) window.clearTimeout(refreshTimer);
+      refreshTimer = window.setTimeout(() => void loadValidityCount(), 250);
+    };
     const channel = supabase.channel("validity-count").on("postgres_changes", { event: "*", schema: "public", table: "material_lots" }, refresh).on("postgres_changes", { event: "*", schema: "public", table: "delivery_items" }, refresh).on("postgres_changes", { event: "*", schema: "public", table: "return_items" }, refresh).subscribe();
     ["delivery-created", "return-created", "stock-entry-created", "stock-entry-updated", "stock-entry-deleted"].forEach((eventName) => window.addEventListener(eventName, refresh));
     window.addEventListener("focus", refresh);
     return () => {
       cancelled = true;
+      if (refreshTimer) window.clearTimeout(refreshTimer);
       void supabase.removeChannel(channel);
       ["delivery-created", "return-created", "stock-entry-created", "stock-entry-updated", "stock-entry-deleted"].forEach((eventName) => window.removeEventListener(eventName, refresh));
       window.removeEventListener("focus", refresh);
