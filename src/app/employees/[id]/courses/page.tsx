@@ -33,7 +33,7 @@ export default function EmployeeCoursesPage() {
   const pendingRequired = requiredCourses.filter((item) => !hasValidCourse(courses, item)).length;
   async function addCourse(event: FormEvent) {
     event.preventDefault(); if (!course.name.trim()) return; setSaving(true); setError(""); setSuccess("");
-    const supabase = createClient(); const { data: auth } = await supabase.auth.getUser(); const { data: profile } = await supabase.from("profiles").select("organization_id").eq("id", auth.user?.id ?? "").single();
+    const supabase = createClient(); const { data: auth, error: authError } = await supabase.auth.getUser(); if (authError) { setError(authError.message); setSaving(false); return; } if (!auth.user) { setError("Sua sessão expirou. Entre novamente."); setSaving(false); return; } const { data: profile, error: profileError } = await supabase.from("profiles").select("organization_id").eq("id", auth.user.id).single(); if (profileError) { setError(profileError.message); setSaving(false); return; } if (!profile?.organization_id) { setError("Não foi possível identificar a organização do usuário."); setSaving(false); return; }
     const { error: saveError } = await supabase.from("employee_courses").insert({ ...course, name: course.name.trim(), provider: course.provider.trim() || null, certificate_number: course.certificate_number.trim() || null, completed_at: course.completed_at || null, expires_at: course.expires_at || null, employee_id: id, organization_id: profile?.organization_id });
     if (saveError) setError(saveError.message); else { setCourse(emptyCourse); await load(); setSuccess("Curso adicionado à ficha."); } setSaving(false);
   }

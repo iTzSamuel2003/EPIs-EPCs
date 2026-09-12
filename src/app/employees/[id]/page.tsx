@@ -80,15 +80,15 @@ export default function EmployeeMaterialsPage() {
     const file = event.target.files?.[0];
     event.target.value = "";
     if (!file) return;
-    if (file.size > 10 * 1024 * 1024) { setError("O arquivo do termo deve ter no máximo 10 MB."); return; }
+    if (!['application/pdf', 'image/jpeg', 'image/png', 'image/webp'].includes(file.type)) { setError("Anexe um PDF, JPG, PNG ou WEBP."); return; } if (file.size > 10 * 1024 * 1024) { setError("O arquivo do termo deve ter no máximo 10 MB."); return; }
     setUploadingId(sheet.id); setError("");
     const supabase = createClient();
-    const { data: profileData } = await supabase.from("profiles").select("organization_id").single();
-    if (!profileData?.organization_id) { setError("Não foi possível identificar a organização."); setUploadingId(""); return; }
+    const { data: profileData, error: profileError } = await supabase.from("profiles").select("organization_id").single();
+    if (profileError || !profileData?.organization_id) { setError(profileError?.message ?? "Não foi possível identificar a organização."); setUploadingId(""); return; }
     const path = `${profileData.organization_id}/${sheet.id}/${crypto.randomUUID()}-${safeFileName(file.name)}`;
     const { error: uploadError } = await supabase.storage.from("delivery-terms").upload(path, file, { contentType: file.type, upsert: false });
     if (uploadError) { setError(uploadError.message); setUploadingId(""); return; }
-    const { data: auth } = await supabase.auth.getUser();
+    const { data: auth, error: authError } = await supabase.auth.getUser(); if (authError) { await supabase.storage.from("delivery-terms").remove([path]); setError(authError.message); setUploadingId(""); return; }
     const uploadedAt = new Date().toISOString();
     const { error: updateError } = await supabase.from("deliveries").update({ term_file_path: path, term_uploaded_at: uploadedAt, term_uploaded_by: auth.user?.id ?? null }).eq("id", sheet.id);
     if (updateError) { await supabase.storage.from("delivery-terms").remove([path]); setError(updateError.message); } else {
