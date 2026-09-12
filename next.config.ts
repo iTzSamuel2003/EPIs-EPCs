@@ -6,6 +6,12 @@ const nextConfig: NextConfig = {
   },
   async headers() {
     return [{
+      source: "/portal",
+      headers: [{ key: "Cache-Control", value: "no-store, max-age=0" }],
+    }, {
+      source: "/medidas/:token*",
+      headers: [{ key: "Cache-Control", value: "no-store, max-age=0" }],
+    }, {
       source: "/(.*)",
       headers: [
         { key: "Strict-Transport-Security", value: "max-age=31536000; includeSubDomains" },
