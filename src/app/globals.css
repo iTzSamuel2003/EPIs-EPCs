@@ -98,6 +98,7 @@
 @media (max-width: 1024px) and (min-width: 761px){
   .module-toolbar,.module-header,.delivery-items-header{flex-wrap:wrap}
   .module-toolbar>*{min-width:0;flex:1 1 240px}
+  .module-summary{grid-template-columns:repeat(2,minmax(0,1fr))}
   .entry-item-row{grid-template-columns:28px minmax(0,1fr) 32px;align-items:end}
   .entry-item-row label{grid-column:2!important}
   .entry-item-row .remove-item{grid-column:3!important;grid-row:1!important}
