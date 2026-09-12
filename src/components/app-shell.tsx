@@ -24,29 +24,9 @@ export function AppShell({ children }: { children: React.ReactNode }) {
     let cancelled = false;
     const supabase = createClient();
     async function loadValidityCount() {
-      const [{ data: lots, error: lotError }, { data: deliveryItems, error: itemError }, { data: returns, error: returnError }] = await Promise.all([
-        supabase.from("material_lots").select("id,material_id,expires_at,available_quantity"),
-        supabase.from("delivery_items").select("id,lot_id,quantity"),
-        supabase.from("return_items").select("delivery_item_id,quantity"),
-      ]);
+      const { data, error } = await supabase.rpc("get_validity_alert_count");
       if (cancelled) return;
-      if (lotError || itemError || returnError) { setValidityCount(0); return; }
-      const today = new Date(); today.setHours(0, 0, 0, 0);
-      const isAlert = (expiresAt: string | null) => {
-        if (!expiresAt) return false;
-        const days = Math.ceil((new Date(`${expiresAt}T00:00:00`).getTime() - today.getTime()) / 86400000);
-        return days <= 30;
-      };
-      const lotMap = new Map((lots ?? []).map((lot) => [lot.id, { materialId: lot.material_id, expiresAt: lot.expires_at }]));
-      const returned = new Map<string, number>();
-      for (const item of returns ?? []) returned.set(item.delivery_item_id, (returned.get(item.delivery_item_id) ?? 0) + Number(item.quantity));
-      const alertMaterialIds = new Set<string>();
-      for (const lot of lots ?? []) if (Number(lot.available_quantity) > 0 && isAlert(lot.expires_at)) alertMaterialIds.add(lot.material_id);
-      for (const item of deliveryItems ?? []) {
-        const lot = item.lot_id ? lotMap.get(item.lot_id) : null;
-        if (Number(item.quantity) > (returned.get(item.id) ?? 0) && lot && isAlert(lot.expiresAt)) alertMaterialIds.add(lot.materialId);
-      }
-      setValidityCount(alertMaterialIds.size);
+      setValidityCount(error ? 0 : Number(data ?? 0));
     }
     void loadValidityCount();
     const refresh = () => void loadValidityCount();
