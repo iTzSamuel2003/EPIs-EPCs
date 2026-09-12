@@ -7,3 +7,4 @@ update public.function_template_items set material_id = '718dea4a-76a3-405b-988f
 update public.function_template_items set material_id = '9a6b4e4c-8d6b-4676-9b6d-5e199797f4b3', material_name = 'Luva isolante CL II' where material_id = 'ddec552e-0be7-42bc-a732-7ab04fce6287';
 update public.function_template_items set material_id = 'e6a1dbb9-34a5-4243-befb-95d785306f1e', material_name = 'Manga isolante CL II' where material_id = 'a172d933-7ddb-4691-ace5-dcaea05b253f';
 update public.function_template_items set material_id = '3e2d6e46-9119-4c5f-90fe-148c36cba62e', material_name = 'Trava quedas' where material_id = '9953f749-8447-47e1-a70f-00a66ba34587';
+
