@@ -122,3 +122,5 @@
 @media print{body .module-shell.portal-qr-page> .portal-qr-card{display:block!important;visibility:visible!important}body .module-shell.portal-qr-page> .portal-qr-card *{visibility:visible!important}.portal-qr-page .portal-qr-card{page-break-inside:avoid}}
 .portal-qr-actions{display:flex;align-items:center;justify-content:center;gap:14px;flex-wrap:wrap}.portal-qr-actions span{max-width:390px;color:#909bad;font-size:10px;line-height:1.4;text-align:left}
 .success-feedback{animation:success-feedback-dismiss 4.5s ease forwards;overflow:hidden}@keyframes success-feedback-dismiss{0%,88%{opacity:1;max-height:120px;margin-bottom:16px}100%{opacity:0;max-height:0;margin-bottom:0;padding-top:0;padding-bottom:0;border-width:0;pointer-events:none}}@media (prefers-reduced-motion:reduce){.success-feedback{animation:none}}
+.loading-spinner{width:24px;height:24px;border:3px solid #e7e3fa;border-top-color:#7762d6;border-radius:50%;animation:spin 1s linear infinite}
+@media (prefers-reduced-motion:reduce){.loading-spinner{animation:none}}
