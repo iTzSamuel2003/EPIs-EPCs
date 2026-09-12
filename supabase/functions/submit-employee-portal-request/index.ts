@@ -46,6 +46,19 @@ function allowAttempt(key: string) {
   return true;
 }
 
+function startsWithBytes(bytes: Uint8Array, signature: number[], offset = 0) {
+  return signature.every((byte, index) => bytes[offset + index] === byte);
+}
+
+async function hasValidFileSignature(file: File, mimeType: string) {
+  const bytes = new Uint8Array(await file.slice(0, 12).arrayBuffer());
+  if (mimeType === "application/pdf") return startsWithBytes(bytes, [0x25, 0x50, 0x44, 0x46, 0x2d]);
+  if (mimeType === "image/jpeg") return startsWithBytes(bytes, [0xff, 0xd8, 0xff]);
+  if (mimeType === "image/png") return startsWithBytes(bytes, [0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]);
+  if (mimeType === "image/webp") return startsWithBytes(bytes, [0x52, 0x49, 0x46, 0x46]) && startsWithBytes(bytes, [0x57, 0x45, 0x42, 0x50], 8);
+  return false;
+}
+
 const supabaseUrl = Deno.env.get("SUPABASE_URL") ?? "";
 const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? Deno.env.get("SUPABASE_SECRET_KEY") ?? "";
 const admin = createClient(supabaseUrl, serviceKey, { auth: { autoRefreshToken: false, persistSession: false } });
@@ -90,7 +103,7 @@ Deno.serve(async (req) => {
     extension = allowedTypes.get(attachment.type) ?? "";
     const filenameExtension = attachment.name.toLowerCase().match(/\.[a-z0-9]+$/)?.[0] ?? "";
     const validJpegExtension = extension === ".jpg" && (filenameExtension === ".jpg" || filenameExtension === ".jpeg");
-    if (!extension || (!validJpegExtension && filenameExtension !== extension) || attachment.size > maxFileSize) return response({ error: "Anexo inválido: use PDF, JPG, JPEG, PNG ou WEBP de até 10 MB" }, 400);
+    if (!extension || (!validJpegExtension && filenameExtension !== extension) || attachment.size > maxFileSize || !(await hasValidFileSignature(attachment, attachment.type))) return response({ error: "Anexo inválido: use PDF, JPG, JPEG, PNG ou WEBP de até 10 MB" }, 400);
   }
 
   const { data: requestId, error: requestError } = await admin.rpc("create_employee_material_request", { p_registration: registration, p_cpf: cpf, p_delivery_item_id: deliveryItemId, p_description: description });
