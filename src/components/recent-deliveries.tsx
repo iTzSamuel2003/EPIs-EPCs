@@ -28,7 +28,7 @@ export function RecentDeliveries() {
         supabase.from("profiles").select("organization_id").single(),
       ]);
       if (loadError) setError(loadError.message); else setDeliveries((data ?? []) as unknown as Delivery[]);
-      if (profileData?.organization_id) { const { data: organization } = await supabase.from("organizations").select("name").eq("id", profileData.organization_id).single(); setCompanyName(organization?.name ?? ""); }
+      if (profileData?.organization_id) { const { data: organization, error: organizationError } = await supabase.from("organizations").select("name").eq("id", profileData.organization_id).single(); if (organizationError) setError(organizationError.message); else setCompanyName(organization?.name ?? ""); }
       setLoading(false);
     }
     void load();
@@ -40,11 +40,12 @@ export function RecentDeliveries() {
   async function uploadTerm(delivery: Delivery, event: ChangeEvent<HTMLInputElement>) {
     const file = event.target.files?.[0]; event.target.value = ""; if (!file) return;
     if (file.size > 10 * 1024 * 1024) { setError("O arquivo do termo deve ter no máximo 10 MB."); return; }
-    setUploadingId(delivery.id); setError(""); const supabase = createClient(); const { data: profile } = await supabase.from("profiles").select("organization_id").single();
+    setUploadingId(delivery.id); setError(""); const supabase = createClient(); const { data: profile, error: profileError } = await supabase.from("profiles").select("organization_id").single();
+    if (profileError) { setError(profileError.message); setUploadingId(""); return; }
     if (!profile?.organization_id) { setError("Não foi possível identificar a organização."); setUploadingId(""); return; }
     const path = `${profile.organization_id}/${delivery.id}/${crypto.randomUUID()}-${safeFileName(file.name)}`;
     const { error: uploadError } = await supabase.storage.from("delivery-terms").upload(path, file, { contentType: file.type, upsert: false });
-    if (uploadError) setError(uploadError.message); else { if (delivery.term_file_path) await supabase.storage.from("delivery-terms").remove([delivery.term_file_path]); const { data: auth } = await supabase.auth.getUser(); const { error: updateError } = await supabase.from("deliveries").update({ term_file_path: path, term_uploaded_at: new Date().toISOString(), term_uploaded_by: auth.user?.id ?? null }).eq("id", delivery.id); if (updateError) { await supabase.storage.from("delivery-terms").remove([path]); setError(updateError.message); } else setDeliveries((current) => current.map((item) => item.id === delivery.id ? { ...item, term_file_path: path, term_uploaded_at: new Date().toISOString() } : item)); }
+    if (uploadError) setError(uploadError.message); else { const { data: auth, error: authError } = await supabase.auth.getUser(); if (authError) { await supabase.storage.from("delivery-terms").remove([path]); setError(authError.message); } else { const { error: updateError } = await supabase.from("deliveries").update({ term_file_path: path, term_uploaded_at: new Date().toISOString(), term_uploaded_by: auth.user?.id ?? null }).eq("id", delivery.id); if (updateError) { await supabase.storage.from("delivery-terms").remove([path]); setError(updateError.message); } else { const { error: previousAttachmentError } = delivery.term_file_path ? await supabase.storage.from("delivery-terms").remove([delivery.term_file_path]) : { error: null }; setDeliveries((current) => current.map((item) => item.id === delivery.id ? { ...item, term_file_path: path, term_uploaded_at: new Date().toISOString() } : item)); if (previousAttachmentError) setError(`Termo atualizado, mas o anexo anterior não pôde ser removido: ${previousAttachmentError.message}`); } } }
     setUploadingId("");
   }
 
