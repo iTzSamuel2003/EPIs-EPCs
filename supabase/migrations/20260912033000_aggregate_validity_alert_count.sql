@@ -7,14 +7,14 @@ set search_path = public, private
 as $$
   select count(*)
   from (
-    select ml.material_id
+    select ml.id
     from public.material_lots ml
     where ml.organization_id = private.current_organization_id()
       and ml.available_quantity > 0
       and ml.expires_at is not null
       and ml.expires_at <= current_date + 30
-    union
-    select ml.material_id
+    union all
+    select di.id
     from public.delivery_items di
     join public.material_lots ml on ml.id = di.lot_id
     where di.organization_id = private.current_organization_id()
