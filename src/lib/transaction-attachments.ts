@@ -7,9 +7,13 @@ function safeFileName(value: string) { return value.normalize("NFD").replace(/[\
 export async function uploadTransactionPhotos(supabase: SupabaseClient, { files, recordId, type }: AttachmentInput) {
   if (!files.length) return { error: null, count: 0 };
   if (files.some((file) => file.size > 10 * 1024 * 1024)) return { error: "Cada foto deve ter no máximo 10 MB.", count: 0 };
-  const { data: profile } = await supabase.from("profiles").select("organization_id").single();
+  const allowedMimeTypes = new Set(["image/jpeg", "image/png", "image/webp"]);
+  if (files.some((file) => !allowedMimeTypes.has(file.type))) return { error: "As fotos devem estar em formato JPG, PNG ou WEBP.", count: 0 };
+  const { data: profile, error: profileError } = await supabase.from("profiles").select("organization_id").single();
+  if (profileError) return { error: profileError.message, count: 0 };
   if (!profile?.organization_id) return { error: "Não foi possível identificar a organização.", count: 0 };
-  const { data: auth } = await supabase.auth.getUser();
+  const { data: auth, error: authError } = await supabase.auth.getUser();
+  if (authError) return { error: authError.message, count: 0 };
   const uploadedPaths: string[] = [];
   const attachments: Array<Record<string, string | null>> = [];
   for (const file of files) {
