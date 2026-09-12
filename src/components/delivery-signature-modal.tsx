@@ -2,7 +2,6 @@
 
 import { ChangeEvent, PointerEvent, useRef, useState } from "react";
 import { Check, Eraser, PenLine, Upload, X } from "lucide-react";
-import { jsPDF } from "jspdf";
 import { createClient } from "@/lib/supabase/client";
 import { uploadTransactionPhotos } from "@/lib/transaction-attachments";
 
@@ -50,7 +49,7 @@ export function DeliverySignatureModal({ deliveryId, employeeName, employeeCpf, 
     if (!profile?.organization_id) { setError("Não foi possível identificar a organização."); setSaving(false); return; }
     const canvas = canvasRef.current;
     if (!canvas) { setError("Não foi possível capturar a assinatura."); setSaving(false); return; }
-    const doc = new jsPDF({ unit: "mm", format: "a4" }); const margin = 18; const width = 210; const lineWidth = width - margin * 2; let y = 20;
+    const { jsPDF } = await import("jspdf"); const doc = new jsPDF({ unit: "mm", format: "a4" }); const margin = 18; const width = 210; const lineWidth = width - margin * 2; let y = 20;
     doc.setTextColor(23, 35, 60); doc.setFont("helvetica", "bold"); doc.setFontSize(16); doc.text("EPIS+", margin, y); doc.setFont("helvetica", "normal"); doc.setFontSize(10); doc.setTextColor(100, 112, 135); doc.text("TERMO DE ENTREGA E RESPONSABILIDADE DE MATERIAIS", margin, y + 7); y += 15; doc.setDrawColor(210, 216, 227); doc.line(margin, y, width - margin, y); y += 10;
     const metadata = [["Colaborador", employeeName], ["Matrícula", employeeRegistration || "Não informada"], ["Data da entrega", date(deliveredAt)], ["Motivo", reasons[reason] || reason]]; const columnWidth = lineWidth / 4; metadata.forEach(([label, value], index) => { const x = margin + index * columnWidth; doc.setFont("helvetica", "normal"); doc.setFontSize(8); doc.setTextColor(120, 132, 151); doc.text(label, x, y); doc.setFont("helvetica", "bold"); doc.setFontSize(9); doc.setTextColor(52, 64, 87); doc.text(doc.splitTextToSize(value, columnWidth - 3), x, y + 5); }); y += 20;
     doc.setFont("helvetica", "bold"); doc.setFontSize(12); doc.text("Materiais entregues", margin, y); y += 7; const columns = [margin, margin + 68, margin + 103, margin + 132, width - margin]; doc.setFillColor(245, 246, 250); doc.rect(margin, y - 5, lineWidth, 8, "F"); doc.setFontSize(8); doc.setTextColor(83, 96, 120); ["Material", "Código", "Qtd.", "Troca prevista"].forEach((label, index) => doc.text(label, columns[index] + 2, y)); y += 8;
