@@ -176,26 +176,26 @@ button:focus-visible,a:focus-visible,input:focus-visible,select:focus-visible,te
   main.module-shell:has(.type-badge) .module-table-card td:nth-child(7) .action-button{width:max-content}
 }
 @media (max-width:600px){
-  main.module-shell:has(.module-summary) .module-table-card table:has(>thead>tr>th:nth-child(4)):not(:has(>thead>tr>th:nth-child(5))){display:block;min-width:0;width:100%;white-space:normal}
-  main.module-shell:has(.module-summary) .module-table-card table:has(>thead>tr>th:nth-child(4)):not(:has(>thead>tr>th:nth-child(5))) thead{display:none}
-  main.module-shell:has(.module-summary) .module-table-card table:has(>thead>tr>th:nth-child(4)):not(:has(>thead>tr>th:nth-child(5))) tbody{display:grid;gap:10px}
-  main.module-shell:has(.module-summary) .module-table-card table:has(>thead>tr>th:nth-child(4)):not(:has(>thead>tr>th:nth-child(5))) tr{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:8px 12px;padding:12px;border:1px solid #edf0f5;border-radius:10px;background:#fafbfe}
-  main.module-shell:has(.module-summary) .module-table-card table:has(>thead>tr>th:nth-child(4)):not(:has(>thead>tr>th:nth-child(5))) td{display:grid;gap:4px;min-width:0;padding:0;border:0;overflow-wrap:anywhere}
-  main.module-shell:has(.module-summary) .module-table-card table:has(>thead>tr>th:nth-child(4)):not(:has(>thead>tr>th:nth-child(5))) td::before{color:#a1aaba;font-size:9px;font-weight:700;letter-spacing:.5px}
-  main.module-shell:has(.module-summary) .module-table-card table:has(>thead>tr>th:nth-child(4)):not(:has(>thead>tr>th:nth-child(5))) td:nth-child(1)::before{content:"Material"}
-  main.module-shell:has(.module-summary) .module-table-card table:has(>thead>tr>th:nth-child(4)):not(:has(>thead>tr>th:nth-child(5))) td:nth-child(2)::before{content:"Lote"}
-  main.module-shell:has(.module-summary) .module-table-card table:has(>thead>tr>th:nth-child(4)):not(:has(>thead>tr>th:nth-child(5))) td:nth-child(3)::before{content:"Saldo"}
-  main.module-shell:has(.module-summary) .module-table-card table:has(>thead>tr>th:nth-child(4)):not(:has(>thead>tr>th:nth-child(5))) td:nth-child(4)::before{content:"Validade"}
-  main.module-shell:has(.module-summary) .module-table-card table:has(>thead>tr>th:nth-child(6)):not(:has(>thead>tr>th:nth-child(7))){display:block;min-width:0;width:100%;white-space:normal}
-  main.module-shell:has(.module-summary) .module-table-card table:has(>thead>tr>th:nth-child(6)):not(:has(>thead>tr>th:nth-child(7))) thead{display:none}
-  main.module-shell:has(.module-summary) .module-table-card table:has(>thead>tr>th:nth-child(6)):not(:has(>thead>tr>th:nth-child(7))) tbody{display:grid;gap:10px}
-  main.module-shell:has(.module-summary) .module-table-card table:has(>thead>tr>th:nth-child(6)):not(:has(>thead>tr>th:nth-child(7))) tr{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:8px 12px;padding:12px;border:1px solid #edf0f5;border-radius:10px;background:#fafbfe}
-  main.module-shell:has(.module-summary) .module-table-card table:has(>thead>tr>th:nth-child(6)):not(:has(>thead>tr>th:nth-child(7))) td{display:grid;gap:4px;min-width:0;padding:0;border:0;overflow-wrap:anywhere}
-  main.module-shell:has(.module-summary) .module-table-card table:has(>thead>tr>th:nth-child(6)):not(:has(>thead>tr>th:nth-child(7))) td::before{color:#a1aaba;font-size:9px;font-weight:700;letter-spacing:.5px}
-  main.module-shell:has(.module-summary) .module-table-card table:has(>thead>tr>th:nth-child(6)):not(:has(>thead>tr>th:nth-child(7))) td:nth-child(1)::before{content:"Código"}
-  main.module-shell:has(.module-summary) .module-table-card table:has(>thead>tr>th:nth-child(6)):not(:has(>thead>tr>th:nth-child(7))) td:nth-child(2)::before{content:"Material"}
-  main.module-shell:has(.module-summary) .module-table-card table:has(>thead>tr>th:nth-child(6)):not(:has(>thead>tr>th:nth-child(7))) td:nth-child(3)::before{content:"Tipo"}
-  main.module-shell:has(.module-summary) .module-table-card table:has(>thead>tr>th:nth-child(6)):not(:has(>thead>tr>th:nth-child(7))) td:nth-child(4)::before{content:"Estoque"}
-  main.module-shell:has(.module-summary) .module-table-card table:has(>thead>tr>th:nth-child(6)):not(:has(>thead>tr>th:nth-child(7))) td:nth-child(5)::before{content:"Mínimo"}
-  main.module-shell:has(.module-summary) .module-table-card table:has(>thead>tr>th:nth-child(6)):not(:has(>thead>tr>th:nth-child(7))) td:nth-child(6)::before{content:"Situação"}
+  main.module-shell:has(.module-toolbar option[value="stock"]) .module-table-card table:has(>thead>tr>th:nth-child(4)):not(:has(>thead>tr>th:nth-child(5))){display:block;min-width:0;width:100%;white-space:normal}
+  main.module-shell:has(.module-toolbar option[value="stock"]) .module-table-card table:has(>thead>tr>th:nth-child(4)):not(:has(>thead>tr>th:nth-child(5))) thead{display:none}
+  main.module-shell:has(.module-toolbar option[value="stock"]) .module-table-card table:has(>thead>tr>th:nth-child(4)):not(:has(>thead>tr>th:nth-child(5))) tbody{display:grid;gap:10px}
+  main.module-shell:has(.module-toolbar option[value="stock"]) .module-table-card table:has(>thead>tr>th:nth-child(4)):not(:has(>thead>tr>th:nth-child(5))) tr{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:8px 12px;padding:12px;border:1px solid #edf0f5;border-radius:10px;background:#fafbfe}
+  main.module-shell:has(.module-toolbar option[value="stock"]) .module-table-card table:has(>thead>tr>th:nth-child(4)):not(:has(>thead>tr>th:nth-child(5))) td{display:grid;gap:4px;min-width:0;padding:0;border:0;overflow-wrap:anywhere}
+  main.module-shell:has(.module-toolbar option[value="stock"]) .module-table-card table:has(>thead>tr>th:nth-child(4)):not(:has(>thead>tr>th:nth-child(5))) td::before{color:#a1aaba;font-size:9px;font-weight:700;letter-spacing:.5px}
+  main.module-shell:has(.module-toolbar option[value="stock"]) .module-table-card table:has(>thead>tr>th:nth-child(4)):not(:has(>thead>tr>th:nth-child(5))) td:nth-child(1)::before{content:"Material"}
+  main.module-shell:has(.module-toolbar option[value="stock"]) .module-table-card table:has(>thead>tr>th:nth-child(4)):not(:has(>thead>tr>th:nth-child(5))) td:nth-child(2)::before{content:"Lote"}
+  main.module-shell:has(.module-toolbar option[value="stock"]) .module-table-card table:has(>thead>tr>th:nth-child(4)):not(:has(>thead>tr>th:nth-child(5))) td:nth-child(3)::before{content:"Saldo"}
+  main.module-shell:has(.module-toolbar option[value="stock"]) .module-table-card table:has(>thead>tr>th:nth-child(4)):not(:has(>thead>tr>th:nth-child(5))) td:nth-child(4)::before{content:"Validade"}
+  main.module-shell:has(.module-toolbar option[value="stock"]) .module-table-card table:has(>thead>tr>th:nth-child(6)):not(:has(>thead>tr>th:nth-child(7))){display:block;min-width:0;width:100%;white-space:normal}
+  main.module-shell:has(.module-toolbar option[value="stock"]) .module-table-card table:has(>thead>tr>th:nth-child(6)):not(:has(>thead>tr>th:nth-child(7))) thead{display:none}
+  main.module-shell:has(.module-toolbar option[value="stock"]) .module-table-card table:has(>thead>tr>th:nth-child(6)):not(:has(>thead>tr>th:nth-child(7))) tbody{display:grid;gap:10px}
+  main.module-shell:has(.module-toolbar option[value="stock"]) .module-table-card table:has(>thead>tr>th:nth-child(6)):not(:has(>thead>tr>th:nth-child(7))) tr{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:8px 12px;padding:12px;border:1px solid #edf0f5;border-radius:10px;background:#fafbfe}
+  main.module-shell:has(.module-toolbar option[value="stock"]) .module-table-card table:has(>thead>tr>th:nth-child(6)):not(:has(>thead>tr>th:nth-child(7))) td{display:grid;gap:4px;min-width:0;padding:0;border:0;overflow-wrap:anywhere}
+  main.module-shell:has(.module-toolbar option[value="stock"]) .module-table-card table:has(>thead>tr>th:nth-child(6)):not(:has(>thead>tr>th:nth-child(7))) td::before{color:#a1aaba;font-size:9px;font-weight:700;letter-spacing:.5px}
+  main.module-shell:has(.module-toolbar option[value="stock"]) .module-table-card table:has(>thead>tr>th:nth-child(6)):not(:has(>thead>tr>th:nth-child(7))) td:nth-child(1)::before{content:"Código"}
+  main.module-shell:has(.module-toolbar option[value="stock"]) .module-table-card table:has(>thead>tr>th:nth-child(6)):not(:has(>thead>tr>th:nth-child(7))) td:nth-child(2)::before{content:"Material"}
+  main.module-shell:has(.module-toolbar option[value="stock"]) .module-table-card table:has(>thead>tr>th:nth-child(6)):not(:has(>thead>tr>th:nth-child(7))) td:nth-child(3)::before{content:"Tipo"}
+  main.module-shell:has(.module-toolbar option[value="stock"]) .module-table-card table:has(>thead>tr>th:nth-child(6)):not(:has(>thead>tr>th:nth-child(7))) td:nth-child(4)::before{content:"Estoque"}
+  main.module-shell:has(.module-toolbar option[value="stock"]) .module-table-card table:has(>thead>tr>th:nth-child(6)):not(:has(>thead>tr>th:nth-child(7))) td:nth-child(5)::before{content:"Mínimo"}
+  main.module-shell:has(.module-toolbar option[value="stock"]) .module-table-card table:has(>thead>tr>th:nth-child(6)):not(:has(>thead>tr>th:nth-child(7))) td:nth-child(6)::before{content:"Situação"}
 }
