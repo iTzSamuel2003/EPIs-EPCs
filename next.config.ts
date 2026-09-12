@@ -7,10 +7,16 @@ const nextConfig: NextConfig = {
   async headers() {
     return [{
       source: "/portal",
-      headers: [{ key: "Cache-Control", value: "no-store, max-age=0" }],
+      headers: [
+        { key: "Cache-Control", value: "no-store, max-age=0" },
+        { key: "X-Robots-Tag", value: "noindex, nofollow, noarchive" },
+      ],
     }, {
       source: "/medidas/:token*",
-      headers: [{ key: "Cache-Control", value: "no-store, max-age=0" }],
+      headers: [
+        { key: "Cache-Control", value: "no-store, max-age=0" },
+        { key: "X-Robots-Tag", value: "noindex, nofollow, noarchive" },
+      ],
     }, {
       source: "/(.*)",
       headers: [

@@ -25,6 +25,7 @@ try {
     if (response.headers.get("x-frame-options") !== "DENY") failures.push(`header anti-frame ausente em ${route}`);
     if (!publicRoutes.has(route) && response.headers.get("cache-control")?.includes("private") !== true) failures.push(`cache privado ausente em ${route}`);
     if ((route === "/portal" || route.startsWith("/medidas/")) && response.headers.get("cache-control")?.includes("no-store") !== true) failures.push(`cache desabilitado ausente em ${route}`);
+    if ((route === "/portal" || route.startsWith("/medidas/")) && response.headers.get("x-robots-tag") !== "noindex, nofollow, noarchive") failures.push(`indexação bloqueada ausente em ${route}`);
   }
 } finally {
   clearTimeout(timeout);
