@@ -20,6 +20,11 @@ export function RecentDeliveries() {
   const [error, setError] = useState("");
 
   useEffect(() => {
+    const timer = window.setTimeout(() => { void import("jspdf"); }, 1000);
+    return () => window.clearTimeout(timer);
+  }, []);
+
+  useEffect(() => {
     async function load() {
       const supabase = createClient();
       const [{ data, error: loadError }, { data: profileData, error: profileError }] = await Promise.all([
