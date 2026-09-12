@@ -1,6 +1,6 @@
 "use client";
 
-import { FormEvent, useEffect, useMemo, useState } from "react";
+import { FormEvent, useCallback, useEffect, useMemo, useState } from "react";
 import { ArrowLeft, BookOpenCheck, Check, CheckCircle2, ClipboardList, Download, LoaderCircle, Plus, Trash2, X } from "lucide-react";
 import Link from "next/link";
 import { useParams } from "next/navigation";
@@ -18,8 +18,7 @@ function formatDate(value: string | null) { return value ? new Date(`${value}T00
 export default function EmployeeCoursesPage() {
   const { id } = useParams<{ id: string }>();
   const [name, setName] = useState(""); const [functionName, setFunctionName] = useState(""); const [courses, setCourses] = useState<Course[]>([]); const [requirements, setRequirements] = useState<Requirement[]>([]); const [course, setCourse] = useState(emptyCourse); const [loading, setLoading] = useState(true); const [saving, setSaving] = useState(false); const [error, setError] = useState(""); const [success, setSuccess] = useState("");
-  useEffect(() => { void load(); }, [id]);
-  async function load() {
+  const load = useCallback(async () => {
     const supabase = createClient();
     const [{ data: employee }, { data, error: loadError }, { data: requirementData, error: requirementError }] = await Promise.all([
       supabase.from("employees").select("full_name,job_title,function_name").eq("id", id).single(),
@@ -28,7 +27,8 @@ export default function EmployeeCoursesPage() {
     ]);
     if (loadError || requirementError) setError((loadError ?? requirementError)?.message ?? "Não foi possível carregar os cursos.");
     setName(employee?.full_name ?? ""); setFunctionName(employee?.job_title || employee?.function_name || ""); setCourses((data ?? []) as Course[]); setRequirements((requirementData ?? []) as Requirement[]); setLoading(false);
-  }
+  }, [id]);
+  useEffect(() => { void load(); }, [load]);
   const requiredCourses = useMemo(() => requirements.filter((item) => matchesGroup(functionName, item.function_group)), [requirements, functionName]);
   const pendingRequired = requiredCourses.filter((item) => !hasValidCourse(courses, item)).length;
   async function addCourse(event: FormEvent) {

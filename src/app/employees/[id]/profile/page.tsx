@@ -1,30 +1,28 @@
 "use client";
 
-import { FormEvent, useEffect, useState } from "react";
-import { ArrowLeft, Ban, Check, Copy, Mail, MessageCircle, Plus, Save, Send, Trash2, X } from "lucide-react";
+import { FormEvent, useCallback, useEffect, useState } from "react";
+import { ArrowLeft, Ban, Check, Copy, Mail, MessageCircle, Save, Send, X } from "lucide-react";
 import Link from "next/link";
 import { useParams } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import { EmployeeNavigation } from "@/components/employee-navigation";
 
 type Profile = { shirt_size: string; pants_size: string; shoe_size: string; helmet_size: string; glove_size: string; uniform_notes: string; completed_by_employee: boolean };
-type Course = { id: string; name: string; provider: string; completed_at: string; expires_at: string; certificate_number: string; notes: string };
 type MeasurementRequest = { token: string; expires_at: string; completed_at: string | null };
 const emptyProfile: Profile = { shirt_size: "", pants_size: "", shoe_size: "", helmet_size: "", glove_size: "", uniform_notes: "", completed_by_employee: false };
-const emptyCourse = { name: "", provider: "", completed_at: "", expires_at: "", certificate_number: "", notes: "" };
 
 export default function EmployeeProfilePage() {
   const { id } = useParams<{ id: string }>();
-  const [name, setName] = useState(""); const [profile, setProfile] = useState<Profile>(emptyProfile); const [courses, setCourses] = useState<Course[]>([]); const [course, setCourse] = useState(emptyCourse); const [request, setRequest] = useState<MeasurementRequest | null>(null); const [loading, setLoading] = useState(true); const [saving, setSaving] = useState(false); const [sharing, setSharing] = useState(false); const [error, setError] = useState(""); const [success, setSuccess] = useState("");
-  useEffect(() => { void load(); }, [id]);
-  async function load() {
+  const [name, setName] = useState(""); const [profile, setProfile] = useState<Profile>(emptyProfile); const [request, setRequest] = useState<MeasurementRequest | null>(null); const [loading, setLoading] = useState(true); const [saving, setSaving] = useState(false); const [sharing, setSharing] = useState(false); const [error, setError] = useState(""); const [success, setSuccess] = useState("");
+  const load = useCallback(async () => {
     const supabase = createClient();
-    const [{ data: employee }, { data: profileData }, { data: courseData, error: courseError }, { data: requestData, error: requestError }] = await Promise.all([
-      supabase.from("employees").select("full_name").eq("id", id).single(), supabase.from("employee_profiles").select("shirt_size,pants_size,shoe_size,helmet_size,glove_size,uniform_notes,completed_by_employee").eq("employee_id", id).maybeSingle(), supabase.from("employee_courses").select("id,name,provider,completed_at,expires_at,certificate_number,notes").eq("employee_id", id).order("expires_at", { ascending: true, nullsFirst: false }), supabase.from("employee_measurement_requests").select("token,expires_at,completed_at").eq("employee_id", id).maybeSingle(),
+    const [{ data: employee }, { data: profileData }, { data: requestData, error: requestError }] = await Promise.all([
+      supabase.from("employees").select("full_name").eq("id", id).single(), supabase.from("employee_profiles").select("shirt_size,pants_size,shoe_size,helmet_size,glove_size,uniform_notes,completed_by_employee").eq("employee_id", id).maybeSingle(), supabase.from("employee_measurement_requests").select("token,expires_at,completed_at").eq("employee_id", id).maybeSingle(),
     ]);
-    if (courseError || requestError) setError(courseError?.message ?? requestError?.message ?? "N\u00e3o foi poss\u00edvel carregar a ficha.");
-    setName(employee?.full_name ?? ""); setProfile({ ...emptyProfile, ...(profileData ?? {}) }); setCourses((courseData ?? []) as Course[]); setRequest(requestData as MeasurementRequest | null); setLoading(false);
-  }
+    if (requestError) setError(requestError.message ?? "N\u00e3o foi poss\u00edvel carregar a ficha.");
+    setName(employee?.full_name ?? ""); setProfile({ ...emptyProfile, ...(profileData ?? {}) }); setRequest(requestData as MeasurementRequest | null); setLoading(false);
+  }, [id]);
+  useEffect(() => { void load(); }, [load]);
   function update(field: keyof Profile, value: string | boolean) { setProfile((current) => ({ ...current, [field]: value })); }
   async function saveProfile(event: FormEvent) {
     event.preventDefault(); setSaving(true); setError(""); setSuccess(""); const supabase = createClient(); const { data: auth } = await supabase.auth.getUser(); const { data: userProfile } = await supabase.from("profiles").select("organization_id").eq("id", auth.user?.id ?? "").single(); const { error: saveError } = await supabase.from("employee_profiles").upsert({ employee_id: id, organization_id: userProfile?.organization_id, ...profile, updated_at: new Date().toISOString() }); if (saveError) setError(saveError.message); else setSuccess("Medidas atualizadas com sucesso."); setSaving(false);
@@ -34,10 +32,6 @@ export default function EmployeeProfilePage() {
     const { data, error: requestError } = await supabase.from("employee_measurement_requests").upsert({ employee_id: id, organization_id: userProfile.organization_id, token: crypto.randomUUID(), expires_at: new Date(Date.now() + 30 * 86400000).toISOString(), completed_at: null, updated_at: new Date().toISOString() }, { onConflict: "employee_id" }).select("token,expires_at,completed_at").single(); if (requestError) setError(requestError.message); else { setRequest(data as MeasurementRequest); setSuccess("Link de preenchimento criado. Escolha abaixo como compartilhar."); } setSharing(false);
   }
   async function copyLink() { if (!shareLink) return; try { await navigator.clipboard.writeText(shareLink); setSuccess("Link copiado para a área de transferência."); } catch { setError("N\u00e3o foi poss\u00edvel copiar o link. Copie-o manualmente no campo abaixo."); } }
-  async function addCourse(event: FormEvent) {
-    event.preventDefault(); if (!course.name.trim()) return; setError(""); const supabase = createClient(); const { data: auth } = await supabase.auth.getUser(); const { data: userProfile } = await supabase.from("profiles").select("organization_id").eq("id", auth.user?.id ?? "").single(); const { error: saveError } = await supabase.from("employee_courses").insert({ ...course, employee_id: id, organization_id: userProfile?.organization_id, name: course.name.trim(), provider: course.provider.trim() || null, certificate_number: course.certificate_number.trim() || null, notes: course.notes.trim() || null, completed_at: course.completed_at || null, expires_at: course.expires_at || null }); if (saveError) setError(saveError.message); else { setCourse(emptyCourse); await load(); setSuccess("Curso adicionado  ficha."); }
-  }
-  async function removeCourse(courseId: string) { const { error: removeError } = await createClient().from("employee_courses").delete().eq("id", courseId); if (removeError) setError(removeError.message); else setCourses((current) => current.filter((item) => item.id !== courseId)); }
   const publicBaseUrl = process.env.NEXT_PUBLIC_APP_URL ?? "https://epis-epcs.vercel.app"; const shareLink = !request ? "" : `${publicBaseUrl}/medidas/${request.token}`; const shareMessage = `Ol&aacute;, ${name}! Preencha suas medidas de uniforme e equipamentos neste link: ${shareLink}`;
   if (loading) return <main className="module-shell"><div className="module-loading">Carregando perfil...</div></main>;
   return <main className="module-shell"><header className="module-header"><div><Link className="employee-back-link" href="/employees"><ArrowLeft size={14} /> Funcionários</Link><p className="eyebrow">PERFIL DO COLABORADOR</p><h1>Medidas</h1><p className="module-subtitle">Dados usados automaticamente na ficha de materiais de {name}.</p></div><div className="employee-header-tools"><EmployeeNavigation id={id} current="profile" /></div></header>{success && <div className="feedback success-feedback"><Check size={17} /> {success}</div>}{error && <div className="feedback error-feedback"><X size={17} /> {error}</div>}

@@ -1,7 +1,7 @@
 "use client";
 
 import { FormEvent, useEffect, useState } from "react";
-import { Boxes, Check, ClipboardList, LoaderCircle, Pencil, Plus, ShieldCheck, Trash2, X } from "lucide-react";
+import { Boxes, Check, LoaderCircle, Pencil, Plus, ShieldCheck, Trash2, X } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 
 type ItemType = "EPI" | "EPC" | "FERRAMENTAL";
@@ -16,7 +16,6 @@ const emptyItem = (): DraftItem => ({ material_id: "", material_name: "", quanti
 export default function FunctionTemplatesPage() {
   const [templates, setTemplates] = useState<Template[]>([]);
   const [materials, setMaterials] = useState<MaterialOption[]>([]);
-  const [scenarios, setScenarios] = useState<ContractScenario[]>([]);
   const [selectedId, setSelectedId] = useState("");
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -33,17 +32,15 @@ export default function FunctionTemplatesPage() {
   async function load(preferredId?: string) {
     setLoading(true);
     const supabase = createClient();
-    const [{ data: templateData, error: templateError }, { data: materialData, error: materialError }, { data: scenarioData, error: scenarioError }] = await Promise.all([
+    const [{ data: templateData, error: templateError }, { data: materialData, error: materialError }] = await Promise.all([
       supabase.from("function_templates").select("id, name, source_document, function_group, contract_scenario_id, contract_scenario:contract_scenarios(id, code, name, source_annex), function_template_items(id, material_id, material_name, quantity, item_type)").order("name"),
       supabase.from("materials").select("id, name, type, unit").eq("status", "active").order("name"),
-      supabase.from("contract_scenarios").select("id, code, name, source_annex, active").eq("active", true).order("name"),
     ]);
     if (templateError || materialError) setError((templateError ?? materialError)?.message ?? "Não foi possível carregar as listas.");
     else {
       const rows = (templateData ?? []) as unknown as Template[];
       setTemplates(rows);
       setMaterials((materialData ?? []) as MaterialOption[]);
-      setScenarios((scenarioData ?? []) as ContractScenario[]);
       setSelectedId(preferredId && rows.some((template) => template.id === preferredId) ? preferredId : rows[0]?.id ?? "");
     }
     setLoading(false);
