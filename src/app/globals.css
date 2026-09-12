@@ -143,3 +143,21 @@
   .module-table-card th,.module-table-card td{vertical-align:middle}
   .module-shell>.edit-employee-card,.module-shell>.module-table-card{width:100%}
 }
+@media (max-width:600px){
+  main.module-shell:has(.type-badge) .module-table-card .table-wrap{overflow:visible}
+  main.module-shell:has(.type-badge) .module-table-card table{display:block;min-width:0;width:100%}
+  main.module-shell:has(.type-badge) .module-table-card thead{display:none}
+  main.module-shell:has(.type-badge) .module-table-card tbody{display:grid;gap:10px}
+  main.module-shell:has(.type-badge) .module-table-card tr{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:8px 12px;padding:12px;border:1px solid #edf0f5;border-radius:10px;background:#fafbfe}
+  main.module-shell:has(.type-badge) .module-table-card td{display:grid;gap:4px;min-width:0;padding:0;border:0;overflow-wrap:anywhere}
+  main.module-shell:has(.type-badge) .module-table-card td::before{color:#a1aaba;font-size:9px;font-weight:700;letter-spacing:.5px}
+  main.module-shell:has(.type-badge) .module-table-card td:nth-child(1),main.module-shell:has(.type-badge) .module-table-card td:nth-child(7){grid-column:1 / -1}
+  main.module-shell:has(.type-badge) .module-table-card td:nth-child(1)::before{content:"Material"}
+  main.module-shell:has(.type-badge) .module-table-card td:nth-child(2)::before{content:"Tipo"}
+  main.module-shell:has(.type-badge) .module-table-card td:nth-child(3)::before{content:"CA"}
+  main.module-shell:has(.type-badge) .module-table-card td:nth-child(4)::before{content:"Estoque"}
+  main.module-shell:has(.type-badge) .module-table-card td:nth-child(5)::before{content:"Localização"}
+  main.module-shell:has(.type-badge) .module-table-card td:nth-child(6)::before{content:"Situação"}
+  main.module-shell:has(.type-badge) .module-table-card td:nth-child(7)::before{content:"Ações"}
+  main.module-shell:has(.type-badge) .module-table-card td:nth-child(7) .action-button{width:max-content}
+}
