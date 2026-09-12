@@ -143,6 +143,14 @@
   .module-table-card th,.module-table-card td{vertical-align:middle}
   .module-shell>.edit-employee-card,.module-shell>.module-table-card{width:100%}
 }
+button:focus-visible,a:focus-visible,input:focus-visible,select:focus-visible,textarea:focus-visible{outline:3px solid #7762d655;outline-offset:2px}
+.module-shell>*,.module-shell .material-form,.module-shell .form-grid,.module-shell label{min-width:0}
+@media (max-width:760px){
+  .primary-button,.secondary-button,.action-button,.remove-item{min-height:40px}
+  .remove-item{display:grid;place-items:center}
+  .module-header .primary-button,.module-header .secondary-button{min-height:44px}
+  .material-form input,.material-form select,.material-form textarea{font-size:16px}
+}
 @media (max-width:600px){
   .delivery-item-row{grid-template-columns:25px minmax(0,1fr) 32px;align-items:start}
   .delivery-item-row label{grid-column:2 / 4!important;grid-row:auto!important;min-width:0}
