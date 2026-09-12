@@ -67,4 +67,4 @@ end;
 $$;
 
 revoke all on function public.submit_measurement_request(uuid, text, text, text, text, text, text) from public, authenticated;
-grant execute on function public.submit_measurement_request(uuid, text, text, text, text, text, text) to anon;
+grant execute on function public.submit_measurement_request(uuid, text, text, text, text, text, text) to anon;;
