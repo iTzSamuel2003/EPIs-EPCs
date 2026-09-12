@@ -79,8 +79,11 @@ export default function FunctionTemplatesPage() {
     if (new Set(atomicItems.map((item) => item.material_name.toLocaleLowerCase("pt-BR"))).size !== atomicItems.length) { setError("Não repita o mesmo material na lista."); return; }
     setSaving(true);
     const supabase = createClient();
-    const { data: auth } = await supabase.auth.getUser();
-    const { data: profile } = auth.user ? await supabase.from("profiles").select("organization_id").eq("id", auth.user.id).single() : { data: null };
+    const { data: auth, error: authError } = await supabase.auth.getUser();
+    if (authError) { setError(authError.message); setSaving(false); return; }
+    if (!auth.user) { setError("Sua sessão expirou. Entre novamente."); setSaving(false); return; }
+    const { data: profile, error: profileError } = await supabase.from("profiles").select("organization_id").eq("id", auth.user.id).single();
+    if (profileError) { setError(profileError.message); setSaving(false); return; }
     if (!profile?.organization_id) { setError("Não foi possível identificar a organização do usuário."); setSaving(false); return; }
     const materialByName = new Map(materials.map((material) => [material.name.trim().toLocaleLowerCase("pt-BR"), material.id]));
     const missingCatalogItems = atomicItems.filter((item) => !materialByName.has(item.material_name.toLocaleLowerCase("pt-BR"))).map((item) => ({
