@@ -19,6 +19,7 @@ export default function ReportsPage() {
   const [lots, setLots] = useState<Lot[]>([]);
   const [movements, setMovements] = useState<Movement[]>([]);
   const [totals, setTotals] = useState<Record<string, number>>({});
+  const [alertDays, setAlertDays] = useState(30);
   const [page, setPage] = useState(1);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
@@ -26,18 +27,20 @@ export default function ReportsPage() {
   useEffect(() => {
     async function load() {
       const supabase = createClient();
-      const [{ data: materialData, error: materialError }, { data: lotData, error: lotError }, { data: movementData, error: movementError }] = await Promise.all([
+      const [{ data: materialData, error: materialError }, { data: lotData, error: lotError }, { data: movementData, error: movementError }, { data: organizationData, error: organizationError }] = await Promise.all([
         supabase.from("materials").select("id, internal_code, name, type, minimum_stock, unit, location, status").eq("status", "active").order("name"),
         supabase.from("material_lots").select("id, material_id, lot_number, available_quantity, expires_at, material:materials!inner(name, internal_code, unit)").eq("materials.status", "active").order("expires_at", { ascending: true, nullsFirst: false }),
         supabase.from("stock_movements").select("id, movement_type, quantity, created_at, material:materials!inner(name, internal_code, unit)").eq("materials.status", "active").order("created_at", { ascending: false }).limit(500),
+        supabase.from("organizations").select("validity_alert_days").single(),
       ]);
-      const loadError = materialError ?? lotError ?? movementError;
+      const loadError = materialError ?? lotError ?? movementError ?? organizationError;
       if (loadError) setError(loadError.message || "Não foi possível carregar os relatórios.");
       else {
         setMaterials((materialData ?? []) as Material[]);
         setLots((lotData ?? []) as unknown as Lot[]);
         setMovements((movementData ?? []) as unknown as Movement[]);
         setTotals((lotData ?? []).reduce<Record<string, number>>((acc, lot) => { acc[lot.material_id] = (acc[lot.material_id] ?? 0) + lot.available_quantity; return acc; }, {}));
+        setAlertDays(Math.max(0, Number(organizationData?.validity_alert_days ?? 30)));
       }
       setLoading(false);
     }
@@ -51,8 +54,8 @@ export default function ReportsPage() {
   }), [materials, query, report, totals]);
   const filteredLots = useMemo(() => lots.filter((lot) => {
     const days = daysUntil(lot.expires_at);
-    return (lot.material?.name + " " + lot.material?.internal_code + " " + lot.lot_number).toLowerCase().includes(query.toLowerCase()) && days !== null && days <= 60;
-  }), [lots, query]);
+    return (lot.material?.name + " " + lot.material?.internal_code + " " + lot.lot_number).toLowerCase().includes(query.toLowerCase()) && days !== null && days <= alertDays;
+  }), [lots, query, alertDays]);
   const filteredMovements = useMemo(() => movements.filter((item) => {
     const date = item.created_at.slice(0, 10);
     const textMatch = (item.material?.name + " " + item.material?.internal_code).toLowerCase().includes(query.toLowerCase());
