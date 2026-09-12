@@ -144,6 +144,12 @@
   .module-shell>.edit-employee-card,.module-shell>.module-table-card{width:100%}
 }
 @media (max-width:600px){
+  .delivery-item-row{grid-template-columns:25px minmax(0,1fr) 32px;align-items:start}
+  .delivery-item-row label{grid-column:2 / 4!important;grid-row:auto!important;min-width:0}
+  .delivery-item-row .item-index{grid-column:1;grid-row:1}
+  .delivery-item-row .remove-item{grid-column:3;grid-row:1;margin:0}
+}
+@media (max-width:600px){
   main.module-shell:has(.type-badge) .module-table-card .table-wrap{overflow:visible}
   main.module-shell:has(.type-badge) .module-table-card table{display:block;min-width:0;width:100%}
   main.module-shell:has(.type-badge) .module-table-card thead{display:none}
