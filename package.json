@@ -8,6 +8,7 @@
     "build": "next build",
     "start": "next start",
     "lint": "eslint",
+    "check:production": "node scripts/smoke-production.mjs",
     "check:encoding": "node scripts/check-encoding.mjs"
   },
   "dependencies": {
