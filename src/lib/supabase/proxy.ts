@@ -26,5 +26,6 @@ export async function updateSession(request: NextRequest) {
     redirectResponse.headers.set("Cache-Control", "private, no-store");
     return redirectResponse;
   }
+  if (!isPublicPath) response.headers.set("Cache-Control", "private, no-store");
   return response;
 }
