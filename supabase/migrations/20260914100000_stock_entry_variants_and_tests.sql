@@ -89,3 +89,7 @@ from public.materials m
 cross join unnest(array['P', 'M', 'G', 'GG', 'XGG']) as sizes(size)
 where lower(m.name) = 'conjunto anti-chamas'
 on conflict (organization_id, material_id, name) do update set size = excluded.size, active = true;
+
+update public.materials
+set test_required = true, test_type = 'operational', test_interval_months = 12
+where lower(name) = 'conjunto anti-chamas';
