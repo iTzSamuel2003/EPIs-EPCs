@@ -74,8 +74,7 @@ export default function EntriesPage() {
         || (variantsFor(item.material_id).length > 0 && !item.variant_id)
         || Boolean(material?.test_required && (!item.test_performed_at || !item.test_expires_at));
     });
-    if (hasInvalidItem) { setError("Preencha material, tamanho, lote e quantidade. Para materiais ensaiáveis, informe também a data e a validade do ensaio."); return; }
-    if (invoiceFile && !invoiceNumber.trim()) { setError("Informe o número da nota fiscal antes de anexar o arquivo."); return; }
+    if (hasInvalidItem) { setError("Preencha material, tamanho e quantidade. Para materiais ensaiáveis, informe também a data e a validade do ensaio."); return; }
     setSaving(true); const supabase = createClient(); let uploadedPath = "";
     if (invoiceFile) {
       const { data: auth, error: authError } = await supabase.auth.getUser();
@@ -92,7 +91,7 @@ export default function EntriesPage() {
       if (uploadedPath) await supabase.storage.from("invoice-attachments").remove([uploadedPath]);
       setError(entryError.message);
     } else {
-      setSuccess(items.length > 1 ? "Nota fiscal e itens registrados com sucesso." : "Entrada registrada e nota fiscal anexada com sucesso.");
+      setSuccess(invoiceNumber.trim() ? (items.length > 1 ? "Nota fiscal e itens registrados com sucesso." : "Entrada registrada e nota fiscal anexada com sucesso.") : "Entrada registrada sem nota fiscal. O lançamento foi marcado para identificação posterior.");
       window.dispatchEvent(new Event("stock-entry-created")); setEntriesRefreshKey((value) => value + 1); setItems([newItem()]); setMaterialSuggestionsOpen(null); setInvoiceNumber(""); setEntryDate(new Date().toISOString().slice(0, 10)); setInvoiceFile(null); setNotes("");
     }
     setSaving(false);
@@ -103,7 +102,7 @@ export default function EntriesPage() {
     {success && <div className="feedback success-feedback"><Check size={17} /> {success}</div>}{error && <div className="feedback error-feedback"><X size={17} /> {error}</div>}
     <section className="panel entry-card"><div className="entry-intro"><div className="entry-icon"><ClipboardList size={22} /></div><div><h2>Nota fiscal e itens recebidos</h2><p>Informe a nota uma vez e adicione todos os produtos e lotes relacionados.</p></div></div>
       <form className="material-form" onSubmit={submit}>
-        <div className="form-grid two"><label>Número da nota fiscal<input value={invoiceNumber} onChange={(event) => setInvoiceNumber(event.target.value)} placeholder="NF-000123" required /></label><label>Data da entrada<input type="date" value={entryDate} onChange={(event) => setEntryDate(event.target.value)} required /></label></div>
+        <div className="form-grid two"><label>Número da nota fiscal (opcional)<input value={invoiceNumber} onChange={(event) => setInvoiceNumber(event.target.value)} placeholder="Deixe em branco se não houver" /></label><label>Data da entrada<input type="date" value={entryDate} onChange={(event) => setEntryDate(event.target.value)} required /></label></div>
         <label className="file-upload">Foto ou PDF da nota fiscal<input type="file" accept="image/jpeg,image/png,image/webp,application/pdf" onChange={chooseFile} /><span><FileImage size={18} /> {invoiceFile ? invoiceFile.name : "Selecionar arquivo (máx. 10 MB)"}</span></label>
         <div className="delivery-items-header"><div><h3>Produtos da nota</h3><p>Uma linha para cada material, tamanho ou lote recebido.</p></div><button type="button" className="secondary-button" onClick={() => setItems((current) => [...current, newItem()])}><Plus size={15} /> Adicionar produto</button></div>
         <div className="delivery-items">{items.map((item, index) => { const selectedMaterial = materials.find((material) => material.id === item.material_id); const materialVariants = variantsFor(item.material_id); return <div className={`delivery-item-row entry-item-row ${materialVariants.length > 0 ? "entry-item-row-with-size" : ""}`} key={index}><span className="item-index">{index + 1}</span>
