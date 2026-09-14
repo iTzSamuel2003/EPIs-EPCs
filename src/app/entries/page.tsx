@@ -8,8 +8,8 @@ import { createClient } from "@/lib/supabase/client";
 
 type MaterialOption = { id: string; name: string; internal_code: string; unit: string; test_required: boolean };
 type MaterialVariant = { id: string; material_id: string; name: string; size: string | null; active: boolean };
-type EntryItem = { material_id: string; materialQuery: string; variant_id: string; lot_number: string; quantity: string; unit_cost: string; manufactured_at: string; expires_at: string; test_performed_at: string; test_expires_at: string };
-const newItem = (): EntryItem => ({ material_id: "", materialQuery: "", variant_id: "", lot_number: "", quantity: "1", unit_cost: "0", manufactured_at: "", expires_at: "", test_performed_at: "", test_expires_at: "" });
+type EntryItem = { material_id: string; materialQuery: string; variant_id: string; quantity: string; unit_cost: string; manufactured_at: string; expires_at: string; test_performed_at: string; test_expires_at: string };
+const newItem = (): EntryItem => ({ material_id: "", materialQuery: "", variant_id: "", quantity: "1", unit_cost: "0", manufactured_at: "", expires_at: "", test_performed_at: "", test_expires_at: "" });
 
 export default function EntriesPage() {
   const [materials, setMaterials] = useState<MaterialOption[]>([]);
@@ -70,7 +70,7 @@ export default function EntriesPage() {
     event.preventDefault(); setError(""); setSuccess("");
     const hasInvalidItem = items.some((item) => {
       const material = materials.find((candidate) => candidate.id === item.material_id);
-      return !item.material_id || !item.lot_number.trim() || Number(item.quantity) <= 0
+      return !item.material_id || Number(item.quantity) <= 0
         || (variantsFor(item.material_id).length > 0 && !item.variant_id)
         || Boolean(material?.test_required && (!item.test_performed_at || !item.test_expires_at));
     });
@@ -87,7 +87,7 @@ export default function EntriesPage() {
       const { error: uploadError } = await supabase.storage.from("invoice-attachments").upload(uploadedPath, invoiceFile, { contentType: invoiceFile.type, upsert: false });
       if (uploadError) { setError(`Não foi possível anexar a nota fiscal: ${uploadError.message}`); setSaving(false); return; }
     }
-    const { error: entryError } = await supabase.rpc("register_stock_entry_batch", { p_invoice_number: invoiceNumber || null, p_entry_date: entryDate || null, p_items: items.map((item) => ({ material_id: item.material_id, variant_id: item.variant_id || null, lot_number: item.lot_number.trim(), quantity: Number(item.quantity), unit_cost: Number(item.unit_cost) || 0, manufactured_at: item.manufactured_at || null, expires_at: item.expires_at || null, test_performed_at: item.test_performed_at || null, test_expires_at: item.test_expires_at || null })), p_invoice_file_path: uploadedPath || null, p_notes: notes || null });
+    const { error: entryError } = await supabase.rpc("register_stock_entry_batch", { p_invoice_number: invoiceNumber || null, p_entry_date: entryDate || null, p_items: items.map((item) => ({ material_id: item.material_id, variant_id: item.variant_id || null, quantity: Number(item.quantity), unit_cost: Number(item.unit_cost) || 0, manufactured_at: item.manufactured_at || null, expires_at: item.expires_at || null, test_performed_at: item.test_performed_at || null, test_expires_at: item.test_expires_at || null })), p_invoice_file_path: uploadedPath || null, p_notes: notes || null });
     if (entryError) {
       if (uploadedPath) await supabase.storage.from("invoice-attachments").remove([uploadedPath]);
       setError(entryError.message);
@@ -109,7 +109,7 @@ export default function EntriesPage() {
         <div className="delivery-items">{items.map((item, index) => { const selectedMaterial = materials.find((material) => material.id === item.material_id); const materialVariants = variantsFor(item.material_id); return <div className={`delivery-item-row entry-item-row ${materialVariants.length > 0 ? "entry-item-row-with-size" : ""}`} key={index}><span className="item-index">{index + 1}</span>
           <label className="material-picker">Material<div className="material-picker-control"><input value={item.materialQuery} onChange={(event) => { updateItem(index, "materialQuery", event.target.value); updateItem(index, "material_id", ""); setMaterialSuggestionsOpen(index); }} onFocus={() => setMaterialSuggestionsOpen(index)} placeholder="Digite o nome do material" required disabled={loading} autoComplete="off" />{materialSuggestionsOpen === index && item.materialQuery && <div className="employee-suggestions">{filteredMaterials(item.materialQuery).map((material) => <button type="button" key={material.id} onMouseDown={() => selectMaterial(index, material)}><strong>{material.name}</strong></button>)}{!filteredMaterials(item.materialQuery).length && <span>Nenhum material encontrado.</span>}</div>}</div></label>
           {materialVariants.length > 0 && <label>Tamanho<select value={item.variant_id} onChange={(event) => updateItem(index, "variant_id", event.target.value)} required><option value="">Selecione o tamanho</option>{materialVariants.map((variant) => <option value={variant.id} key={variant.id}>{variant.size || variant.name}</option>)}</select></label>}
-          <label>Lote<input value={item.lot_number} onChange={(event) => updateItem(index, "lot_number", event.target.value)} placeholder="LOTE-2026-001" required /></label><label>Quantidade<input type="number" min="1" value={item.quantity} onChange={(event) => updateItem(index, "quantity", event.target.value)} required /></label><label>Custo unitário (R$)<input type="number" min="0" step="0.01" value={item.unit_cost} onChange={(event) => updateItem(index, "unit_cost", event.target.value)} required /></label>
+          <label>Quantidade<input type="number" min="1" value={item.quantity} onChange={(event) => updateItem(index, "quantity", event.target.value)} required /></label><label>Custo unitário (R$)<input type="number" min="0" step="0.01" value={item.unit_cost} onChange={(event) => updateItem(index, "unit_cost", event.target.value)} required /></label>
           {selectedMaterial?.test_required ? <><label>Data do ensaio<input type="date" value={item.test_performed_at} onChange={(event) => updateItem(index, "test_performed_at", event.target.value)} required /></label><label>Validade do ensaio<input type="date" value={item.test_expires_at} onChange={(event) => updateItem(index, "test_expires_at", event.target.value)} required /></label></> : <><label>Fabricação<input type="date" value={item.manufactured_at} onChange={(event) => updateItem(index, "manufactured_at", event.target.value)} /></label><label>Validade<input type="date" value={item.expires_at} onChange={(event) => updateItem(index, "expires_at", event.target.value)} /></label></>}{items.length > 1 && <button type="button" className="remove-item" aria-label={`Remover produto ${index + 1}`} onClick={() => setItems((current) => current.filter((_, itemIndex) => itemIndex !== index))}><Trash2 size={17} /></button>}
         </div>; })}</div>
         <label>Observações da nota<textarea value={notes} onChange={(event) => setNotes(event.target.value)} placeholder="Fornecedor, conferência ou outras observações" rows={3} /></label>
