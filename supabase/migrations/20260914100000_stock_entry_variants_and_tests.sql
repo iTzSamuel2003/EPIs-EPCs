@@ -83,3 +83,9 @@ $$;
 revoke all on function public.register_stock_entry_batch(text, date, jsonb, text, text) from public;
 grant execute on function public.register_stock_entry_batch(text, date, jsonb, text, text) to authenticated;
 
+insert into public.material_variants (organization_id, material_id, name, size, active)
+select m.organization_id, m.id, sizes.size, sizes.size, true
+from public.materials m
+cross join unnest(array['P', 'M', 'G', 'GG', 'XGG']) as sizes(size)
+where lower(m.name) = 'conjunto anti-chamas'
+on conflict (organization_id, material_id, name) do update set size = excluded.size, active = true;
