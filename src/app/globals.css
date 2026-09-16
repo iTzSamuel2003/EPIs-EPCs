@@ -230,3 +230,4 @@ button:focus-visible,a:focus-visible,input:focus-visible,select:focus-visible,te
   main.module-shell:has(.module-toolbar option[value="stock"]) .module-table-card table:has(>thead>tr>th:nth-child(6)):not(:has(>thead>tr>th:nth-child(7))) td:nth-child(6)::before{content:"Situação"}
 }
 .employee-term-menu-panel{min-width:220px}.employee-term-menu-panel .action-button{min-height:36px}.employee-delivery-sheets .table-wrap,.employee-return-sheets .table-wrap{overflow:visible}@media(max-width:760px){.employee-term-menu-panel{right:auto;left:0;max-width:calc(100vw - 48px)}}
+.employee-delivery-sheets td:last-child,.employee-return-sheets td:last-child{display:flex;align-items:center;gap:8px;flex-wrap:wrap}.employee-delivery-sheets td:last-child .employee-term-menu,.employee-return-sheets td:last-child .employee-term-menu{flex:0 0 auto}.employee-term-material{line-height:1.45}
