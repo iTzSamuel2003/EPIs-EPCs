@@ -4,6 +4,7 @@ import { FormEvent, useEffect, useMemo, useState } from "react";
 import { CalendarCheck, Check, ClipboardCheck, LoaderCircle, Plus, Search, X } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 import { friendlyError } from "@/lib/ui-feedback";
+import { FeedbackMessage } from "@/components/feedback-message";
 
 type Material = { id: string; name: string; internal_code: string; type: "EPI" | "EPC" | "FERRAMENTAL"; unit: string; test_required: boolean };
 type MaterialTest = { id: string; performed_at: string; interval_months: number; next_due_at: string; result: "approved" | "approved_with_restrictions" | "failed" | "pending"; examiner: string | null; professional_registration: string | null; art_number: string | null; certificate_number: string | null; report_reference: string | null; report_url: string | null; material: Material | null };
@@ -44,10 +45,14 @@ export default function TestsPage() {
   const [error, setError] = useState("");
   const [success, setSuccess] = useState("");
   const [stockByMaterial, setStockByMaterial] = useState<Record<string, number>>({});
+  const [retryKey, setRetryKey] = useState(0);
 
   async function loadData() {
     setLoading(true);
     setError("");
+    setMaterials([]);
+    setTests([]);
+    setStockByMaterial({});
     const supabase = createClient();
     const [{ data: materialData, error: materialError }, { data: testData, error: testError }, { data: lotData, error: lotError }] = await Promise.all([
       supabase.from("materials").select("id, name, internal_code, type, unit, test_required").eq("status", "active").order("name"),
@@ -64,7 +69,9 @@ export default function TestsPage() {
     setLoading(false);
   }
 
-  useEffect(() => { void Promise.resolve().then(() => loadData()); }, []);
+  useEffect(() => { void Promise.resolve().then(() => loadData()); }, [retryKey]);
+
+  function retryLoad() { setRetryKey((current) => current + 1); }
 
   const latestTestsByMaterial = useMemo(() => {
     const latest = new Map<string, MaterialTest>();
@@ -135,7 +142,7 @@ export default function TestsPage() {
 
   return <main className="module-shell">
     <header className="module-header"><div><p className="eyebrow">CONTROLE TÉCNICO</p><h1>Ensaios</h1><p className="module-subtitle">Acompanhe os materiais que exigem ensaio, suas validades e próximos vencimentos.</p></div><button type="button" className="primary-button" onClick={() => { setShowForm(true); setError(""); setSuccess(""); }}><Plus size={17} /> Registrar ensaio</button></header>
-    {success && <div className="feedback success-feedback"><Check size={17} /> {success}</div>}{error && !showForm && <div className="feedback error-feedback"><X size={17} /> {error}</div>}
+    {success && <div className="feedback success-feedback"><Check size={17} /> {success}</div>}{error && !showForm && <FeedbackMessage onRetry={retryLoad}>{error}</FeedbackMessage>}
     <section className="module-toolbar"><div className="module-search"><Search size={17} /><input aria-label="Buscar material, certificado ou ART" value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Buscar material, certificado ou ART" /></div><select aria-label="Filtrar ensaios por situação" value={filter} onChange={(event) => setFilter(event.target.value)}><option value="all">Todos os materiais</option><option value="pending">Pendentes de ensaio</option><option value="overdue">Vencidos</option><option value="urgent">Até 30 dias</option><option value="approved">Aprovados</option></select></section>
     {!loading && (<section className="module-summary"><div><strong>{counts.total}</strong><span>materiais ensaiáveis</span></div><div><strong>{counts.pending}</strong><span>pendentes de ensaio</span></div><div><strong>{counts.overdue}</strong><span>vencidos</span></div><div><strong>{counts.urgent}</strong><span>até 30 dias</span></div></section>)}
     <section className="panel module-table-card"><div className="panel-header"><div><h2>Materiais que exigem ensaio</h2><p>{filtered.length} material(is) listado(s)</p></div></div>
