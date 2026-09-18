@@ -23,6 +23,8 @@ export default function SettingsPage() {
 
   useEffect(() => {
     async function load() {
+      setLoading(true);
+      setError("");
       const supabase = createClient();
       const { data: auth, error: authError } = await supabase.auth.getUser();
       const { data: profile, error: profileError } = auth.user ? await supabase.from("profiles").select("organization_id").eq("id", auth.user.id).maybeSingle() : { data: null, error: authError };
