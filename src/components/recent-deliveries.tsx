@@ -27,6 +27,8 @@ export function RecentDeliveries() {
 
   useEffect(() => {
     async function load() {
+      setLoading(true);
+      setError("");
       const supabase = createClient();
       const { data: auth, error: authError } = await supabase.auth.getUser();
       const [{ data, error: loadError }, { data: profileData, error: profileError }] = await Promise.all([
