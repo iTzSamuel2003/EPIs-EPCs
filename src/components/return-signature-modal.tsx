@@ -1,6 +1,6 @@
 "use client";
 
-import { PointerEvent, useRef, useState } from "react";
+import { PointerEvent, useEffect, useRef, useState } from "react";
 import { Check, Eraser, PenLine, X } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 import { friendlyError } from "@/lib/ui-feedback";
@@ -14,6 +14,18 @@ const safeFileName = (value: string) => value.normalize("NFD").replace(/[\u0300-
 
 export function ReturnSignatureModal({ returnId, employeeName, employeeCpf, employeeRegistration, returnedAt, reason, items, currentPath, onComplete }: ReturnSignatureModalProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null); const [open, setOpen] = useState(false); const [cpf, setCpf] = useState(""); const [accepted, setAccepted] = useState(false); const [hasSignature, setHasSignature] = useState(false); const [drawing, setDrawing] = useState(false); const [saving, setSaving] = useState(false); const [error, setError] = useState("");
+  useEffect(() => {
+    if (!open) return;
+    const input = document.querySelector<HTMLInputElement>(".signature-modal input");
+    input?.focus();
+    function closeOnEscape(event: KeyboardEvent) {
+      if (event.key !== "Escape" || saving) return;
+      canvasRef.current?.getContext("2d")?.clearRect(0, 0, canvasRef.current.width, canvasRef.current.height);
+      setHasSignature(false); setOpen(false); setError(""); setCpf(""); setAccepted(false);
+    }
+    document.addEventListener("keydown", closeOnEscape);
+    return () => document.removeEventListener("keydown", closeOnEscape);
+  }, [open, saving]);
   function point(event: PointerEvent<HTMLCanvasElement>) { const canvas = canvasRef.current; if (!canvas) return { x: 0, y: 0 }; const rect = canvas.getBoundingClientRect(); return { x: (event.clientX - rect.left) * (canvas.width / rect.width), y: (event.clientY - rect.top) * (canvas.height / rect.height) }; }
   function start(event: PointerEvent<HTMLCanvasElement>) { const canvas = canvasRef.current; const context = canvas?.getContext("2d"); if (!canvas || !context) return; canvas.setPointerCapture(event.pointerId); const p = point(event); context.beginPath(); context.moveTo(p.x, p.y); setDrawing(true); setHasSignature(true); }
   function draw(event: PointerEvent<HTMLCanvasElement>) { if (!drawing) return; const context = canvasRef.current?.getContext("2d"); if (!context) return; const p = point(event); context.lineWidth = 2.5; context.lineCap = "round"; context.strokeStyle = "#243452"; context.lineTo(p.x, p.y); context.stroke(); }
