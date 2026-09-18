@@ -1,12 +1,13 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { ArrowLeft, ClipboardList, History, LoaderCircle, Printer, RotateCcw, ShieldAlert, Truck, X } from "lucide-react";
+import { ArrowLeft, ClipboardList, History, LoaderCircle, Printer, RotateCcw, ShieldAlert, Truck } from "lucide-react";
 import Link from "next/link";
 import { useParams } from "next/navigation";
 import { EmployeeNavigation } from "@/components/employee-navigation";
 import { createClient } from "@/lib/supabase/client";
 import { friendlyError } from "@/lib/ui-feedback";
+import { FeedbackMessage } from "@/components/feedback-message";
 
 type Employee = { id: string; full_name: string; registration: string | null; job_title: string | null; function_name: string | null; function_classification: string | null; department: string | null };
 type Delivery = { id: string; delivered_at: string; reason: string; notes: string | null; responsible_id: string };
@@ -81,7 +82,7 @@ export default function EmployeeHistoryPage() {
   const summary = useMemo(() => ({ delivered: filteredEvents.filter((event) => event.kind === "delivery").reduce((total, event) => total + event.quantity, 0), returned: filteredEvents.filter((event) => event.kind === "return").reduce((total, event) => total + Math.abs(event.quantity), 0), incidents: filteredEvents.filter((event) => event.accountability && event.accountability.incident_type !== "normal").length }), [filteredEvents]);
 
   if (loading) return <main className="module-shell"><div className="module-loading"><LoaderCircle className="spin" size={22} /> Carregando histórico...</div></main>;
-  if (error || !employee) return <main className="module-shell"><div className="feedback error-feedback"><X size={17} /> {error || "Funcionário não encontrado."}</div><Link className="secondary-button" href="/employees"><ArrowLeft size={16} /> Funcionários</Link></main>;
+  if (error || !employee) return <main className="module-shell"><section className="panel runtime-error-card"><FeedbackMessage onRetry={() => window.location.reload()}>{error || "Funcionário não encontrado."}</FeedbackMessage></section><Link className="secondary-button" href="/employees"><ArrowLeft size={16} /> Funcionários</Link></main>;
   return <main className="module-shell history-page"><header className="module-header no-print"><div><Link className="employee-back-link" href={`/employees/${id}`}><ArrowLeft size={14} /> Ficha do funcionário</Link><p className="eyebrow">CONTROLE INDIVIDUAL</p><h1>Histórico de materiais</h1><p className="module-subtitle">{employee.full_name} · {employee.registration || "Matrícula não informada"} · {employee.function_name || employee.job_title || "Função não informada"}{employee.function_classification ? ` · Classe ${employee.function_classification}` : ""}</p></div><div className="employee-header-tools"><EmployeeNavigation id={id} current="history" /><button className="secondary-button" onClick={() => window.print()}><Printer size={16} /> Imprimir histórico</button></div></header>
     <section className="module-summary history-summary"><div><Truck size={18} /><strong>{summary.delivered}</strong><span>Itens entregues</span></div><div><RotateCcw size={18} /><strong>{summary.returned}</strong><span>Itens devolvidos</span></div><div><ClipboardList size={18} /><strong>{filteredEvents.length}</strong><span>Movimentações</span></div><div><ShieldAlert size={18} /><strong>{summary.incidents}</strong><span>Ocorrências</span></div></section>
     <section className="module-toolbar no-print history-filters"><label>De<input type="date" value={from} onChange={(event) => setFrom(event.target.value)} /></label><label>Até<input type="date" value={to} onChange={(event) => setTo(event.target.value)} /></label><label>Tipo<select value={kind} onChange={(event) => setKind(event.target.value)}><option value="all">Todos</option><option value="delivery">Entregas</option><option value="return">Devoluções</option></select></label><label>Material<select value={materialFilter} onChange={(event) => setMaterialFilter(event.target.value)}><option value="">Todos</option>{materials.map((material) => <option key={material} value={material}>{material}</option>)}</select></label></section>
