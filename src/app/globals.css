@@ -276,6 +276,26 @@ main.module-shell:has(> .module-table-card .module-loading) > .module-summary{di
   main.module-shell:has(.employees-table-card) .employees-table-card .row-actions .action-button{width:42px;min-width:42px;justify-content:center;padding:8px}
 }
 /* Legibilidade: textos auxiliares e cabeçalhos de tabela não ficam menores que 10px. */
+@media(max-width:600px){
+  .employee-sheet .sheet-table-wrap{margin-right:0;overflow:visible}
+  .employee-sheet .sheet-table-wrap::after{display:none}
+  .employee-sheet .sheet-table-wrap table{display:block;min-width:0;width:100%;white-space:normal}
+  .employee-sheet .sheet-table-wrap thead{display:none}
+  .employee-sheet .sheet-table-wrap tbody{display:grid;gap:10px}
+  .employee-sheet .sheet-table-wrap tr{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:10px 12px;padding:13px;border:1px solid #edf0f5;border-radius:10px;background:#fafbfe}
+  .employee-sheet .sheet-table-wrap td{display:grid;gap:4px;min-width:0;padding:0;border:0;overflow-wrap:anywhere;white-space:normal}
+  .employee-sheet .sheet-table-wrap td::before{color:#a1aaba;font-size:9px;font-weight:700;letter-spacing:.5px}
+  .employee-sheet .sheet-table-wrap td:nth-child(1),.employee-sheet .sheet-table-wrap td:nth-child(8),.employee-sheet .sheet-table-wrap td:nth-child(9){grid-column:1 / -1}
+  .employee-sheet .sheet-table-wrap td:nth-child(1)::before{content:"Material"}
+  .employee-sheet .sheet-table-wrap td:nth-child(2)::before{content:"Identificação"}
+  .employee-sheet .sheet-table-wrap td:nth-child(3)::before{content:"Validade"}
+  .employee-sheet .sheet-table-wrap td:nth-child(4)::before{content:"Lote"}
+  .employee-sheet .sheet-table-wrap td:nth-child(5)::before{content:"Quantidade"}
+  .employee-sheet .sheet-table-wrap td:nth-child(6)::before{content:"Data da entrega"}
+  .employee-sheet .sheet-table-wrap td:nth-child(7)::before{content:"Previsão de troca"}
+  .employee-sheet .sheet-table-wrap td:nth-child(8)::before{content:"Status"}
+  .employee-sheet .sheet-table-wrap td:nth-child(9)::before{content:"Motivo"}
+}
 .signature-pad:focus-visible{outline:3px solid #7762d6;outline-offset:3px;border-color:#7762d6}
 th{font-size:10px}
 .material-cell small{font-size:10px}
