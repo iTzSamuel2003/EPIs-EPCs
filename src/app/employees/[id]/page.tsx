@@ -1,7 +1,7 @@
 "use client";
 
 import { ChangeEvent, ReactNode, useEffect, useMemo, useRef, useState } from "react";
-import { AlertTriangle, ArrowLeft, CalendarClock, Check, Download, Eye, LoaderCircle, PackageCheck, ShieldCheck, Upload, UserRound, X } from "lucide-react";
+import { AlertTriangle, ArrowLeft, CalendarClock, Check, Download, Eye, LoaderCircle, PackageCheck, ShieldCheck, Upload, UserRound } from "lucide-react";
 import Link from "next/link";
 import { useParams } from "next/navigation";
 import { jsPDF } from "jspdf";
@@ -10,6 +10,7 @@ import { friendlyError } from "@/lib/ui-feedback";
 import { EmployeeNavigation } from "@/components/employee-navigation";
 import { DeliverySignatureModal } from "@/components/delivery-signature-modal";
 import { ReturnSignatureModal } from "@/components/return-signature-modal";
+import { FeedbackMessage } from "@/components/feedback-message";
 
 type Employee = { id: string; registration: string | null; full_name: string; cpf: string; job_title: string | null; function_name: string | null; function_classification: string | null; department: string | null; unit: string | null };
 type MaterialUnit = { unit_identifier: string; delivered_at: string | null; valid_until: string | null };
@@ -51,6 +52,12 @@ export default function EmployeeMaterialsPage() {
 
   useEffect(() => {
     async function load() {
+      setLoading(true);
+      setError("");
+      setEmployee(null);
+      setItems([]);
+      setCourses([]);
+      setReturnSheets([]);
       const supabase = createClient();
       const [{ data: employeeData, error: employeeError }, { data: deliveryData, error: deliveryError }, { data: courseData, error: courseError }, { data: returnData, error: returnError }] = await Promise.all([
         supabase.from("employees").select("id,registration,full_name,cpf,job_title,function_name,function_classification,department,unit").eq("id", id).single(),
@@ -168,7 +175,7 @@ export default function EmployeeMaterialsPage() {
   }
 
   if (loading) return <main className="module-shell"><div className="module-loading"><LoaderCircle className="spin" size={22} /> Carregando ficha...</div></main>;
-  if (error || !employee) return <main className="module-shell"><div className="feedback error-feedback"><X size={17} /> {error || "Funcionário não encontrado."}</div><Link className="secondary-button" href="/employees"><ArrowLeft size={16} /> Funcionários</Link></main>;
+  if (error || !employee) return <main className="module-shell"><section className="panel runtime-error-card"><FeedbackMessage onRetry={() => window.location.reload()}>{error || "Funcionário não encontrado."}</FeedbackMessage></section><Link className="secondary-button" href="/employees"><ArrowLeft size={16} /> Funcionários</Link></main>;
 
   return <main className="module-shell employee-sheet">
     <header className="module-header no-print"><div><Link className="employee-back-link" href="/employees"><ArrowLeft size={14} /> Funcionários</Link><p className="eyebrow">CONTROLE INDIVIDUAL</p><h1>Ficha de materiais entregues</h1><p className="module-subtitle">Histórico de responsabilidade, reposições previstas e treinamentos do colaborador.</p></div><div className="employee-header-tools"><EmployeeNavigation id={id} current="sheet" /></div></header>
