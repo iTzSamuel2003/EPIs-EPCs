@@ -3,6 +3,7 @@
 import { ClipboardCheck, FileText, LoaderCircle, PackageCheck, ShieldAlert } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { createClient } from "@/lib/supabase/client";
+import { FeedbackMessage } from "@/components/feedback-message";
 import { friendlyError } from "@/lib/ui-feedback";
 
 type Scenario = { id: string; code: string; name: string; source_annex: string; team_size: number | null; composition: string | null; active: boolean };
@@ -19,9 +20,15 @@ export default function ContractRequirementsPage() {
   const [teamMembers, setTeamMembers] = useState(0);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
+  const [retryKey, setRetryKey] = useState(0);
 
   useEffect(() => {
     async function load() {
+      setLoading(true);
+      setError("");
+      setScenarios([]);
+      setRequirements([]);
+      setStock({});
       const supabase = createClient();
       const [{ data: scenarioData, error: scenarioError }, { data: requirementData, error: requirementError }, { data: lotData, error: lotError }] = await Promise.all([
         supabase.from("contract_scenarios").select("id, code, name, source_annex, team_size, composition, active").eq("active", true).order("name"),
@@ -39,7 +46,9 @@ export default function ContractRequirementsPage() {
       setLoading(false);
     }
     void load();
-  }, []);
+  }, [retryKey]);
+
+  function retryLoad() { setRetryKey((current) => current + 1); }
 
   const visible = useMemo(() => requirements.filter((item) => item.scenario_id === scenarioId), [requirements, scenarioId]);
   const selected = scenarios.find((item) => item.id === scenarioId);
@@ -50,7 +59,7 @@ export default function ContractRequirementsPage() {
 
   return <main className="module-shell">
     <header className="module-header"><div><p className="eyebrow">CONTROLE CONTRATUAL</p><h1>Requisitos por equipe</h1><p className="module-subtitle">Confira os materiais mínimos dos anexos contratuais e compare com o estoque disponível.</p></div><div className="header-actions"><a className="secondary-button" href="/function-templates"><FileText size={16} /> Listas por função</a></div></header>
-    {error && <div className="feedback error-feedback"><ShieldAlert size={17} /> {error}</div>}
+    {error && <FeedbackMessage onRetry={retryLoad}>{error}</FeedbackMessage>}
     {loading ? <div className="module-loading"><LoaderCircle className="spin" size={22} /> Carregando requisitos...</div> : <>
       <section className="module-toolbar"><label className="contract-scenario-select">Cenário contratual<select value={scenarioId} onChange={(event) => { const next = scenarios.find((scenario) => scenario.id === event.target.value); setScenarioId(event.target.value); setTeamMembers(next?.team_size ?? 0); }}>{scenarios.map((scenario) => <option key={scenario.id} value={scenario.id}>{scenario.name} · {scenario.source_annex}</option>)}</select></label><label className="contract-scenario-select">Efetivo real da equipe<input type="number" min="1" value={teamMembers || ""} onChange={(event) => setTeamMembers(Number(event.target.value) || 0)} placeholder="Ex.: 7" /></label>{selected && <div className="contract-composition"><strong>Base: {selected.team_size ?? "—"} integrantes</strong><span>{selected.composition}</span></div>}</section>
       {!loading && (<section className="module-summary"><div><ClipboardCheck size={18} /><strong>{visible.length}</strong><span>itens exigidos</span></div><div><PackageCheck size={18} /><strong>{totalRequired}</strong><span>quantidade mínima</span></div><div><ShieldAlert size={18} /><strong>{deficitCount}</strong><span>com saldo insuficiente</span></div><div><FileText size={18} /><strong>{complianceCount}</strong><span>pendências de CA/ensaio</span></div></section>)}
@@ -58,4 +67,3 @@ export default function ContractRequirementsPage() {
     </>}
   </main>;
 }
-
