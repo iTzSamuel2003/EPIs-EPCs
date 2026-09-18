@@ -46,6 +46,8 @@ export default function TestsPage() {
   const [stockByMaterial, setStockByMaterial] = useState<Record<string, number>>({});
 
   async function loadData() {
+    setLoading(true);
+    setError("");
     const supabase = createClient();
     const [{ data: materialData, error: materialError }, { data: testData, error: testError }, { data: lotData, error: lotError }] = await Promise.all([
       supabase.from("materials").select("id, name, internal_code, type, unit, test_required").eq("status", "active").order("name"),
