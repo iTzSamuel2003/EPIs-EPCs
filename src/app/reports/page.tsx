@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import { Boxes, Download, LoaderCircle, Search, ShieldCheck, X } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 import { friendlyError } from "@/lib/ui-feedback";
+import { FeedbackMessage } from "@/components/feedback-message";
 
 type Material = { id: string; internal_code: string; name: string; type: "EPI" | "EPC" | "FERRAMENTAL"; minimum_stock: number; unit: string; location: string | null; status: string };
 type Lot = { id: string; material_id: string; lot_number: string; available_quantity: number; expires_at: string | null; material: { name: string; internal_code: string; unit: string } | null };
@@ -24,9 +25,12 @@ export default function ReportsPage() {
   const [page, setPage] = useState(1);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
+  const [reloadKey, setReloadKey] = useState(0);
 
   useEffect(() => {
     async function load() {
+      setLoading(true);
+      setError("");
       const supabase = createClient();
       const [{ data: materialData, error: materialError }, { data: lotData, error: lotError }, { data: movementData, error: movementError }, { data: organizationData, error: organizationError }] = await Promise.all([
         supabase.from("materials").select("id, internal_code, name, type, minimum_stock, unit, location, status").eq("status", "active").order("name"),
@@ -46,7 +50,7 @@ export default function ReportsPage() {
       setLoading(false);
     }
     void load();
-  }, []);
+  }, [reloadKey]);
 
   const daysUntil = (value: string | null) => value ? Math.ceil((new Date(value + "T00:00:00").getTime() - new Date(new Date().toDateString()).getTime()) / 86400000) : null;
   const filteredMaterials = useMemo(() => materials.filter((item) => {
@@ -73,6 +77,8 @@ export default function ReportsPage() {
   useEffect(() => { setPage(1); }, [report, query, fromDate, toDate]);
   useEffect(() => { setPage((current) => Math.min(current, pageCount)); }, [pageCount]);
 
+  if (error && !loading) return <main className="module-shell"><header className="module-header"><div><p className="eyebrow">GESTÃO E CONFORMIDADE</p><h1>Relatórios</h1><p className="module-subtitle">Consulte indicadores operacionais e exporte os dados para CSV.</p></div></header><section className="panel runtime-error-card"><FeedbackMessage onRetry={() => setReloadKey((current) => current + 1)}>{error}</FeedbackMessage></section></main>;
+
   function exportCsv() {
     let rows: string[][];
     if (report === "movements") rows = [["Data", "Material", "Tipo", "Quantidade"], ...filteredMovements.map((item) => [new Date(item.created_at).toLocaleString("pt-BR"), item.material?.name ?? "", item.movement_type, String(item.quantity)])];
@@ -88,4 +94,3 @@ export default function ReportsPage() {
 
   return <main className="module-shell"><header className="module-header"><div><p className="eyebrow">GESTÃO E CONFORMIDADE</p><h1>Relatórios</h1><p className="module-subtitle">Consulte indicadores operacionais e exporte os dados para CSV.</p></div><button className="primary-button" onClick={exportCsv} disabled={loading}><Download size={16} /> Exportar CSV</button></header>{error && <div className="feedback error-feedback"><X size={17} /> {error}</div>}<section className="module-toolbar"><div className="module-search"><Search size={17} /><input aria-label="Buscar no relatório" value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Buscar no relatório" /></div><select aria-label="Tipo de relatório" value={report} onChange={(event) => setReport(event.target.value)}>{reportTypes.map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select><label>De<input type="date" value={fromDate} onChange={(event) => setFromDate(event.target.value)} /></label><label>Até<input type="date" value={toDate} onChange={(event) => setToDate(event.target.value)} /></label></section>{!loading && <section className="module-summary"><div><strong>{materials.length}</strong><span>materiais</span></div><div><strong>{Object.values(totals).reduce((sum, value) => sum + value, 0)}</strong><span>itens em estoque</span></div><div><strong>{lots.filter((lot) => { const days = daysUntil(lot.expires_at); return days !== null && days <= 30; }).length}</strong><span>lotes até 30 dias</span></div><div><strong>{movements.length}</strong><span>movimentações</span></div></section>}<section className="panel module-table-card"><div className="panel-header"><div><h2>{title}</h2><p>Dados atualizados diretamente do Supabase</p></div></div>{loading ? <div className="module-loading"><LoaderCircle className="spin" size={22} /> Carregando relatório...</div> : report === "validity" ? <div className="table-wrap"><table><thead><tr><th>MATERIAL</th><th>LOTE</th><th>SALDO</th><th>VALIDADE</th></tr></thead><tbody>{visibleLots.map((lot) => <tr key={lot.id}><td><div className="material-cell"><div className="material-type-icon epi"><Boxes size={17} /></div><div><strong>{lot.material?.name}</strong><small>{lot.material?.internal_code || "Código não informado"}</small></div></div></td><td>{lot.lot_number}</td><td>{lot.available_quantity} {lot.material?.unit}</td><td>{lot.expires_at ? new Date(lot.expires_at + "T00:00:00").toLocaleDateString("pt-BR") : "Sem data"}</td></tr>)}</tbody></table>{pagination}</div> : report === "movements" ? <div className="table-wrap"><table><thead><tr><th>DATA</th><th>MATERIAL</th><th>TIPO</th><th>QUANTIDADE</th></tr></thead><tbody>{visibleMovements.map((item) => <tr key={item.id}><td>{new Date(item.created_at).toLocaleString("pt-BR")}</td><td>{item.material?.name}</td><td>{item.movement_type}</td><td>{item.quantity} {item.material?.unit}</td></tr>)}</tbody></table>{pagination}</div> : <div className="table-wrap"><table><thead><tr><th>CÓDIGO</th><th>MATERIAL</th><th>TIPO</th><th>ESTOQUE</th><th>MÍNIMO</th><th>SITUAÇÃO</th></tr></thead><tbody>{visibleMaterials.map((item) => { const stock = totals[item.id] ?? 0; const empty = stock === 0; const low = stock > 0 && Number(item.minimum_stock) > 0 && stock < item.minimum_stock; return <tr key={item.id}><td>{item.internal_code || "Código não informado"}</td><td><strong>{item.name}</strong></td><td>{item.type}</td><td>{stock} {item.unit}</td><td>{item.minimum_stock}</td><td><span className={"status-pill " + (empty ? "danger" : low ? "warning" : "success")}>{empty ? "Sem estoque" : low ? "Estoque baixo" : "Normal"}</span></td></tr>; })}</tbody></table>{!filteredMaterials.length && <div className="empty-state"><ShieldCheck size={27} /><strong>Nenhum material encontrado</strong><span>Ajuste os filtros selecionados.</span></div>}{pagination}</div>}</section></main>;
 }
-

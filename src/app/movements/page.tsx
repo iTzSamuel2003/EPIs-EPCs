@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import { ArrowDownToLine, ArrowUpRight, Boxes, LoaderCircle, Search, SlidersHorizontal, X } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 import { friendlyError } from "@/lib/ui-feedback";
+import { FeedbackMessage } from "@/components/feedback-message";
 
 type Movement = { id: string; movement_type: "entry" | "delivery" | "return" | "adjustment" | "discard" | "transfer"; quantity: number; notes: string | null; created_at: string; material: { name: string; internal_code: string; unit: string } | null; employee: { full_name: string; registration: string | null } | null };
 const labels: Record<Movement["movement_type"], string> = { entry: "Entrada", delivery: "Entrega", return: "Devolução", adjustment: "Ajuste", discard: "Descarte", transfer: "Transferência" };
@@ -18,8 +19,11 @@ export default function MovementsPage() {
   const [filter, setFilter] = useState("all");
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
+  const [reloadKey, setReloadKey] = useState(0);
   useEffect(() => {
     async function load() {
+      setLoading(true);
+      setError("");
       const supabase = createClient();
       const { data: movementData, error: movementError } = await supabase
         .from("stock_movements")
@@ -61,7 +65,8 @@ export default function MovementsPage() {
       setLoading(false);
     }
     void load();
-  }, []);
+  }, [reloadKey]);
   const filtered = useMemo(() => movements.filter((movement) => (movement.material?.name + " " + movement.material?.internal_code + " " + (movement.employee?.full_name ?? "") + " " + (movement.notes ?? "")).toLowerCase().includes(query.toLowerCase()) && (filter === "all" || movement.movement_type === filter)), [movements, query, filter]);
+  if (error && !loading) return <main className="module-shell"><header className="module-header"><div><p className="eyebrow">AUDITORIA OPERACIONAL</p><h1>Movimentações</h1><p className="module-subtitle">Acompanhe todas as entradas, entregas, devoluções e saídas do estoque.</p></div></header><section className="panel runtime-error-card"><FeedbackMessage onRetry={() => setReloadKey((current) => current + 1)}>{error}</FeedbackMessage></section></main>;
   return <main className="module-shell"><header className="module-header"><div><p className="eyebrow">AUDITORIA OPERACIONAL</p><h1>Movimentações</h1><p className="module-subtitle">Acompanhe todas as entradas, entregas, devoluções e saídas do estoque.</p></div></header>{error && <div className="feedback error-feedback"><X size={17} /> {error}</div>}<section className="module-toolbar"><div className="module-search"><Search size={17} /><input aria-label="Buscar material, código ou funcionário" value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Buscar material, código ou funcionário" /></div><select aria-label="Filtrar movimentações por tipo" value={filter} onChange={(event) => setFilter(event.target.value)}><option value="all">Todos os tipos</option>{Object.entries(labels).map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select></section>{!loading && (<section className="module-summary"><div><strong>{movements.length}</strong><span>movimentações registradas</span></div><div><strong>{movements.filter((item) => item.movement_type === "entry").length}</strong><span>entradas</span></div><div><strong>{movements.filter((item) => item.movement_type === "delivery").length}</strong><span>entregas</span></div><div><strong>{movements.filter((item) => item.movement_type === "return").length}</strong><span>devoluções</span></div></section>)}<section className="panel module-table-card"><div className="panel-header"><div><h2>Histórico do estoque</h2><p>{filtered.length} registro(s) listado(s)</p></div></div>{loading ? <div className="module-loading"><LoaderCircle className="spin" size={22} /> Carregando movimentações...</div> : filtered.length ? <div className="table-wrap"><table><thead><tr><th>DATA</th><th>MATERIAL</th><th>FUNCIONÁRIO</th><th>MATRÍCULA</th><th>DESTINO / ORIGEM</th><th>TIPO</th><th>QUANTIDADE</th><th>OBSERVAÇÃO</th></tr></thead><tbody>{filtered.map((movement) => { const Icon = icons[movement.movement_type]; const hasEmployee = Boolean((movement.movement_type === "delivery" || movement.movement_type === "return") && movement.employee); return <tr key={movement.id}><td>{new Date(movement.created_at).toLocaleString("pt-BR", { dateStyle: "short", timeStyle: "short" })}</td><td><div className="material-cell"><div className="material-type-icon epi"><Boxes size={17} /></div><div><strong>{movement.material?.name ?? "Material removido"}</strong><small>{movement.material?.internal_code || "Código não informado"} · {movement.material?.unit}</small></div></div></td><td>{hasEmployee ? <strong>{movement.employee?.full_name}</strong> : <span className="muted-cell">—</span>}</td><td>{hasEmployee ? movement.employee?.registration || <span className="muted-cell">Sem matrícula</span> : <span className="muted-cell">—</span>}</td><td><span className="muted-cell">{destination(movement)}</span></td><td><span className={"movement-type " + tones[movement.movement_type]}><Icon size={14} /> {labels[movement.movement_type]}</span></td><td><strong>{movement.quantity}</strong> {movement.material?.unit}</td><td>{cleanNotes(movement)}</td></tr>; })}</tbody></table></div> : <div className="empty-state"><SlidersHorizontal size={27} /><strong>Nenhuma movimentação encontrada</strong><span>Os registros aparecerão aqui conforme o estoque for movimentado.</span></div>}</section></main>;
 }
