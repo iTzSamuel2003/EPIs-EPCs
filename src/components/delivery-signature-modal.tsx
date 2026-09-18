@@ -1,9 +1,8 @@
 "use client";
 
-import { ChangeEvent, PointerEvent, useRef, useState } from "react";
-import { Check, Eraser, PenLine, Upload, X } from "lucide-react";
+import { PointerEvent, useRef, useState } from "react";
+import { Check, Eraser, PenLine, X } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
-import { uploadTransactionPhotos } from "@/lib/transaction-attachments";
 import { friendlyError } from "@/lib/ui-feedback";
 
 type SignatureItem = { quantity: number; expected_replacement_at: string | null; material: { name: string; unit: string; internal_code: string | null } | null };
@@ -23,21 +22,13 @@ export function DeliverySignatureModal({ deliveryId, employeeName, employeeCpf, 
   const [hasSignature, setHasSignature] = useState(false);
   const [drawing, setDrawing] = useState(false);
   const [saving, setSaving] = useState(false);
-  const [photoUploading, setPhotoUploading] = useState(false);
   const [error, setError] = useState("");
-  const [photoMessage, setPhotoMessage] = useState("");
 
   function point(event: PointerEvent<HTMLCanvasElement>) { const canvas = canvasRef.current; if (!canvas) return { x: 0, y: 0 }; const rect = canvas.getBoundingClientRect(); return { x: (event.clientX - rect.left) * (canvas.width / rect.width), y: (event.clientY - rect.top) * (canvas.height / rect.height) }; }
   function startDrawing(event: PointerEvent<HTMLCanvasElement>) { const canvas = canvasRef.current; if (!canvas) return; canvas.setPointerCapture(event.pointerId); const context = canvas.getContext("2d"); if (!context) return; const { x, y } = point(event); context.beginPath(); context.moveTo(x, y); setDrawing(true); setHasSignature(true); }
   function draw(event: PointerEvent<HTMLCanvasElement>) { if (!drawing) return; const context = canvasRef.current?.getContext("2d"); if (!context) return; const { x, y } = point(event); context.lineWidth = 2.5; context.lineCap = "round"; context.strokeStyle = "#243452"; context.lineTo(x, y); context.stroke(); }
   function clearSignature() { const canvas = canvasRef.current; if (!canvas) return; canvas.getContext("2d")?.clearRect(0, 0, canvas.width, canvas.height); setHasSignature(false); }
-  function close() { if (saving) return; setOpen(false); setError(""); setPhotoMessage(""); clearSignature(); setCpf(""); setAccepted(false); }
-
-  async function uploadPhotos(event: ChangeEvent<HTMLInputElement>) {
-    const files = Array.from(event.target.files ?? []); event.target.value = ""; if (!files.length) return;
-    setPhotoUploading(true); setError(""); setPhotoMessage(""); const result = await uploadTransactionPhotos(createClient(), { files: files.slice(0, 5), recordId: deliveryId, type: "delivery" });
-    if (result.error) setError(result.error); else setPhotoMessage(`${result.count} foto(s) anexada(s) à entrega.`); setPhotoUploading(false);
-  }
+  function close() { if (saving) return; setOpen(false); setError(""); clearSignature(); setCpf(""); setAccepted(false); }
 
   async function submit() {
     if (digits(cpf) !== digits(employeeCpf)) { setError("O CPF informado não corresponde ao cadastro do colaborador."); return; }
@@ -66,5 +57,5 @@ export function DeliverySignatureModal({ deliveryId, employeeName, employeeCpf, 
     onComplete(path); close(); setSaving(false); if (previousAttachmentError) setError("Assinatura salva, mas o termo anterior não pôde ser removido.");
   }
 
-  return <><div className="delivery-attachment-actions"><button type="button" className="action-button assisted-signature-button" onClick={() => setOpen(true)}><PenLine size={14} /> Assinar no aparelho</button><label className="action-button upload-term-button"><Upload size={14} /> {photoUploading ? "Enviando..." : "Adicionar fotos"}<input type="file" accept="image/jpeg,image/png,image/webp" multiple onChange={(event) => void uploadPhotos(event)} disabled={photoUploading} /></label></div>{open && <div className="signature-modal-backdrop"><section className="signature-modal" role="dialog" aria-modal="true" aria-labelledby="signature-title"><button type="button" className="signature-modal-close" onClick={close} aria-label="Fechar"><X size={18} /></button><div className="signature-modal-icon"><PenLine size={22} /></div><h2 id="signature-title">Assinatura assistida</h2><p>O colaborador deve conferir os materiais, informar o CPF e assinar no campo abaixo.</p><label>CPF do colaborador<input value={cpf} onChange={(event) => setCpf(event.target.value)} inputMode="numeric" placeholder="000.000.000-00" /></label><div className="signature-pad-label"><span>Assinatura</span><button type="button" onClick={clearSignature}><Eraser size={13} /> Limpar</button></div><canvas ref={canvasRef} width={640} height={180} className="signature-pad" onPointerDown={startDrawing} onPointerMove={draw} onPointerUp={() => setDrawing(false)} onPointerCancel={() => setDrawing(false)} /><label className="signature-acceptance"><input type="checkbox" checked={accepted} onChange={(event) => setAccepted(event.target.checked)} /> Confirmo que o colaborador leu e concorda com o termo de entrega e responsabilidade.</label>{error && <div className="feedback error-feedback"><X size={15} /> {error}</div>}{photoMessage && <div className="feedback success-feedback"><Check size={15} /> {photoMessage}</div>}<div className="signature-modal-actions"><button type="button" className="secondary-button" onClick={close}>Cancelar</button><button type="button" className="primary-button" onClick={() => void submit()} disabled={saving}>{saving ? "Gerando documento..." : "Confirmar assinatura"}<Check size={16} /></button></div></section></div>}</>;
+  return <><div className="delivery-attachment-actions"><button type="button" className="action-button assisted-signature-button" onClick={() => setOpen(true)}><PenLine size={14} /> Assinar no aparelho</button></div>{open && <div className="signature-modal-backdrop"><section className="signature-modal" role="dialog" aria-modal="true" aria-labelledby="signature-title"><button type="button" className="signature-modal-close" onClick={close} aria-label="Fechar"><X size={18} /></button><div className="signature-modal-icon"><PenLine size={22} /></div><h2 id="signature-title">Assinatura assistida</h2><p>O colaborador deve conferir os materiais, informar o CPF e assinar no campo abaixo.</p><label>CPF do colaborador<input value={cpf} onChange={(event) => setCpf(event.target.value)} inputMode="numeric" placeholder="000.000.000-00" /></label><div className="signature-pad-label"><span>Assinatura</span><button type="button" onClick={clearSignature}><Eraser size={13} /> Limpar</button></div><canvas ref={canvasRef} width={640} height={180} className="signature-pad" onPointerDown={startDrawing} onPointerMove={draw} onPointerUp={() => setDrawing(false)} onPointerCancel={() => setDrawing(false)} /><label className="signature-acceptance"><input type="checkbox" checked={accepted} onChange={(event) => setAccepted(event.target.checked)} /> Confirmo que o colaborador leu e concorda com o termo de entrega e responsabilidade.</label>{error && <div className="feedback error-feedback"><X size={15} /> {error}</div>}<div className="signature-modal-actions"><button type="button" className="secondary-button" onClick={close}>Cancelar</button><button type="button" className="primary-button" onClick={() => void submit()} disabled={saving}>{saving ? "Gerando documento..." : "Confirmar assinatura"}<Check size={16} /></button></div></section></div>}</>;
 }
