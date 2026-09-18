@@ -2,6 +2,7 @@
 
 import { FormEvent, useEffect, useMemo, useState } from "react";
 import { ArrowDownAZ, ArrowUpAZ, Boxes, Check, LoaderCircle, Pencil, Plus, Search, ShieldCheck, X } from "lucide-react";
+import { useSearchParams } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import type { MaterialType } from "@/types/domain";
 
@@ -26,7 +27,7 @@ const emptyForm: MaterialForm = {
 function statusFor(material: MaterialRow, stock: number) {
   if (material.status === "inactive") return ["Inativo", "inactive"];
   if (stock === 0) return ["Sem estoque", "danger"];
-  if (stock <= material.minimum_stock) return ["Estoque baixo", "warning"];
+  if (material.minimum_stock > 0 && stock < material.minimum_stock) return ["Estoque baixo", "warning"];
   return ["Normal", "success"];
 }
 
@@ -41,6 +42,7 @@ function formFromMaterial(material: MaterialRow): MaterialForm {
 }
 
 export default function MaterialsPage() {
+  const searchParams = useSearchParams();
   const [materials, setMaterials] = useState<MaterialRow[]>([]);
   const [stockByMaterial, setStockByMaterial] = useState<Record<string, number>>({});
   const [form, setForm] = useState<MaterialForm>(emptyForm);
@@ -56,6 +58,11 @@ export default function MaterialsPage() {
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
   const [success, setSuccess] = useState("");
+
+  useEffect(() => {
+    const initialSearch = searchParams.get("search");
+    if (initialSearch) setQuery(initialSearch);
+  }, [searchParams]);
 
   async function loadMaterials() {
     setLoading(true);
@@ -83,7 +90,7 @@ export default function MaterialsPage() {
       return `${material.name} ${material.internal_code} ${material.ca_number ?? ""}`.toLowerCase().includes(query.toLowerCase())
         && (typeFilter === "all" || material.type === typeFilter)
         && (statusFilter === "all" || material.status === statusFilter)
-        && (!lowStockOnly || stock <= material.minimum_stock);
+        && (!lowStockOnly || (material.minimum_stock > 0 && stock < material.minimum_stock));
     })
     .sort((a, b) => ascending ? a.name.localeCompare(b.name, "pt-BR") : b.name.localeCompare(a.name, "pt-BR")), [materials, stockByMaterial, query, typeFilter, statusFilter, lowStockOnly, ascending]);
 
