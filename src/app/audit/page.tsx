@@ -32,6 +32,7 @@ export default function AuditPage() {
 
   async function load() {
     setLoading(true); setError("");
+    setRows([]); setActors({});
     const supabase = createClient();
     const { data, error: loadError } = await supabase.from("audit_logs").select("id,action,table_name,record_id,created_at,actor_id").order("created_at", { ascending: false }).limit(500);
     if (loadError) { setError(friendlyError(loadError, "Não foi possível carregar a auditoria.")); setLoading(false); return; }
