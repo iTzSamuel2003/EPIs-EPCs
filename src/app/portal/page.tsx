@@ -22,7 +22,7 @@ function readPortalSession(): PortalSession | null { try { const raw = window.se
 function savePortalSession(registration: string, cpf: string) { window.sessionStorage.setItem(portalSessionKey, JSON.stringify({ registration, cpf, expiresAt: Date.now() + portalSessionDuration } satisfies PortalSession)); }
 function clearPortalSession() { window.sessionStorage.removeItem(portalSessionKey); }
 const requestLabels: Record<string, string> = { replacement: "Troca de material", return: "Devolução", new_material: "Solicitar material", course: "Solicitar curso", other: "Outra solicitação" };
-const statusLabels: Record<string, string> = { pending: "Pendente", in_review: "Em análise", approved: "Aprovada", rejected: "Recusada", completed: "Concluída" };
+const statusLabels: Record<string, string> = { pending: "Pendente", in_review: "Em análise", approved: "Aprovada", rejected: "Recusada", completed: "Entregue" };
 function normalize(value: string) { return value.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase(); }
 function matchesGroup(functionName: string, group: string) { if (group === "Todos os grupos") return true; const text = normalize(functionName); return text.includes(normalize(group)) || (group === "Poda" && text.includes("pod")) || (group === "Operador de Guindauto" && (text.includes("munck") || text.includes("guindauto"))); }
 function formatDate(value: string | null) { return value ? new Date(`${value}T00:00:00`).toLocaleDateString("pt-BR") : "—"; }
