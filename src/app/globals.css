@@ -255,5 +255,6 @@ main.module-shell:has(> .module-table-card .module-loading) > .module-summary{di
 @media(max-width:760px){.table-wrap{overflow-x:auto}.table-wrap::after{content:"Deslize para ver mais";display:block;padding:8px 2px 0;color:#667895;font-size:12px}.module-toolbar{align-items:stretch}.module-toolbar>*{min-width:0;width:100%}.module-toolbar label{display:grid;gap:6px}.form-grid.three,.form-grid.two{grid-template-columns:1fr}.module-header{gap:18px}.module-header .primary-button,.module-header .secondary-button{width:100%;justify-content:center}}
 @media(max-width:600px){main.module-shell:has(.type-badge) .table-wrap::after,main.module-shell:has(.stock-table) .table-wrap::after{display:none}}
 /* Legibilidade: textos auxiliares e cabeçalhos de tabela não ficam menores que 10px. */
+.signature-pad:focus-visible{outline:3px solid #7762d6;outline-offset:3px;border-color:#7762d6}
 th{font-size:10px}
 .material-cell small{font-size:10px}
