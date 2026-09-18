@@ -39,6 +39,10 @@ export default function EmployeeHistoryPage() {
 
   useEffect(() => {
     async function load() {
+      setLoading(true);
+      setError("");
+      setEmployee(null);
+      setEvents([]);
       const supabase = createClient();
       const { data: employeeData, error: employeeError } = await supabase.from("employees").select("id,full_name,registration,job_title,function_name,function_classification,department").eq("id", id).maybeSingle();
       if (employeeError || !employeeData) { setError(friendlyError(employeeError, "Funcionário não encontrado.")); setLoading(false); return; }

@@ -22,6 +22,10 @@ export default function EmployeeCoursesPage() {
   const { id } = useParams<{ id: string }>();
   const [name, setName] = useState(""); const [functionName, setFunctionName] = useState(""); const [courses, setCourses] = useState<Course[]>([]); const [requirements, setRequirements] = useState<Requirement[]>([]); const [course, setCourse] = useState(emptyCourse); const [certificateFile, setCertificateFile] = useState<File | null>(null); const [loading, setLoading] = useState(true); const [saving, setSaving] = useState(false); const [error, setError] = useState(""); const [success, setSuccess] = useState(""); const [confirmingCourseId, setConfirmingCourseId] = useState<string | null>(null);
   const load = useCallback(async () => {
+    setLoading(true);
+    setError("");
+    setCourses([]);
+    setRequirements([]);
     const supabase = createClient();
     const [{ data: employee, error: employeeError }, { data, error: loadError }, { data: requirementData, error: requirementError }] = await Promise.all([
       supabase.from("employees").select("full_name,job_title,function_name").eq("id", id).single(),
