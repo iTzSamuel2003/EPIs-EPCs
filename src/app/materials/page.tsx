@@ -6,6 +6,7 @@ import { useSearchParams } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import { friendlyError } from "@/lib/ui-feedback";
 import type { MaterialType } from "@/types/domain";
+import { FeedbackMessage } from "@/components/feedback-message";
 
 type MaterialRow = {
   id: string; internal_code: string | null; name: string; type: MaterialType; unit: string; size: string | null;
@@ -67,6 +68,9 @@ export default function MaterialsPage() {
 
   async function loadMaterials() {
     setLoading(true);
+    setError("");
+    setMaterials([]);
+    setStockByMaterial({});
     const supabase = createClient();
     const [{ data, error: materialsError }, { data: lots, error: lotsError }] = await Promise.all([
       supabase.from("materials").select("id,internal_code,name,type,unit,size,description,brand,manufacturer,model,ca_number,ca_expires_at,useful_life_months,replacement_interval_days,minimum_stock,location,notes,status").order("name"),
@@ -139,7 +143,7 @@ export default function MaterialsPage() {
   return <main className="module-shell">
     <header className="module-header"><div><p className="eyebrow">CADASTRO E CONTROLE</p><h1>Materiais</h1><p className="module-subtitle">Gerencie EPIs, EPCs e ferramentais, certificados e níveis mínimos de estoque.</p></div><button className="primary-button" onClick={openNew}><Plus size={17} /> Novo material</button></header>
     {success && <div className="feedback success-feedback" role="status"><Check size={17} /> {success}</div>}
-    {error && !showForm && <div className="feedback error-feedback" role="alert"><X size={17} /> {error}</div>}
+    {error && !showForm && <FeedbackMessage onRetry={() => void loadMaterials()}>{error}</FeedbackMessage>}
     <section className="module-toolbar"><div className="module-search"><Search size={17} /><input aria-label="Buscar por nome, código ou CA" value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Buscar por nome, código ou CA" /></div><select aria-label="Filtrar materiais por tipo" value={typeFilter} onChange={(event) => setTypeFilter(event.target.value)}><option value="all">Todos os tipos</option><option value="EPI">EPI</option><option value="EPC">EPC</option><option value="FERRAMENTAL">Ferramental</option></select><select aria-label="Filtrar materiais por status" value={statusFilter} onChange={(event) => setStatusFilter(event.target.value)}><option value="all">Todos os status</option><option value="active">Ativos</option><option value="inactive">Inativos</option></select><label className="check-filter"><input type="checkbox" checked={lowStockOnly} onChange={(event) => setLowStockOnly(event.target.checked)} /> Estoque baixo</label></section>
     <section className="module-summary"><div><strong>{materials.filter((item) => item.status === "active").length}</strong><span>materiais ativos</span></div><div><strong>{materials.filter((item) => item.status === "active" && item.type === "EPI").length}</strong><span>EPIs ativos</span></div><div><strong>{materials.filter((item) => item.status === "active" && item.type === "EPC").length}</strong><span>EPCs ativos</span></div><div><strong>{materials.filter((item) => item.status === "active" && item.type === "FERRAMENTAL").length}</strong><span>ferramentais ativos</span></div></section>
     {!showForm && <>
