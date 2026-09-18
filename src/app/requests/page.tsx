@@ -32,6 +32,7 @@ export default function RequestsPage() {
 
   async function load() {
     setLoading(true); setError("");
+    setRequests([]);
     const { data, error: loadError } = await createClient().from("employee_portal_requests").select("id,request_type,description,status,review_notes,attachment_path,created_at,updated_at,employee:employees(full_name,registration),delivery_item:delivery_items(material:materials(name,unit),lot:material_lots(lot_number))").order("created_at", { ascending: false });
     if (loadError) setError(friendlyError(loadError, "Não foi possível carregar as solicitações.")); else setRequests((data ?? []) as unknown as RequestRow[]);
     setLoading(false);
