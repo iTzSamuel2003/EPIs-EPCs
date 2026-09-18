@@ -6,7 +6,6 @@ import Link from "next/link";
 import { useParams } from "next/navigation";
 import { EmployeeNavigation } from "@/components/employee-navigation";
 import { createClient } from "@/lib/supabase/client";
-import { createClient } from "@/lib/supabase/client";
 import { friendlyError } from "@/lib/ui-feedback";
 
 type Employee = { id: string; full_name: string; registration: string | null; job_title: string | null; function_name: string | null; function_classification: string | null; department: string | null };

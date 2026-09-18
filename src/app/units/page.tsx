@@ -3,7 +3,6 @@
 import { FormEvent, useEffect, useState } from "react";
 import { Check, LoaderCircle, PackageSearch, Plus, Search, X } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
-import { createClient } from "@/lib/supabase/client";
 import { friendlyError } from "@/lib/ui-feedback";
 
 type Material = { id: string; name: string; internal_code: string; type: string };

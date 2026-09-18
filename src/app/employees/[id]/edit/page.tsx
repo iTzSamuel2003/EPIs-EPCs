@@ -5,7 +5,6 @@ import { ArrowLeft, Check, LoaderCircle, Save, X } from "lucide-react";
 import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
-import { createClient } from "@/lib/supabase/client";
 import { friendlyError } from "@/lib/ui-feedback";
 import { EmployeeNavigation } from "@/components/employee-navigation";
 

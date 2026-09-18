@@ -3,7 +3,6 @@
 import { FormEvent, useEffect, useState } from "react";
 import { Check, LoaderCircle, Plus, ShieldCheck, Users, X } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
-import { createClient } from "@/lib/supabase/client";
 import { friendlyError } from "@/lib/ui-feedback";
 
 type Scenario = { id: string; name: string; source_annex: string; team_size: number | null; active: boolean };

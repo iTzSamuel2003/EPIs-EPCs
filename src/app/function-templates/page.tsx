@@ -3,7 +3,6 @@
 import { FormEvent, useEffect, useState } from "react";
 import { Boxes, Check, LoaderCircle, Pencil, Plus, ShieldCheck, Trash2, X } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
-import { createClient } from "@/lib/supabase/client";
 import { friendlyError } from "@/lib/ui-feedback";
 
 type ItemType = "EPI" | "EPC" | "FERRAMENTAL";

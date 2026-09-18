@@ -4,7 +4,6 @@ import { FormEvent, useEffect, useState } from "react";
 import { Check, FileText, GraduationCap, History, LoaderCircle, Pencil, Plus, Ruler, Search, UserRound, X } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
-import { createClient } from "@/lib/supabase/client";
 import { friendlyError } from "@/lib/ui-feedback";
 
 type Employee = { id: string; registration: string | null; full_name: string; cpf: string; job_title: string | null; function_name: string | null; function_classification: string | null; department: string | null; unit: string | null; admission_date: string | null; phone: string | null; email: string | null; status: "active" | "away" | "terminated"; notes: string | null };

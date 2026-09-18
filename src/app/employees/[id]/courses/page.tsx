@@ -6,7 +6,6 @@ import Link from "next/link";
 import { useParams } from "next/navigation";
 import { EmployeeNavigation } from "@/components/employee-navigation";
 import { createClient } from "@/lib/supabase/client";
-import { createClient } from "@/lib/supabase/client";
 import { friendlyError } from "@/lib/ui-feedback";
 
 type Course = { id: string; name: string; provider: string | null; completed_at: string | null; expires_at: string | null; certificate_number: string | null; certificate_file_path: string | null };

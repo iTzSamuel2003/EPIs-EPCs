@@ -5,7 +5,6 @@ import { ArrowLeft, Ban, Check, Copy, Mail, MessageCircle, Save, Send, X } from 
 import Link from "next/link";
 import { useParams } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
-import { createClient } from "@/lib/supabase/client";
 import { friendlyError } from "@/lib/ui-feedback";
 import { EmployeeNavigation } from "@/components/employee-navigation";
 
