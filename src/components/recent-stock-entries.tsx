@@ -28,6 +28,7 @@ export function RecentStockEntries({ refreshKey = 0 }: Props) {
   async function load() {
     setLoading(true);
     setError("");
+    setEntries([]);
     const supabase = createClient();
     const { data: invoiceData, error: invoiceError } = await supabase.from("stock_invoices").select("id,invoice_number,without_invoice,issued_at,notes").order("created_at", { ascending: false }).limit(10);
     if (invoiceError) { setError(friendlyError(invoiceError, "Não foi possível carregar as entradas.")); setLoading(false); return; }

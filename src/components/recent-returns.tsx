@@ -35,6 +35,7 @@ export function RecentReturns() {
     async function load() {
       setLoading(true);
       setError("");
+      setReturns([]);
       const { data, error: loadError } = await createClient().from("returns").select("id,returned_at,reason,term_file_path,term_signature_method,term_signed_at,employee:employees(full_name,registration,cpf),return_items(quantity,material:materials(name,unit),delivery_item:delivery_items(variant:material_variants(name,size)))").order("returned_at", { ascending: false }).order("created_at", { ascending: false }).limit(10);
       if (loadError) setError(friendlyError(loadError, "Não foi possível carregar as devoluções.")); else setReturns((data ?? []) as unknown as ReturnRecord[]);
       setLoading(false);

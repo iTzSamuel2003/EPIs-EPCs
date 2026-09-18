@@ -29,6 +29,7 @@ export function RecentDeliveries() {
     async function load() {
       setLoading(true);
       setError("");
+      setDeliveries([]);
       const supabase = createClient();
       const { data: auth, error: authError } = await supabase.auth.getUser();
       const [{ data, error: loadError }, { data: profileData, error: profileError }] = await Promise.all([
