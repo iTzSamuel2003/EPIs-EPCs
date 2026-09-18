@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { Check, ClipboardList, Download, LoaderCircle, Search, X } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
+import { friendlyError } from "@/lib/ui-feedback";
 
 type RequestRow = { id: string; request_type: string; description: string; status: string; review_notes: string | null; attachment_path: string | null; created_at: string; updated_at: string; delivered_at: string | null; employee: { full_name: string; registration: string | null } | null; delivery_item: { material: { name: string; unit: string } | null; lot: { lot_number: string } | null } | null };
 type Confirmation = { item: RequestRow; status: string };
@@ -31,7 +32,7 @@ export default function RequestsPage() {
   async function load() {
     setLoading(true); setError("");
     const { data, error: loadError } = await createClient().from("employee_portal_requests").select("id,request_type,description,status,review_notes,attachment_path,created_at,updated_at,employee:employees(full_name,registration),delivery_item:delivery_items(material:materials(name,unit),lot:material_lots(lot_number))").order("created_at", { ascending: false });
-    if (loadError) setError(loadError.message); else setRequests((data ?? []) as unknown as RequestRow[]);
+    if (loadError) setError(friendlyError(loadError, "Não foi possível carregar as solicitações.")); else setRequests((data ?? []) as unknown as RequestRow[]);
     setLoading(false);
   }
 
@@ -46,7 +47,7 @@ export default function RequestsPage() {
   async function updateRequest(item: RequestRow, status: string, note: string) {
     setSavingId(item.id); setError(""); setSuccess("");
     const { error: updateError } = await createClient().from("employee_portal_requests").update({ status, review_notes: note.trim() || null, delivered_at: status === "completed" ? deliveredAtDraft || new Date().toISOString().slice(0, 10) : null }).eq("id", item.id);
-    if (updateError) setError(updateError.message); else {
+    if (updateError) setError(friendlyError(updateError, "Não foi possível atualizar a solicitação.")); else {
       setRequests((current) => current.map((currentItem) => currentItem.id === item.id ? { ...currentItem, status, review_notes: note.trim() || null, delivered_at: status === "completed" ? deliveredAtDraft || new Date().toISOString().slice(0, 10) : null, updated_at: new Date().toISOString() } : currentItem));
       setSuccess("Solicitação atualizada."); setConfirming(null);
     }
@@ -57,7 +58,7 @@ export default function RequestsPage() {
     if (!item.attachment_path) return;
     setOpeningId(item.id); setError("");
     const { data, error: signedUrlError } = await createClient().storage.from("employee-request-attachments").createSignedUrl(item.attachment_path, 300);
-    if (signedUrlError || !data?.signedUrl) setError(signedUrlError?.message ?? "Não foi possível abrir o anexo."); else window.open(data.signedUrl, "_blank", "noopener,noreferrer");
+    if (signedUrlError || !data?.signedUrl) setError(friendlyError(signedUrlError, "Não foi possível abrir o anexo.")); else window.open(data.signedUrl, "_blank", "noopener,noreferrer");
     setOpeningId("");
   }
 

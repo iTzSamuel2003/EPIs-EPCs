@@ -3,6 +3,7 @@
 import { FormEvent, useEffect, useMemo, useState } from "react";
 import { CalendarCheck, Check, ClipboardCheck, LoaderCircle, Plus, Search, X } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
+import { friendlyError } from "@/lib/ui-feedback";
 
 type Material = { id: string; name: string; internal_code: string; type: "EPI" | "EPC" | "FERRAMENTAL"; unit: string; test_required: boolean };
 type MaterialTest = { id: string; performed_at: string; interval_months: number; next_due_at: string; result: "approved" | "approved_with_restrictions" | "failed" | "pending"; examiner: string | null; professional_registration: string | null; art_number: string | null; certificate_number: string | null; report_reference: string | null; report_url: string | null; material: Material | null };
@@ -52,7 +53,7 @@ export default function TestsPage() {
       supabase.from("material_lots").select("material_id, available_quantity"),
     ]);
 
-    if (materialError || testError || lotError) setError((materialError ?? testError ?? lotError)?.message ?? "Não foi possível carregar os ensaios.");
+    if (materialError || testError || lotError) setError(friendlyError(materialError ?? testError ?? lotError, "Não foi possível carregar os ensaios."));
     else {
       setMaterials((materialData ?? []) as Material[]);
       setTests((testData ?? []) as unknown as MaterialTest[]);
@@ -121,10 +122,10 @@ export default function TestsPage() {
     setSaving(true);
     const supabase = createClient();
     const { data: testId, error: saveError } = await supabase.rpc("register_material_test", { p_material_id: materialId, p_performed_at: performedAt, p_interval_months: Number(interval), p_result: result, p_examiner: examiner || null, p_certificate_number: certificate || null, p_notes: notes || null });
-    if (saveError || !testId) setError(saveError?.message ?? "Não foi possível registrar o ensaio.");
+    if (saveError || !testId) setError(friendlyError(saveError, "Não foi possível registrar o ensaio."));
     else {
       const { error: detailsError } = await supabase.from("material_tests").update({ professional_registration: registration || null, art_number: artNumber || null, report_reference: reportReference || null, report_url: reportUrl || null }).eq("id", testId);
-      if (detailsError) setError(detailsError.message);
+      if (detailsError) setError(friendlyError(detailsError, "Não foi possível concluir a operação."));
       else { setSuccess("Ensaio, responsável técnico, ART e laudo registrados com sucesso."); setShowForm(false); resetForm(); await loadData(); }
     }
     setSaving(false);
@@ -143,3 +144,4 @@ export default function TestsPage() {
 }
 
 function isHttpUrl(value: string) { try { const url = new URL(value); return url.protocol === "http:" || url.protocol === "https:"; } catch { return false; } }
+

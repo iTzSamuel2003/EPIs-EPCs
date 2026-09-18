@@ -3,6 +3,7 @@
 import { ClipboardCheck, FileText, LoaderCircle, PackageCheck, ShieldAlert } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { createClient } from "@/lib/supabase/client";
+import { friendlyError } from "@/lib/ui-feedback";
 
 type Scenario = { id: string; code: string; name: string; source_annex: string; team_size: number | null; composition: string | null; active: boolean };
 type Requirement = { id: string; scenario_id: string; source_annex: string; quantity: number; unit: string; usage_scope: "individual" | "coletivo"; notes: string | null; materials: { id: string; name: string; type: "EPI" | "EPC" | "FERRAMENTAL"; contract_item_code: string | null; contract_category: string; contract_specification: string | null; ca_required: boolean; ca_number: string | null; ca_expires_at: string | null; test_required: boolean } | null };
@@ -27,7 +28,7 @@ export default function ContractRequirementsPage() {
         supabase.from("contract_requirements").select("id, scenario_id, source_annex, quantity, unit, usage_scope, notes, materials(id, name, type, contract_item_code, contract_category, contract_specification, ca_required, ca_number, ca_expires_at, test_required)"),
         supabase.from("material_lots").select("material_id, available_quantity"),
       ]);
-      if (scenarioError || requirementError || lotError) setError((scenarioError ?? requirementError ?? lotError)?.message ?? "Não foi possível carregar os requisitos contratuais.");
+      if (scenarioError || requirementError || lotError) setError(friendlyError(scenarioError ?? requirementError ?? lotError, "Não foi possível carregar os requisitos contratuais."));
       const rows = (scenarioData ?? []) as Scenario[];
       const lots = (lotData ?? []) as Lot[];
       setScenarios(rows);
@@ -57,3 +58,5 @@ export default function ContractRequirementsPage() {
     </>}
   </main>;
 }
+
+

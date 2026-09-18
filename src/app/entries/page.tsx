@@ -5,6 +5,7 @@ import { ArrowLeft, Check, ClipboardList, FileImage, Plus, Trash2, X } from "luc
 import Link from "next/link";
 import { RecentStockEntries } from "@/components/recent-stock-entries";
 import { createClient } from "@/lib/supabase/client";
+import { friendlyError } from "@/lib/ui-feedback";
 
 type MaterialOption = { id: string; name: string; internal_code: string; unit: string; test_required: boolean };
 type MaterialVariant = { id: string; material_id: string; name: string; size: string | null; active: boolean };
@@ -32,7 +33,7 @@ export default function EntriesPage() {
       supabase.from("materials").select("id, name, internal_code, unit, test_required").eq("status", "active").order("name"),
       supabase.from("material_variants").select("id, material_id, name, size, active").eq("active", true).order("size"),
     ]);
-    if (loadError || variantError) setError((loadError ?? variantError)?.message ?? "Não foi possível carregar os materiais.");
+    if (loadError || variantError) setError(friendlyError(loadError ?? variantError, "Não foi possível carregar os materiais."));
     else { setMaterials((data ?? []) as MaterialOption[]); setVariants((variantData ?? []) as MaterialVariant[]); }
     setLoading(false);
   }
@@ -78,18 +79,18 @@ export default function EntriesPage() {
     setSaving(true); const supabase = createClient(); let uploadedPath = "";
     if (invoiceFile) {
       const { data: auth, error: authError } = await supabase.auth.getUser();
-      if (authError || !auth.user) { setError(authError?.message ?? "Sua sessão expirou. Entre novamente."); setSaving(false); return; }
+      if (authError || !auth.user) { setError(friendlyError(authError, "Sua sessão expirou. Entre novamente.")); setSaving(false); return; }
       const { data: profile, error: profileError } = await supabase.from("profiles").select("organization_id").eq("id", auth.user.id).single();
-      if (profileError) { setError(profileError.message); setSaving(false); return; }
+      if (profileError) { setError(friendlyError(profileError, "Não foi possível concluir a operação.")); setSaving(false); return; }
       if (!profile?.organization_id) { setError("Não foi possível identificar a organização do usuário."); setSaving(false); return; }
       uploadedPath = `${profile.organization_id}/${crypto.randomUUID()}-${invoiceFile.name.replace(/[^a-zA-Z0-9._-]/g, "_")}`;
       const { error: uploadError } = await supabase.storage.from("invoice-attachments").upload(uploadedPath, invoiceFile, { contentType: invoiceFile.type, upsert: false });
-      if (uploadError) { setError(`Não foi possível anexar a nota fiscal: ${uploadError.message}`); setSaving(false); return; }
+      if (uploadError) { setError(friendlyError(uploadError, "Não foi possível anexar a nota fiscal.")); setSaving(false); return; }
     }
     const { error: entryError } = await supabase.rpc("register_stock_entry_batch", { p_invoice_number: invoiceNumber || null, p_entry_date: entryDate || null, p_items: items.map((item) => ({ material_id: item.material_id, variant_id: item.variant_id || null, quantity: Number(item.quantity), unit_cost: Number(item.unit_cost) || 0, manufactured_at: item.manufactured_at || null, expires_at: item.expires_at || null, test_performed_at: item.test_performed_at || null, test_expires_at: item.test_expires_at || null })), p_invoice_file_path: uploadedPath || null, p_notes: notes || null });
     if (entryError) {
       if (uploadedPath) await supabase.storage.from("invoice-attachments").remove([uploadedPath]);
-      setError(entryError.message);
+      setError(friendlyError(entryError, "Não foi possível concluir a operação."));
     } else {
       setSuccess(invoiceNumber.trim() ? (items.length > 1 ? "Nota fiscal e itens registrados com sucesso." : "Entrada registrada e nota fiscal anexada com sucesso.") : "Entrada registrada sem nota fiscal. O lançamento foi marcado para identificação posterior.");
       window.dispatchEvent(new Event("stock-entry-created")); setEntriesRefreshKey((value) => value + 1); setItems([newItem()]); setMaterialSuggestionsOpen(null); setInvoiceNumber(""); setEntryDate(new Date().toISOString().slice(0, 10)); setInvoiceFile(null); setNotes("");
