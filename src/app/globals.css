@@ -254,6 +254,27 @@ main.module-shell:has(> .module-table-card .module-loading) > .module-summary{di
 .table-wrap{scrollbar-width:thin;scrollbar-color:#b8bfd0 transparent}
 @media(max-width:760px){.table-wrap{overflow-x:auto}.table-wrap::after{content:"Deslize para ver mais";display:block;padding:8px 2px 0;color:#667895;font-size:12px}.module-toolbar{align-items:stretch}.module-toolbar>*{min-width:0;width:100%}.module-toolbar label{display:grid;gap:6px}.form-grid.three,.form-grid.two{grid-template-columns:1fr}.module-header{gap:18px}.module-header .primary-button,.module-header .secondary-button{width:100%;justify-content:center}}
 @media(max-width:600px){main.module-shell:has(.type-badge) .table-wrap::after,main.module-shell:has(.stock-table) .table-wrap::after{display:none}}
+@media(max-width:600px){
+  main.module-shell:has(.employees-table-card) .employees-table-card .table-wrap{overflow:visible}
+  main.module-shell:has(.employees-table-card) .employees-table-card .table-wrap::after{display:none}
+  main.module-shell:has(.employees-table-card) .employees-table-card table{display:block;min-width:0;width:100%;white-space:normal}
+  main.module-shell:has(.employees-table-card) .employees-table-card thead{display:none}
+  main.module-shell:has(.employees-table-card) .employees-table-card tbody{display:grid;gap:10px}
+  main.module-shell:has(.employees-table-card) .employees-table-card tr{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:10px 12px;padding:13px;border:1px solid #edf0f5;border-radius:10px;background:#fafbfe}
+  main.module-shell:has(.employees-table-card) .employees-table-card td{display:grid;gap:4px;min-width:0;padding:0;border:0;overflow-wrap:anywhere;white-space:normal}
+  main.module-shell:has(.employees-table-card) .employees-table-card td::before{color:#a1aaba;font-size:9px;font-weight:700;letter-spacing:.5px}
+  main.module-shell:has(.employees-table-card) .employees-table-card td:nth-child(1),main.module-shell:has(.employees-table-card) .employees-table-card td:nth-child(7){grid-column:1 / -1}
+  main.module-shell:has(.employees-table-card) .employees-table-card td:nth-child(1)::before{content:"Funcionário"}
+  main.module-shell:has(.employees-table-card) .employees-table-card td:nth-child(2)::before{content:"Matrícula"}
+  main.module-shell:has(.employees-table-card) .employees-table-card td:nth-child(3)::before{content:"Cargo / função"}
+  main.module-shell:has(.employees-table-card) .employees-table-card td:nth-child(4)::before{content:"Setor"}
+  main.module-shell:has(.employees-table-card) .employees-table-card td:nth-child(5)::before{content:"Unidade"}
+  main.module-shell:has(.employees-table-card) .employees-table-card td:nth-child(6)::before{content:"Status"}
+  main.module-shell:has(.employees-table-card) .employees-table-card td:nth-child(7)::before{content:"Ações"}
+  main.module-shell:has(.employees-table-card) .employees-table-card .material-cell strong{white-space:normal;overflow-wrap:anywhere}
+  main.module-shell:has(.employees-table-card) .employees-table-card .row-actions{display:flex;flex-wrap:wrap;gap:6px;max-width:none}
+  main.module-shell:has(.employees-table-card) .employees-table-card .row-actions .action-button{width:42px;min-width:42px;justify-content:center;padding:8px}
+}
 /* Legibilidade: textos auxiliares e cabeçalhos de tabela não ficam menores que 10px. */
 .signature-pad:focus-visible{outline:3px solid #7762d6;outline-offset:3px;border-color:#7762d6}
 th{font-size:10px}
