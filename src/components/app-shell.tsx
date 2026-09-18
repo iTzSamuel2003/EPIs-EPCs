@@ -22,6 +22,15 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   const pathname = usePathname(); const router = useRouter(); const [mobileMenu, setMobileMenu] = useState(false); const [query, setQuery] = useState(""); const [results, setResults] = useState<SearchResult[]>([]); const [selectedSearchIndex, setSelectedSearchIndex] = useState(-1); const [validityCount, setValidityCount] = useState(0);
   const publicRoute = pathname === "/login" || pathname === "/reset-password" || pathname.startsWith("/medidas/") || pathname === "/portal";
   useEffect(() => {
+    if (!mobileMenu) return;
+    function closeOnOutsidePointer(event: PointerEvent) {
+      const sidebar = document.querySelector(".sidebar");
+      if (sidebar && !sidebar.contains(event.target as Node)) setMobileMenu(false);
+    }
+    document.addEventListener("pointerdown", closeOnOutsidePointer);
+    return () => document.removeEventListener("pointerdown", closeOnOutsidePointer);
+  }, [mobileMenu]);
+  useEffect(() => {
     if (publicRoute) return;
     let cancelled = false;
     let loading = false;
