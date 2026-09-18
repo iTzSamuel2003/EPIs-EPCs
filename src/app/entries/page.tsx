@@ -1,9 +1,10 @@
 "use client";
 
 import { ChangeEvent, FormEvent, useEffect, useState } from "react";
-import { ArrowLeft, Check, ClipboardList, FileImage, Plus, Trash2, X } from "lucide-react";
+import { ArrowLeft, ClipboardList, FileImage, Plus, Trash2 } from "lucide-react";
 import Link from "next/link";
 import { RecentStockEntries } from "@/components/recent-stock-entries";
+import { FeedbackMessage } from "@/components/feedback-message";
 import { createClient } from "@/lib/supabase/client";
 import { friendlyError } from "@/lib/ui-feedback";
 
@@ -28,6 +29,8 @@ export default function EntriesPage() {
   const [entriesRefreshKey, setEntriesRefreshKey] = useState(0);
 
   async function loadMaterials() {
+    setLoading(true);
+    setError("");
     const supabase = createClient();
     const [{ data, error: loadError }, { data: variantData, error: variantError }] = await Promise.all([
       supabase.from("materials").select("id, name, internal_code, unit, test_required").eq("status", "active").order("name"),
@@ -100,7 +103,7 @@ if (uploadError) { setError(friendlyError(uploadError, "Não foi possível anexa
 
   return <main className="module-shell">
     <header className="module-header"><div><p className="eyebrow">MOVIMENTAÇÃO DE ESTOQUE</p><h1>Entrada de materiais</h1><p className="module-subtitle">Registre vários produtos da mesma nota fiscal em uma única operação.</p></div><Link className="secondary-button" href="/stock"><ArrowLeft size={16} /> Ver estoque</Link></header>
-    {success && <div className="feedback success-feedback" role="status"><Check size={17} /> {success}</div>}{error && <div className="feedback error-feedback" role="alert"><X size={17} /> {error}</div>}
+    {success && <FeedbackMessage kind="success">{success}</FeedbackMessage>}{error && <FeedbackMessage onRetry={() => void loadMaterials()}>{error}</FeedbackMessage>}
     <section className="panel entry-card"><div className="entry-intro"><div className="entry-icon"><ClipboardList size={22} /></div><div><h2>Nota fiscal e itens recebidos</h2><p>Informe a nota uma vez e adicione todos os produtos e lotes relacionados.</p></div></div>
       <form className="material-form" onSubmit={submit}>
         <div className="form-grid two"><label>Número da nota fiscal (opcional)<input value={invoiceNumber} onChange={(event) => setInvoiceNumber(event.target.value)} placeholder="Deixe em branco se não houver" /></label><label>Data da entrada<input type="date" value={entryDate} onChange={(event) => setEntryDate(event.target.value)} required /></label></div>
