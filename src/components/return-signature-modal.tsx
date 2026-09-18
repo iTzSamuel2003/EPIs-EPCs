@@ -18,6 +18,8 @@ export function ReturnSignatureModal({ returnId, employeeName, employeeCpf, empl
     if (!open) return;
     const input = document.querySelector<HTMLInputElement>(".signature-modal input");
     input?.focus();
+    canvasRef.current?.setAttribute("aria-label", "Campo para desenhar a assinatura");
+    canvasRef.current?.setAttribute("tabindex", "0");
     function closeOnEscape(event: KeyboardEvent) {
       if (event.key !== "Escape" || saving) return;
       canvasRef.current?.getContext("2d")?.clearRect(0, 0, canvasRef.current.width, canvasRef.current.height);
