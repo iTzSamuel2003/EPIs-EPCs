@@ -4,6 +4,7 @@ import { ChangeEvent, useEffect, useState } from "react";
 import { Check, ClipboardList, Download, LoaderCircle, RotateCcw, Upload, UserRound } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 import { ReturnSignatureModal } from "@/components/return-signature-modal";
+import { friendlyError } from "@/lib/ui-feedback";
 
 type ReturnRecord = {
   id: string;
@@ -33,7 +34,7 @@ export function RecentReturns() {
   useEffect(() => {
     async function load() {
       const { data, error: loadError } = await createClient().from("returns").select("id,returned_at,reason,term_file_path,term_signature_method,term_signed_at,employee:employees(full_name,registration,cpf),return_items(quantity,material:materials(name,unit),delivery_item:delivery_items(variant:material_variants(name,size)))").order("returned_at", { ascending: false }).order("created_at", { ascending: false }).limit(10);
-      if (loadError) setError(loadError.message); else setReturns((data ?? []) as unknown as ReturnRecord[]);
+      if (loadError) setError(friendlyError(loadError, "Não foi possível carregar as devoluções.")); else setReturns((data ?? []) as unknown as ReturnRecord[]);
       setLoading(false);
     }
     void load();
@@ -52,16 +53,16 @@ export function RecentReturns() {
     if (!["application/pdf", "image/jpeg", "image/png", "image/webp"].includes(file.type)) { setError("Anexe um PDF, JPG, PNG ou WEBP."); return; }
     if (file.size > 10 * 1024 * 1024) { setError("O arquivo do termo deve ter no máximo 10 MB."); return; }
     setUploadingId(item.id); setError(""); const supabase = createClient();
-    const { data: profile, error: profileError } = await supabase.from("profiles").select("organization_id").single();
-    if (profileError || !profile?.organization_id) { setError(profileError?.message ?? "Não foi possível identificar a organização."); setUploadingId(""); return; }
+    const { data: auth, error: authError } = await supabase.auth.getUser();
+    const { data: profile, error: profileError } = auth.user ? await supabase.from("profiles").select("organization_id").eq("id", auth.user.id).maybeSingle() : { data: null, error: authError };
+    if (profileError || !profile?.organization_id) { setError(friendlyError(profileError ?? authError, "Não foi possível identificar a organização.")); setUploadingId(""); return; }
     const path = `${profile.organization_id}/${item.id}/${crypto.randomUUID()}-${safeFileName(file.name)}`;
     const { error: uploadError } = await supabase.storage.from("delivery-terms").upload(path, file, { contentType: file.type, upsert: false });
-    if (uploadError) { setError(uploadError.message); setUploadingId(""); return; }
-    const { data: auth, error: authError } = await supabase.auth.getUser();
-    if (authError || !auth.user) { await supabase.storage.from("delivery-terms").remove([path]); setError(authError?.message ?? "Sua sessão expirou. Entre novamente."); setUploadingId(""); return; }
+    if (uploadError) { setError(friendlyError(uploadError, "Não foi possível anexar o termo.")); setUploadingId(""); return; }
+    if (authError || !auth.user) { await supabase.storage.from("delivery-terms").remove([path]); setError(friendlyError(authError, "Sua sessão expirou. Entre novamente.")); setUploadingId(""); return; }
     const uploadedAt = new Date().toISOString();
     const { error: updateError } = await supabase.from("returns").update({ term_file_path: path, term_uploaded_at: uploadedAt, term_uploaded_by: auth.user.id, term_signature_method: "physical_upload", term_signed_at: uploadedAt, term_signer_name: item.employee?.full_name || null, term_signer_cpf: item.employee?.cpf || null }).eq("id", item.id);
-    if (updateError) { await supabase.storage.from("delivery-terms").remove([path]); setError(updateError.message); setUploadingId(""); return; }
+    if (updateError) { await supabase.storage.from("delivery-terms").remove([path]); setError(friendlyError(updateError, "Não foi possível atualizar o termo.")); setUploadingId(""); return; }
     if (item.term_file_path) await supabase.storage.from("delivery-terms").remove([item.term_file_path]);
     setReturns((current) => current.map((currentItem) => currentItem.id === item.id ? { ...currentItem, term_file_path: path, term_uploaded_at: uploadedAt, term_signature_method: "physical_upload", term_signed_at: uploadedAt } : currentItem));
     setUploadingId("");

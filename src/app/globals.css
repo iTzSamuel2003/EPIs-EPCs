@@ -231,3 +231,14 @@ button:focus-visible,a:focus-visible,input:focus-visible,select:focus-visible,te
 }
 .employee-term-menu-panel{min-width:220px}.employee-term-menu-panel .action-button{min-height:36px}.employee-delivery-sheets .table-wrap,.employee-return-sheets .table-wrap{overflow:visible}@media(max-width:760px){.employee-term-menu-panel{right:auto;left:0;max-width:calc(100vw - 48px)}}
 .employee-delivery-sheets td:last-child,.employee-return-sheets td:last-child{display:flex;align-items:center;gap:8px;flex-wrap:wrap}.employee-delivery-sheets td:last-child .employee-term-menu,.employee-return-sheets td:last-child .employee-term-menu{flex:0 0 auto}.employee-term-material{line-height:1.45}
+
+/* Base de acessibilidade e feedback consistente */
+button,a,input,select,textarea{font:inherit}
+button:focus-visible,a:focus-visible,input:focus-visible,select:focus-visible,textarea:focus-visible{outline:3px solid #7762d6;outline-offset:2px}
+.primary-button,.secondary-button,.action-button,.icon-button,.menu-toggle,.close-menu,.close-modal,.select-button{min-height:44px}
+.feedback{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+.feedback-retry{margin-left:auto;display:inline-flex;align-items:center;gap:6px;min-height:36px;padding:7px 10px;border:1px solid currentColor;border-radius:8px;background:transparent;color:inherit;cursor:pointer}
+.feedback-retry:hover{background:rgba(119,98,214,.08)}
+.module-loading{min-height:120px;display:flex;align-items:center;justify-content:center;gap:10px;color:#667895}
+.table-wrap{scrollbar-width:thin;scrollbar-color:#b8bfd0 transparent}
+@media(max-width:760px){.table-wrap{overflow-x:auto}.table-wrap::after{content:"Deslize para ver mais";display:block;padding:8px 2px 0;color:#667895;font-size:12px}.module-toolbar{align-items:stretch}.module-toolbar>*{min-width:0;width:100%}.module-toolbar label{display:grid;gap:6px}.form-grid.three,.form-grid.two{grid-template-columns:1fr}.module-header{gap:18px}.module-header .primary-button,.module-header .secondary-button{width:100%;justify-content:center}}

@@ -3,6 +3,7 @@
 import { ChangeEvent, useEffect, useState } from "react";
 import { CalendarClock, Check, ClipboardList, Download, LoaderCircle, Upload, UserRound, X } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
+import { friendlyError } from "@/lib/ui-feedback";
 import { DeliverySignatureModal } from "@/components/delivery-signature-modal";
 
 type DeliveryUnit = { unit_identifier: string; employee_id: string | null; delivered_at: string | null; valid_until: string | null };
@@ -27,12 +28,13 @@ export function RecentDeliveries() {
   useEffect(() => {
     async function load() {
       const supabase = createClient();
+      const { data: auth, error: authError } = await supabase.auth.getUser();
       const [{ data, error: loadError }, { data: profileData, error: profileError }] = await Promise.all([
         supabase.from("deliveries").select("id,delivered_at,reason,notes,term_file_path,term_uploaded_at,term_signature_method,employee:employees(full_name,registration,cpf),delivery_items(quantity,expected_replacement_at,material:materials(name,unit,internal_code),material_units(unit_identifier,employee_id,delivered_at,valid_until))").order("delivered_at", { ascending: false }).order("created_at", { ascending: false }).limit(10),
-        supabase.from("profiles").select("organization_id").single(),
+        auth.user ? supabase.from("profiles").select("organization_id").eq("id", auth.user.id).maybeSingle() : Promise.resolve({ data: null, error: authError }),
       ]);
-      if (loadError || profileError) setError((loadError ?? profileError)?.message ?? "Não foi possível carregar as entregas."); else setDeliveries((data ?? []) as unknown as Delivery[]);
-      if (profileData?.organization_id) { const { data: organization, error: organizationError } = await supabase.from("organizations").select("name").eq("id", profileData.organization_id).single(); if (organizationError) setError(organizationError.message); else setCompanyName(organization?.name ?? ""); }
+      if (loadError || profileError) setError(friendlyError(loadError ?? profileError, "Não foi possível carregar as entregas.")); else setDeliveries((data ?? []) as unknown as Delivery[]);
+      if (profileData?.organization_id) { const { data: organization, error: organizationError } = await supabase.from("organizations").select("name").eq("id", profileData.organization_id).maybeSingle(); if (organizationError) setError(friendlyError(organizationError, "Não foi possível carregar os dados da organização.")); else setCompanyName(organization?.name ?? ""); }
       setLoading(false);
     }
     void load();
@@ -44,12 +46,12 @@ export function RecentDeliveries() {
   async function uploadTerm(delivery: Delivery, event: ChangeEvent<HTMLInputElement>) {
     const file = event.target.files?.[0]; event.target.value = ""; if (!file) return;
     if (!["application/pdf", "image/jpeg", "image/png", "image/webp"].includes(file.type)) { setError("Anexe um PDF, JPG, PNG ou WEBP."); return; } if (file.size > 10 * 1024 * 1024) { setError("O arquivo do termo deve ter no máximo 10 MB."); return; }
-    setUploadingId(delivery.id); setError(""); const supabase = createClient(); const { data: profile, error: profileError } = await supabase.from("profiles").select("organization_id").single();
-    if (profileError) { setError(profileError.message); setUploadingId(""); return; }
+    setUploadingId(delivery.id); setError(""); const supabase = createClient(); const { data: auth, error: authError } = await supabase.auth.getUser(); const { data: profile, error: profileError } = auth.user ? await supabase.from("profiles").select("organization_id").eq("id", auth.user.id).maybeSingle() : { data: null, error: authError };
+    if (profileError) { setError(friendlyError(profileError, "Não foi possível identificar a organização.")); setUploadingId(""); return; }
     if (!profile?.organization_id) { setError("Não foi possível identificar a organização."); setUploadingId(""); return; }
     const path = `${profile.organization_id}/${delivery.id}/${crypto.randomUUID()}-${safeFileName(file.name)}`;
     const { error: uploadError } = await supabase.storage.from("delivery-terms").upload(path, file, { contentType: file.type, upsert: false });
-    if (uploadError) setError(uploadError.message); else { const { data: auth, error: authError } = await supabase.auth.getUser(); if (authError || !auth.user) { await supabase.storage.from("delivery-terms").remove([path]); setError(authError?.message ?? "Sua sessão expirou. Entre novamente."); } else { const { error: updateError } = await supabase.from("deliveries").update({ term_file_path: path, term_uploaded_at: new Date().toISOString(), term_uploaded_by: auth.user.id }).eq("id", delivery.id); if (updateError) { await supabase.storage.from("delivery-terms").remove([path]); setError(updateError.message); } else { const { error: previousAttachmentError } = delivery.term_file_path ? await supabase.storage.from("delivery-terms").remove([delivery.term_file_path]) : { error: null }; setDeliveries((current) => current.map((item) => item.id === delivery.id ? { ...item, term_file_path: path, term_uploaded_at: new Date().toISOString() } : item)); if (previousAttachmentError) setError(`Termo atualizado, mas o anexo anterior não pôde ser removido: ${previousAttachmentError.message}`); } } }
+    if (uploadError) setError(friendlyError(uploadError, "Não foi possível anexar o termo.")); else { if (authError || !auth.user) { await supabase.storage.from("delivery-terms").remove([path]); setError("Sua sessão expirou. Entre novamente."); } else { const { error: updateError } = await supabase.from("deliveries").update({ term_file_path: path, term_uploaded_at: new Date().toISOString(), term_uploaded_by: auth.user.id }).eq("id", delivery.id); if (updateError) { await supabase.storage.from("delivery-terms").remove([path]); setError(friendlyError(updateError, "Não foi possível atualizar o termo.")); } else { const { error: previousAttachmentError } = delivery.term_file_path ? await supabase.storage.from("delivery-terms").remove([delivery.term_file_path]) : { error: null }; setDeliveries((current) => current.map((item) => item.id === delivery.id ? { ...item, term_file_path: path, term_uploaded_at: new Date().toISOString() } : item)); if (previousAttachmentError) setError("O termo foi atualizado, mas o anexo anterior não pôde ser removido."); } } }
     setUploadingId("");
   }
 

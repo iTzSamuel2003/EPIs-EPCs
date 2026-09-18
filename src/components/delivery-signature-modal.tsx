@@ -4,6 +4,7 @@ import { ChangeEvent, PointerEvent, useRef, useState } from "react";
 import { Check, Eraser, PenLine, Upload, X } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 import { uploadTransactionPhotos } from "@/lib/transaction-attachments";
+import { friendlyError } from "@/lib/ui-feedback";
 
 type SignatureItem = { quantity: number; expected_replacement_at: string | null; material: { name: string; unit: string; internal_code: string | null } | null };
 type DeliverySignatureModalProps = { deliveryId: string; employeeName: string; employeeCpf: string; employeeRegistration: string | null; deliveredAt: string; reason: string; items: SignatureItem[]; currentPath: string | null; onComplete: (path: string) => void };
@@ -44,8 +45,9 @@ export function DeliverySignatureModal({ deliveryId, employeeName, employeeCpf, 
     if (!accepted) { setError("Confirme que o colaborador leu e concorda com o termo."); return; }
     setSaving(true); setError("");
     const supabase = createClient();
-    const { data: profile, error: profileError } = await supabase.from("profiles").select("organization_id").single();
-    if (profileError) { setError(profileError.message); setSaving(false); return; }
+    const { data: auth, error: authError } = await supabase.auth.getUser();
+    const { data: profile, error: profileError } = auth.user ? await supabase.from("profiles").select("organization_id").eq("id", auth.user.id).maybeSingle() : { data: null, error: authError };
+    if (profileError || authError) { setError(friendlyError(profileError ?? authError, "Não foi possível identificar a organização.")); setSaving(false); return; }
     if (!profile?.organization_id) { setError("Não foi possível identificar a organização."); setSaving(false); return; }
     const canvas = canvasRef.current;
     if (!canvas) { setError("Não foi possível capturar a assinatura."); setSaving(false); return; }
@@ -58,7 +60,7 @@ export function DeliverySignatureModal({ deliveryId, employeeName, employeeCpf, 
     const signatureY = Math.max(y + 28, 247); const signatureWidth = 72; doc.setDrawColor(70, 82, 103); doc.line(margin, signatureY, margin + signatureWidth, signatureY); doc.line(width - margin - signatureWidth, signatureY, width - margin, signatureY); const signature = cropSignature(canvas); const signatureBoxWidth = signatureWidth - 8; const signatureBoxHeight = 16; const signatureScale = Math.min(signatureBoxWidth / signature.width, signatureBoxHeight / signature.height); const renderedWidth = signature.width * signatureScale; const renderedHeight = signature.height * signatureScale; doc.addImage(signature.dataUrl, "PNG", margin + (signatureWidth - renderedWidth) / 2, signatureY - renderedHeight - 2, renderedWidth, renderedHeight); doc.setFontSize(8); doc.setTextColor(90, 103, 123); doc.text("Assinatura eletrônica assistida", margin + signatureWidth / 2, signatureY + 5, { align: "center" }); doc.text("Responsável pela entrega", width - margin - signatureWidth / 2, signatureY + 5, { align: "center" }); doc.setFont("helvetica", "bold"); doc.text(employeeName, margin + signatureWidth / 2, signatureY + 10, { align: "center" }); doc.text("Controle de equipamentos", width - margin - signatureWidth / 2, signatureY + 10, { align: "center" });
     const blob = doc.output("blob"); const path = `${profile.organization_id}/${deliveryId}/signed-${crypto.randomUUID()}-${safeFileName(employeeName)}.pdf`; const { error: uploadError } = await supabase.storage.from("delivery-terms").upload(path, blob, { contentType: "application/pdf", upsert: false });
     if (uploadError) { setError(uploadError.message); setSaving(false); return; }
-    const { data: auth, error: authError } = await supabase.auth.getUser(); if (authError) { await supabase.storage.from("delivery-terms").remove([path]); setError(authError.message); setSaving(false); return; } const { error: updateError } = await supabase.from("deliveries").update({ term_file_path: path, term_uploaded_at: new Date().toISOString(), term_uploaded_by: auth.user?.id ?? null, term_signature_method: "assisted", term_signed_at: new Date().toISOString(), term_signer_name: employeeName, term_signer_cpf: digits(cpf) }).eq("id", deliveryId);
+    if (!auth.user) { await supabase.storage.from("delivery-terms").remove([path]); setError("Sua sessão expirou. Entre novamente."); setSaving(false); return; } const { error: updateError } = await supabase.from("deliveries").update({ term_file_path: path, term_uploaded_at: new Date().toISOString(), term_uploaded_by: auth.user.id, term_signature_method: "assisted", term_signed_at: new Date().toISOString(), term_signer_name: employeeName, term_signer_cpf: digits(cpf) }).eq("id", deliveryId);
     if (updateError) { await supabase.storage.from("delivery-terms").remove([path]); setError(updateError.message); setSaving(false); return; }
     const { error: previousAttachmentError } = currentPath ? await supabase.storage.from("delivery-terms").remove([currentPath]) : { error: null };
     onComplete(path); close(); setSaving(false); if (previousAttachmentError) setError(`Assinatura salva, mas o termo anterior não pôde ser removido: ${previousAttachmentError.message}`);
