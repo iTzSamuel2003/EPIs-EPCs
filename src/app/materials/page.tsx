@@ -4,6 +4,8 @@ import { FormEvent, useEffect, useMemo, useState } from "react";
 import { ArrowDownAZ, ArrowUpAZ, Boxes, Check, LoaderCircle, Pencil, Plus, Search, ShieldCheck, X } from "lucide-react";
 import { useSearchParams } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
+import { createClient } from "@/lib/supabase/client";
+import { friendlyError } from "@/lib/ui-feedback";
 import type { MaterialType } from "@/types/domain";
 
 type MaterialRow = {
@@ -71,7 +73,7 @@ export default function MaterialsPage() {
       supabase.from("materials").select("id,internal_code,name,type,unit,size,description,brand,manufacturer,model,ca_number,ca_expires_at,useful_life_months,replacement_interval_days,minimum_stock,location,notes,status").order("name"),
       supabase.from("material_lots").select("material_id,available_quantity"),
     ]);
-    if (materialsError || lotsError) setError((materialsError ?? lotsError)?.message ?? "Não foi possível carregar materiais.");
+    if (materialsError || lotsError) setError(friendlyError(materialsError ?? lotsError, "Não foi possível carregar materiais."));
     else {
       setMaterials((data ?? []) as MaterialRow[]);
       setStockByMaterial((lots ?? []).reduce<Record<string, number>>((total, lot) => {
@@ -112,10 +114,10 @@ export default function MaterialsPage() {
     setSaving(true);
     const supabase = createClient();
     const { data: auth, error: authError } = await supabase.auth.getUser();
-    if (authError) { setError(authError.message); setSaving(false); return; }
+    if (authError) { setError(friendlyError(authError, "Não foi possível concluir a operação.")); setSaving(false); return; }
     if (!auth.user) { setError("Sua sessão expirou. Entre novamente."); setSaving(false); return; }
     const { data: profile, error: profileError } = await supabase.from("profiles").select("organization_id").eq("id", auth.user.id).single();
-    if (profileError) { setError(profileError.message); setSaving(false); return; }
+    if (profileError) { setError(friendlyError(profileError, "Não foi possível concluir a operação.")); setSaving(false); return; }
     if (!profile?.organization_id) { setError("Não foi possível identificar a organização do usuário."); setSaving(false); return; }
     const payload = {
       internal_code: form.internal_code.trim() || null, name: form.name.trim(), type: form.type, unit: form.unit.trim() || "un.", size: form.size.trim() || null,
@@ -130,7 +132,7 @@ export default function MaterialsPage() {
     const { error: saveError } = editingId
       ? await supabase.from("materials").update(payload).eq("id", editingId)
       : await supabase.from("materials").insert({ ...payload, organization_id: profile.organization_id });
-    if (saveError) setError(saveError.code === "23505" ? "Já existe um material com este código interno." : saveError.message);
+    if (saveError) setError(saveError.code === "23505" ? "Já existe um material com este código interno." : friendlyError(saveError, "Não foi possível salvar as alterações."));
     else { setSuccess(editingId ? "Material atualizado com sucesso." : "Material cadastrado com sucesso."); setShowForm(false); await loadMaterials(); }
     setSaving(false);
   }

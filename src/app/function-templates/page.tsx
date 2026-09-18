@@ -3,6 +3,8 @@
 import { FormEvent, useEffect, useState } from "react";
 import { Boxes, Check, LoaderCircle, Pencil, Plus, ShieldCheck, Trash2, X } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
+import { createClient } from "@/lib/supabase/client";
+import { friendlyError } from "@/lib/ui-feedback";
 
 type ItemType = "EPI" | "EPC" | "FERRAMENTAL";
 type TemplateItem = { id?: string; material_id?: string | null; material_name: string; quantity: number; item_type: ItemType };
@@ -38,7 +40,7 @@ export default function FunctionTemplatesPage() {
       supabase.from("materials").select("id, name, type, unit").eq("status", "active").order("name"),
       supabase.from("contract_scenarios").select("id, code, name, source_annex, active").eq("active", true).order("name"),
     ]);
-    if (templateError || materialError || scenarioError) setError((templateError ?? materialError ?? scenarioError)?.message ?? "Não foi possível carregar as listas.");
+    if (templateError || materialError || scenarioError) setError(friendlyError(templateError ?? materialError ?? scenarioError, "Não foi possível carregar as listas."));
     else {
       const rows = (templateData ?? []) as unknown as Template[];
       setTemplates(rows);
@@ -83,10 +85,10 @@ export default function FunctionTemplatesPage() {
     setSaving(true);
     const supabase = createClient();
     const { data: auth, error: authError } = await supabase.auth.getUser();
-    if (authError) { setError(authError.message); setSaving(false); return; }
+    if (authError) { setError(friendlyError(authError, "Não foi possível concluir a operação.")); setSaving(false); return; }
     if (!auth.user) { setError("Sua sessão expirou. Entre novamente."); setSaving(false); return; }
     const { data: profile, error: profileError } = await supabase.from("profiles").select("organization_id").eq("id", auth.user.id).single();
-    if (profileError) { setError(profileError.message); setSaving(false); return; }
+    if (profileError) { setError(friendlyError(profileError, "Não foi possível concluir a operação.")); setSaving(false); return; }
     if (!profile?.organization_id) { setError("Não foi possível identificar a organização do usuário."); setSaving(false); return; }
     const materialByName = new Map(materials.map((material) => [material.name.trim().toLocaleLowerCase("pt-BR"), material.id]));
     const missingCatalogItems = atomicItems.filter((item) => !materialByName.has(item.material_name.toLocaleLowerCase("pt-BR"))).map((item) => ({
@@ -96,9 +98,9 @@ export default function FunctionTemplatesPage() {
     }));
     if (missingCatalogItems.length) {
       const { error: materialError } = await supabase.from("materials").insert(missingCatalogItems);
-      if (materialError) { setError(materialError.message); setSaving(false); return; }
+      if (materialError) { setError(friendlyError(materialError, "Não foi possível concluir a operação.")); setSaving(false); return; }
       const { data: refreshedMaterials, error: refreshError } = await supabase.from("materials").select("id,name,type,unit").eq("organization_id", profile.organization_id).eq("status", "active");
-      if (refreshError) { setError(refreshError.message); setSaving(false); return; }
+      if (refreshError) { setError(friendlyError(refreshError, "Não foi possível atualizar a lista.")); setSaving(false); return; }
       refreshedMaterials?.forEach((material) => materialByName.set(material.name.trim().toLocaleLowerCase("pt-BR"), material.id));
     }
     atomicItems = atomicItems.map((item) => ({ ...item, material_id: item.material_id ?? materialByName.get(item.material_name.toLocaleLowerCase("pt-BR")) ?? null }));
@@ -109,7 +111,7 @@ export default function FunctionTemplatesPage() {
       p_contract_scenario_id: scenarioId || null,
       p_items: atomicItems,
     });
-    if (saveError || !savedTemplateId) { setError(saveError?.message ?? "Não foi possível salvar a lista."); setSaving(false); return; }
+    if (saveError || !savedTemplateId) { setError(friendlyError(saveError, "Não foi possível salvar a lista.")); setSaving(false); return; }
     setSuccess(editingId ? "Lista por função atualizada." : "Nova função e sua lista foram cadastradas.");
     setShowForm(false); await load(savedTemplateId); setSaving(false);
     return;
@@ -131,12 +133,12 @@ export default function FunctionTemplatesPage() {
     let templateId = editingId;
     if (templateId) {
       const { error: updateError } = await supabase.from("function_templates").update({ name: name.trim(), source_document: sourceDocument.trim() || null, contract_scenario_id: scenarioId || null }).eq("id", templateId);
-      if (updateError) { setError(updateError.message); setSaving(false); return; }
+      if (updateError) { setError(friendlyError(updateError, "Não foi possível concluir a operação.")); setSaving(false); return; }
       const { error: deleteError } = await supabase.from("function_template_items").delete().eq("template_id", templateId);
-      if (deleteError) { setError(deleteError.message); setSaving(false); return; }
+      if (deleteError) { setError(friendlyError(deleteError, "Não foi possível concluir a operação.")); setSaving(false); return; }
     } else {
       const { data, error: insertError } = await supabase.from("function_templates").insert({ organization_id: profile.organization_id, name: name.trim(), source_document: sourceDocument.trim() || null, contract_scenario_id: scenarioId || null }).select("id").single();
-      if (insertError || !data) { setError(insertError?.message ?? "Não foi possível criar a função."); setSaving(false); return; }
+      if (insertError || !data) { setError(friendlyError(insertError, "Não foi possível criar a função.")); setSaving(false); return; }
       templateId = data.id;
     }
 
@@ -148,14 +150,14 @@ export default function FunctionTemplatesPage() {
     }));
     if (missingCatalogItems.length) {
       const { error: materialError } = await supabase.from("materials").insert(missingCatalogItems);
-      if (materialError) { setError(materialError.message); setSaving(false); return; }
+      if (materialError) { setError(friendlyError(materialError, "Não foi possível concluir a operação.")); setSaving(false); return; }
       const { data: refreshedMaterials } = await supabase.from("materials").select("id,name,type,unit").eq("organization_id", profile.organization_id).eq("status", "active");
       const byName = new Map((refreshedMaterials ?? []).map((material) => [material.name.trim().toLocaleLowerCase("pt-BR"), material.id]));
       validItems.forEach((item) => { if (!item.material_id) item.material_id = byName.get(item.material_name.toLocaleLowerCase("pt-BR")) ?? null; });
     }
 
     const { error: itemError } = await supabase.from("function_template_items").insert(validItems.map((item) => ({ ...item, organization_id: profile.organization_id, template_id: templateId })));
-    if (itemError) { setError(itemError.message); setSaving(false); return; }
+    if (itemError) { setError(friendlyError(itemError, "Não foi possível concluir a operação.")); setSaving(false); return; }
     setSuccess(editingId ? "Lista por função atualizada." : "Nova função e sua lista foram cadastradas.");
     setShowForm(false); await load(templateId ?? undefined); setSaving(false);
     */

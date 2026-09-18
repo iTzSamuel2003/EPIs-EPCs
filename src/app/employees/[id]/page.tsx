@@ -6,6 +6,8 @@ import Link from "next/link";
 import { useParams } from "next/navigation";
 import { jsPDF } from "jspdf";
 import { createClient } from "@/lib/supabase/client";
+import { createClient } from "@/lib/supabase/client";
+import { friendlyError } from "@/lib/ui-feedback";
 import { EmployeeNavigation } from "@/components/employee-navigation";
 import { DeliverySignatureModal } from "@/components/delivery-signature-modal";
 import { ReturnSignatureModal } from "@/components/return-signature-modal";
@@ -57,7 +59,7 @@ export default function EmployeeMaterialsPage() {
         supabase.from("employee_courses").select("id,name,provider,expires_at").eq("employee_id", id).order("expires_at", { ascending: true, nullsFirst: false }),
         supabase.from("returns").select("id,returned_at,reason,term_file_path,term_signature_method,term_signed_at,return_items(quantity,material:materials(name,unit),delivery_item:delivery_items(variant:material_variants(name,size)))").eq("employee_id", id).order("returned_at", { ascending: false }),
       ]);
-      if (employeeError || deliveryError || courseError || returnError) setError(employeeError?.message ?? deliveryError?.message ?? courseError?.message ?? returnError?.message ?? "Não foi possível carregar a ficha.");
+      if (employeeError || deliveryError || courseError || returnError) setError(friendlyError(employeeError ?? deliveryError ?? courseError ?? returnError, "Não foi possível carregar a ficha."));
       setEmployee(employeeData as Employee);
       setCourses((courseData ?? []) as Course[]);
       setReturnSheets(((returnData ?? []) as Array<Record<string, unknown>>).map((row) => ({ id: String(row.id), returned_at: String(row.returned_at), reason: String(row.reason), term_file_path: row.term_file_path as string | null, term_signature_method: row.term_signature_method as string | null, term_signed_at: row.term_signed_at as string | null, items: ((row.return_items ?? []) as Array<Record<string, unknown>>).map((item) => ({ quantity: Number(item.quantity), material: item.material as ReturnSheet["items"][number]["material"], variant: ((item.delivery_item as Record<string, unknown> | null)?.variant ?? null) as ReturnSheet["items"][number]["variant"] })) })));
@@ -102,14 +104,14 @@ export default function EmployeeMaterialsPage() {
     setUploadingId(sheet.id); setError("");
     const supabase = createClient();
     const { data: profileData, error: profileError } = await supabase.from("profiles").select("organization_id").single();
-    if (profileError || !profileData?.organization_id) { setError(profileError?.message ?? "Não foi possível identificar a organização."); setUploadingId(""); return; }
+    if (profileError || !profileData?.organization_id) { setError(friendlyError(profileError, "Não foi possível identificar a organização.")); setUploadingId(""); return; }
     const path = `${profileData.organization_id}/${sheet.id}/${crypto.randomUUID()}-${safeFileName(file.name)}`;
     const { error: uploadError } = await supabase.storage.from("delivery-terms").upload(path, file, { contentType: file.type, upsert: false });
-    if (uploadError) { setError(uploadError.message); setUploadingId(""); return; }
-    const { data: auth, error: authError } = await supabase.auth.getUser(); if (authError) { await supabase.storage.from("delivery-terms").remove([path]); setError(authError.message); setUploadingId(""); return; }
+    if (uploadError) { setError(friendlyError(uploadError, "Não foi possível enviar o arquivo.")); setUploadingId(""); return; }
+    const { data: auth, error: authError } = await supabase.auth.getUser(); if (authError) { await supabase.storage.from("delivery-terms").remove([path]); setError(friendlyError(authError, "Não foi possível concluir a operação.")); setUploadingId(""); return; }
     const uploadedAt = new Date().toISOString();
     const { error: updateError } = await supabase.from("deliveries").update({ term_file_path: path, term_uploaded_at: uploadedAt, term_uploaded_by: auth.user?.id ?? null }).eq("id", sheet.id);
-    if (updateError) { await supabase.storage.from("delivery-terms").remove([path]); setError(updateError.message); } else {
+    if (updateError) { await supabase.storage.from("delivery-terms").remove([path]); setError(friendlyError(updateError, "Não foi possível concluir a operação.")); } else {
       if (sheet.term_file_path) await supabase.storage.from("delivery-terms").remove([sheet.term_file_path]);
       setItems((current) => current.map((item) => item.delivery?.id === sheet.id ? { ...item, delivery: item.delivery ? { ...item.delivery, term_file_path: path, term_uploaded_at: uploadedAt } : item.delivery } : item));
     }
@@ -134,7 +136,7 @@ export default function EmployeeMaterialsPage() {
     if (!sheet.term_file_path) return;
     setError("");
     const { data, error: signedUrlError } = await createClient().storage.from("delivery-terms").createSignedUrl(sheet.term_file_path, 300);
-    if (signedUrlError || !data?.signedUrl) { setError(signedUrlError?.message ?? "Não foi possível abrir o termo assinado."); return; }
+    if (signedUrlError || !data?.signedUrl) { setError(friendlyError(signedUrlError, "Não foi possível abrir o termo assinado.")); return; }
     window.open(data.signedUrl, "_blank", "noopener,noreferrer");
   }
 
@@ -143,13 +145,13 @@ export default function EmployeeMaterialsPage() {
     if (!["application/pdf", "image/jpeg", "image/png", "image/webp"].includes(file.type)) { setError("Anexe um PDF, JPG, PNG ou WEBP."); return; }
     if (file.size > 10 * 1024 * 1024) { setError("O arquivo do termo deve ter no máximo 10 MB."); return; }
     setUploadingId(sheet.id); setError(""); const supabase = createClient(); const { data: profileData, error: profileError } = await supabase.from("profiles").select("organization_id").single();
-    if (profileError || !profileData?.organization_id) { setError(profileError?.message ?? "Não foi possível identificar a organização."); setUploadingId(""); return; }
+    if (profileError || !profileData?.organization_id) { setError(friendlyError(profileError, "Não foi possível identificar a organização.")); setUploadingId(""); return; }
     const path = `${profileData.organization_id}/${sheet.id}/${crypto.randomUUID()}-${safeFileName(file.name)}`;
     const { error: uploadError } = await supabase.storage.from("delivery-terms").upload(path, file, { contentType: file.type, upsert: false });
-    if (uploadError) { setError(uploadError.message); setUploadingId(""); return; }
-    const { data: auth, error: authError } = await supabase.auth.getUser(); if (authError || !auth.user) { await supabase.storage.from("delivery-terms").remove([path]); setError(authError?.message ?? "Sua sessão expirou. Entre novamente."); setUploadingId(""); return; }
+    if (uploadError) { setError(friendlyError(uploadError, "Não foi possível enviar o arquivo.")); setUploadingId(""); return; }
+    const { data: auth, error: authError } = await supabase.auth.getUser(); if (authError || !auth.user) { await supabase.storage.from("delivery-terms").remove([path]); setError(friendlyError(authError, "Sua sessão expirou. Entre novamente.")); setUploadingId(""); return; }
     const uploadedAt = new Date().toISOString(); const { error: updateError } = await supabase.from("returns").update({ term_file_path: path, term_uploaded_at: uploadedAt, term_uploaded_by: auth.user.id, term_signature_method: "physical_upload", term_signed_at: uploadedAt, term_signer_name: employee!.full_name, term_signer_cpf: employee!.cpf }).eq("id", sheet.id);
-    if (updateError) { await supabase.storage.from("delivery-terms").remove([path]); setError(updateError.message); setUploadingId(""); return; }
+    if (updateError) { await supabase.storage.from("delivery-terms").remove([path]); setError(friendlyError(updateError, "Não foi possível concluir a operação.")); setUploadingId(""); return; }
     if (sheet.term_file_path) await supabase.storage.from("delivery-terms").remove([sheet.term_file_path]);
     setReturnSheets((current) => current.map((item) => item.id === sheet.id ? { ...item, term_file_path: path, term_signature_method: "physical_upload", term_signed_at: uploadedAt } : item)); setUploadingId("");
   }
@@ -163,7 +165,7 @@ export default function EmployeeMaterialsPage() {
   }
 
   async function openSignedReturnTerm(sheet: ReturnSheet) {
-    if (!sheet.term_file_path) return; const { data, error: signedUrlError } = await createClient().storage.from("delivery-terms").createSignedUrl(sheet.term_file_path, 300); if (signedUrlError || !data?.signedUrl) { setError(signedUrlError?.message ?? "Não foi possível abrir o termo assinado."); return; } window.open(data.signedUrl, "_blank", "noopener,noreferrer");
+    if (!sheet.term_file_path) return; const { data, error: signedUrlError } = await createClient().storage.from("delivery-terms").createSignedUrl(sheet.term_file_path, 300); if (signedUrlError || !data?.signedUrl) { setError(friendlyError(signedUrlError, "Não foi possível abrir o termo assinado.")); return; } window.open(data.signedUrl, "_blank", "noopener,noreferrer");
   }
 
   if (loading) return <main className="module-shell"><div className="module-loading"><LoaderCircle className="spin" size={22} /> Carregando ficha...</div></main>;

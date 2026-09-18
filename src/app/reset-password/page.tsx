@@ -4,6 +4,8 @@ import { FormEvent, useEffect, useState } from "react";
 import { ArrowRight, ShieldCheck } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
+import { createClient } from "@/lib/supabase/client";
+import { friendlyError } from "@/lib/ui-feedback";
 
 export default function ResetPasswordPage() {
   const router = useRouter();
@@ -34,7 +36,7 @@ export default function ResetPasswordPage() {
     if (password !== confirmation) { setError("As senhas não coincidem."); return; }
     setLoading(true);
     const { error: updateError } = await createClient().auth.updateUser({ password });
-    if (updateError) setError(updateError.message);
+    if (updateError) setError(friendlyError(updateError, "Não foi possível concluir a operação."));
     else { setMessage("Senha atualizada com sucesso. Você já pode entrar no sistema."); setTimeout(() => router.push("/login"), 1400); }
     setLoading(false);
   }

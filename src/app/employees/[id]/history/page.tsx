@@ -6,6 +6,8 @@ import Link from "next/link";
 import { useParams } from "next/navigation";
 import { EmployeeNavigation } from "@/components/employee-navigation";
 import { createClient } from "@/lib/supabase/client";
+import { createClient } from "@/lib/supabase/client";
+import { friendlyError } from "@/lib/ui-feedback";
 
 type Employee = { id: string; full_name: string; registration: string | null; job_title: string | null; function_name: string | null; function_classification: string | null; department: string | null };
 type Delivery = { id: string; delivered_at: string; reason: string; notes: string | null; responsible_id: string };
@@ -40,13 +42,13 @@ export default function EmployeeHistoryPage() {
     async function load() {
       const supabase = createClient();
       const { data: employeeData, error: employeeError } = await supabase.from("employees").select("id,full_name,registration,job_title,function_name,function_classification,department").eq("id", id).maybeSingle();
-      if (employeeError || !employeeData) { setError(employeeError?.message ?? "Funcionário não encontrado."); setLoading(false); return; }
+      if (employeeError || !employeeData) { setError(friendlyError(employeeError, "Funcionário não encontrado.")); setLoading(false); return; }
       const [{ data: deliveries, error: deliveriesError }, { data: returns, error: returnsError }, { data: profileData }] = await Promise.all([
         supabase.from("deliveries").select("id,delivered_at,reason,notes,responsible_id").eq("employee_id", id).order("delivered_at", { ascending: false }),
         supabase.from("returns").select("id,returned_at,reason,notes,responsible_id").eq("employee_id", id).order("returned_at", { ascending: false }),
         supabase.from("profiles").select("id,full_name"),
       ]);
-      if (deliveriesError || returnsError) { setError(deliveriesError?.message ?? returnsError?.message ?? "Não foi possível carregar o histórico."); setLoading(false); return; }
+      if (deliveriesError || returnsError) { setError(friendlyError(deliveriesError ?? returnsError, "Não foi possível carregar o histórico.")); setLoading(false); return; }
       const deliveryRows = (deliveries ?? []) as Delivery[];
       const returnRows = (returns ?? []) as ReturnRecord[];
       const deliveryIds = deliveryRows.map((item) => item.id);
@@ -56,7 +58,7 @@ export default function EmployeeHistoryPage() {
         returnIds.length ? supabase.from("return_items").select("return_id,delivery_item_id,quantity,equipment_condition,destination").in("return_id", returnIds) : Promise.resolve({ data: [], error: null }),
         returnIds.length ? supabase.from("return_accountability").select("return_id,incident_type,incident_description,employee_signature_name,deduction_requested,deduction_amount").in("return_id", returnIds) : Promise.resolve({ data: [], error: null }),
       ]);
-      if (itemError || returnItemError) { setError(itemError?.message ?? returnItemError?.message ?? "Não foi possível carregar os itens do histórico."); setLoading(false); return; }
+      if (itemError || returnItemError) { setError(friendlyError(itemError ?? returnItemError, "Não foi possível carregar os itens do histórico.")); setLoading(false); return; }
       const itemRows = (deliveryItems ?? []) as unknown as DeliveryItem[];
       const returnItemRows = (returnItems ?? []) as ReturnItem[];
       const deliveryById = new Map(deliveryRows.map((item) => [item.id, item]));
