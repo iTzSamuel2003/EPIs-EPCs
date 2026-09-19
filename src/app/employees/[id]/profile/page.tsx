@@ -28,13 +28,57 @@ export default function EmployeeProfilePage() {
   useEffect(() => { void load(); }, [load]);
   function update(field: keyof Profile, value: string | boolean) { setProfile((current) => ({ ...current, [field]: value })); }
   async function saveProfile(event: FormEvent) {
-    event.preventDefault(); setSaving(true); setError(""); setSuccess(""); const supabase = createClient(); const { data: auth, error: authError } = await supabase.auth.getUser(); if (authError) { setError(friendlyError(authError, "Não foi possível concluir a operação.")); setSaving(false); return; } if (!auth.user) { setError("Sua sessão expirou. Entre novamente."); setSaving(false); return; } const { data: userProfile, error: profileError } = await supabase.from("profiles").select("organization_id").eq("id", auth.user.id).single(); if (profileError || !userProfile?.organization_id) { setError(friendlyError(profileError, "Não foi possível identificar a organização.")); setSaving(false); return; } const { error: saveError } = await supabase.from("employee_profiles").upsert({ employee_id: id, organization_id: userProfile.organization_id, ...profile, updated_at: new Date().toISOString() }); if (saveError) setError(friendlyError(saveError, "Não foi possível concluir a operação.")); else setSuccess("Medidas atualizadas com sucesso."); setSaving(false);
+    event.preventDefault();
+    if (saving) return;
+    setSaving(true); setError(""); setSuccess("");
+    try {
+      const supabase = createClient();
+      const { data: auth, error: authError } = await supabase.auth.getUser();
+      if (authError || !auth.user) throw authError ?? new Error("Sua sessão expirou. Entre novamente.");
+      const { data: userProfile, error: profileError } = await supabase.from("profiles").select("organization_id").eq("id", auth.user.id).single();
+      if (profileError) throw profileError;
+      if (!userProfile?.organization_id) throw new Error("Não foi possível identificar a organização.");
+      const { error: saveError } = await supabase.from("employee_profiles").upsert({ employee_id: id, organization_id: userProfile.organization_id, ...profile, updated_at: new Date().toISOString() });
+      if (saveError) throw saveError;
+      setSuccess("Medidas atualizadas com sucesso.");
+    } catch (caught) {
+      setError(friendlyError(caught, "Não foi possível concluir a operação."));
+    } finally {
+      setSaving(false);
+    }
   }
   async function createRequest() {
-    setSharing(true); setError(""); setSuccess(""); const supabase = createClient(); const { data: auth } = await supabase.auth.getUser(); const { data: userProfile, error: profileError } = await supabase.from("profiles").select("organization_id").eq("id", auth.user?.id ?? "").single(); if (profileError || !userProfile?.organization_id) { setError(friendlyError(profileError, "N\u00e3o foi poss\u00edvel identificar a organiza&ccedil;&atilde;o.")); setSharing(false); return; }
-    const { data, error: requestError } = await supabase.from("employee_measurement_requests").upsert({ employee_id: id, organization_id: userProfile.organization_id, token: crypto.randomUUID(), expires_at: new Date(Date.now() + 30 * 86400000).toISOString(), completed_at: null, updated_at: new Date().toISOString() }, { onConflict: "employee_id" }).select("token,expires_at,completed_at").single(); if (requestError) setError(friendlyError(requestError, "Não foi possível gerar o link de preenchimento.")); else { setRequest(data as MeasurementRequest); setSuccess("Link de preenchimento criado. Escolha abaixo como compartilhar."); } setSharing(false);
+    if (sharing) return;
+    setSharing(true); setError(""); setSuccess("");
+    try {
+      const supabase = createClient();
+      const { data: auth, error: authError } = await supabase.auth.getUser();
+      if (authError || !auth.user) throw authError ?? new Error("Sua sessão expirou. Entre novamente.");
+      const { data: userProfile, error: profileError } = await supabase.from("profiles").select("organization_id").eq("id", auth.user.id).single();
+      if (profileError) throw profileError;
+      if (!userProfile?.organization_id) throw new Error("Não foi possível identificar a organização.");
+      const { data, error: requestError } = await supabase.from("employee_measurement_requests").upsert({ employee_id: id, organization_id: userProfile.organization_id, token: crypto.randomUUID(), expires_at: new Date(Date.now() + 30 * 86400000).toISOString(), completed_at: null, updated_at: new Date().toISOString() }, { onConflict: "employee_id" }).select("token,expires_at,completed_at").single();
+      if (requestError) throw requestError;
+      setRequest(data as MeasurementRequest); setConfirmingRevoke(false); setSuccess("Link de preenchimento criado. Escolha abaixo como compartilhar.");
+    } catch (caught) {
+      setError(friendlyError(caught, "Não foi possível gerar o link de preenchimento."));
+    } finally {
+      setSharing(false);
+    }
   }
-  async function revokeRequest() { setSharing(true); const { error: revokeError } = await createClient().from("employee_measurement_requests").delete().eq("employee_id", id); if (revokeError) setError(friendlyError(revokeError, "Não foi possível revogar o link.")); else { setRequest(null); setConfirmingRevoke(false); setSuccess("Link revogado. Gere um novo link quando necessário."); } setSharing(false); }
+  async function revokeRequest() {
+    if (sharing) return;
+    setSharing(true); setError("");
+    try {
+      const { error: revokeError } = await createClient().from("employee_measurement_requests").delete().eq("employee_id", id);
+      if (revokeError) throw revokeError;
+      setRequest(null); setConfirmingRevoke(false); setSuccess("Link revogado. Gere um novo link quando necessario.");
+    } catch (caught) {
+      setError(friendlyError(caught, "Não foi possível revogar o link."));
+    } finally {
+      setSharing(false);
+    }
+  }
   async function copyLink() { if (!shareLink) return; try { await navigator.clipboard.writeText(shareLink); setSuccess("Link copiado para a área de transferência."); } catch { setError("N\u00e3o foi poss\u00edvel copiar o link. Copie-o manualmente no campo abaixo."); } }
   const publicBaseUrl = (process.env.NEXT_PUBLIC_APP_URL ?? "https://epis-epcs.vercel.app").replace(/\/$/, ""); const shareLink = !request ? "" : `${publicBaseUrl}/medidas/${request.token}`; const shareMessage = `Olá, ${name}! Preencha suas medidas de uniforme e equipamentos neste link: ${shareLink}`;
   if (loading) return <main className="module-shell"><div className="module-loading">Carregando perfil...</div></main>;

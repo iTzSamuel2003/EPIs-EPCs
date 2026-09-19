@@ -52,22 +52,37 @@ export default function RequestsPage() {
   function closeConfirmation() { if (!savingId) setConfirming(null); }
 
   async function updateRequest(item: RequestRow, status: string, note: string) {
-    setSavingId(item.id); setError(""); setSuccess("");
+    if (savingId) return;
     const deliveredAt = deliveredAtDraft || localDateValue();
-    const { error: updateError } = await createClient().from("employee_portal_requests").update({ status, review_notes: note.trim() || null, delivered_at: status === "completed" ? deliveredAt : null }).eq("id", item.id);
-    if (updateError) setError(friendlyError(updateError, "Não foi possível atualizar a solicitação.")); else {
+    if (status === "completed" && (!/^\d{4}-\d{2}-\d{2}$/.test(deliveredAt) || Number.isNaN(new Date(`${deliveredAt}T00:00:00`).getTime()))) {
+      setError("Informe uma data de entrega válida.");
+      return;
+    }
+    setSavingId(item.id); setError(""); setSuccess("");
+    try {
+      const { error: updateError } = await createClient().from("employee_portal_requests").update({ status, review_notes: note.trim() || null, delivered_at: status === "completed" ? deliveredAt : null }).eq("id", item.id);
+      if (updateError) throw updateError;
       setRequests((current) => current.map((currentItem) => currentItem.id === item.id ? { ...currentItem, status, review_notes: note.trim() || null, delivered_at: status === "completed" ? deliveredAt : null, updated_at: new Date().toISOString() } : currentItem));
       setSuccess("Solicitação atualizada."); setConfirming(null);
+    } catch (caught) {
+      setError(friendlyError(caught, "Não foi possível atualizar a solicitação."));
+    } finally {
+      setSavingId("");
     }
-    setSavingId("");
   }
 
   async function openAttachment(item: RequestRow) {
-    if (!item.attachment_path) return;
+    if (!item.attachment_path || openingId) return;
     setOpeningId(item.id); setError("");
-    const { data, error: signedUrlError } = await createClient().storage.from("employee-request-attachments").createSignedUrl(item.attachment_path, 300);
-    if (signedUrlError || !data?.signedUrl) setError(friendlyError(signedUrlError, "Não foi possível abrir o anexo.")); else window.open(data.signedUrl, "_blank", "noopener,noreferrer");
-    setOpeningId("");
+    try {
+      const { data, error: signedUrlError } = await createClient().storage.from("employee-request-attachments").createSignedUrl(item.attachment_path, 300);
+      if (signedUrlError || !data?.signedUrl) throw signedUrlError ?? new Error("Não foi possível abrir o anexo.");
+      window.open(data.signedUrl, "_blank", "noopener,noreferrer");
+    } catch (caught) {
+      setError(friendlyError(caught, "Não foi possível abrir o anexo."));
+    } finally {
+      setOpeningId("");
+    }
   }
 
   return <main className="module-shell">
