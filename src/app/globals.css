@@ -206,29 +206,40 @@ button:focus-visible,a:focus-visible,input:focus-visible,select:focus-visible,te
   main.module-shell:has(.type-badge) .module-table-card td:nth-child(7)::before{content:"Ações"}
   main.module-shell:has(.type-badge) .module-table-card td:nth-child(7) .action-button{width:max-content}
 }
+@media (max-width:1024px) and (min-width:601px){
+  main.module-shell:has(.module-toolbar) .module-table-card :is(table[aria-label="Lotes próximos do vencimento"],table[aria-label="Movimentações do estoque"],table[aria-label="Estoque de materiais"]){table-layout:fixed}
+  main.module-shell:has(.module-toolbar) .module-table-card :is(table[aria-label="Lotes próximos do vencimento"],table[aria-label="Movimentações do estoque"],table[aria-label="Estoque de materiais"]) th,
+  main.module-shell:has(.module-toolbar) .module-table-card :is(table[aria-label="Lotes próximos do vencimento"],table[aria-label="Movimentações do estoque"],table[aria-label="Estoque de materiais"]) td{min-width:0;max-width:none;white-space:normal;overflow-wrap:anywhere}
+}
 @media (max-width:600px){
-  main.module-shell:has(.module-toolbar option[value="stock"]) .module-table-card table:has(>thead>tr>th:nth-child(4)):not(:has(>thead>tr>th:nth-child(5))){display:block;min-width:0;width:100%;white-space:normal}
-  main.module-shell:has(.module-toolbar option[value="stock"]) .module-table-card table:has(>thead>tr>th:nth-child(4)):not(:has(>thead>tr>th:nth-child(5))) thead{display:none}
-  main.module-shell:has(.module-toolbar option[value="stock"]) .module-table-card table:has(>thead>tr>th:nth-child(4)):not(:has(>thead>tr>th:nth-child(5))) tbody{display:grid;gap:10px}
-  main.module-shell:has(.module-toolbar option[value="stock"]) .module-table-card table:has(>thead>tr>th:nth-child(4)):not(:has(>thead>tr>th:nth-child(5))) tr{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:8px 12px;padding:12px;border:1px solid #edf0f5;border-radius:10px;background:#fafbfe}
-  main.module-shell:has(.module-toolbar option[value="stock"]) .module-table-card table:has(>thead>tr>th:nth-child(4)):not(:has(>thead>tr>th:nth-child(5))) td{display:grid;gap:4px;min-width:0;padding:0;border:0;overflow-wrap:anywhere}
-  main.module-shell:has(.module-toolbar option[value="stock"]) .module-table-card table:has(>thead>tr>th:nth-child(4)):not(:has(>thead>tr>th:nth-child(5))) td::before{color:#a1aaba;font-size:9px;font-weight:700;letter-spacing:.5px}
-  main.module-shell:has(.module-toolbar option[value="stock"]) .module-table-card table:has(>thead>tr>th:nth-child(4)):not(:has(>thead>tr>th:nth-child(5))) td:nth-child(1)::before{content:"Material"}
-  main.module-shell:has(.module-toolbar option[value="stock"]) .module-table-card table:has(>thead>tr>th:nth-child(4)):not(:has(>thead>tr>th:nth-child(5))) td:nth-child(2)::before{content:"Lote"}
-  main.module-shell:has(.module-toolbar option[value="stock"]) .module-table-card table:has(>thead>tr>th:nth-child(4)):not(:has(>thead>tr>th:nth-child(5))) td:nth-child(3)::before{content:"Saldo"}
-  main.module-shell:has(.module-toolbar option[value="stock"]) .module-table-card table:has(>thead>tr>th:nth-child(4)):not(:has(>thead>tr>th:nth-child(5))) td:nth-child(4)::before{content:"Validade"}
-  main.module-shell:has(.module-toolbar option[value="stock"]) .module-table-card table:has(>thead>tr>th:nth-child(6)):not(:has(>thead>tr>th:nth-child(7))){display:block;min-width:0;width:100%;white-space:normal}
-  main.module-shell:has(.module-toolbar option[value="stock"]) .module-table-card table:has(>thead>tr>th:nth-child(6)):not(:has(>thead>tr>th:nth-child(7))) thead{display:none}
-  main.module-shell:has(.module-toolbar option[value="stock"]) .module-table-card table:has(>thead>tr>th:nth-child(6)):not(:has(>thead>tr>th:nth-child(7))) tbody{display:grid;gap:10px}
-  main.module-shell:has(.module-toolbar option[value="stock"]) .module-table-card table:has(>thead>tr>th:nth-child(6)):not(:has(>thead>tr>th:nth-child(7))) tr{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:8px 12px;padding:12px;border:1px solid #edf0f5;border-radius:10px;background:#fafbfe}
-  main.module-shell:has(.module-toolbar option[value="stock"]) .module-table-card table:has(>thead>tr>th:nth-child(6)):not(:has(>thead>tr>th:nth-child(7))) td{display:grid;gap:4px;min-width:0;padding:0;border:0;overflow-wrap:anywhere}
-  main.module-shell:has(.module-toolbar option[value="stock"]) .module-table-card table:has(>thead>tr>th:nth-child(6)):not(:has(>thead>tr>th:nth-child(7))) td::before{color:#a1aaba;font-size:9px;font-weight:700;letter-spacing:.5px}
-  main.module-shell:has(.module-toolbar option[value="stock"]) .module-table-card table:has(>thead>tr>th:nth-child(6)):not(:has(>thead>tr>th:nth-child(7))) td:nth-child(1)::before{content:"Código"}
-  main.module-shell:has(.module-toolbar option[value="stock"]) .module-table-card table:has(>thead>tr>th:nth-child(6)):not(:has(>thead>tr>th:nth-child(7))) td:nth-child(2)::before{content:"Material"}
-  main.module-shell:has(.module-toolbar option[value="stock"]) .module-table-card table:has(>thead>tr>th:nth-child(6)):not(:has(>thead>tr>th:nth-child(7))) td:nth-child(3)::before{content:"Tipo"}
-  main.module-shell:has(.module-toolbar option[value="stock"]) .module-table-card table:has(>thead>tr>th:nth-child(6)):not(:has(>thead>tr>th:nth-child(7))) td:nth-child(4)::before{content:"Estoque"}
-  main.module-shell:has(.module-toolbar option[value="stock"]) .module-table-card table:has(>thead>tr>th:nth-child(6)):not(:has(>thead>tr>th:nth-child(7))) td:nth-child(5)::before{content:"Mínimo"}
-  main.module-shell:has(.module-toolbar option[value="stock"]) .module-table-card table:has(>thead>tr>th:nth-child(6)):not(:has(>thead>tr>th:nth-child(7))) td:nth-child(6)::before{content:"Situação"}
+  main.module-shell:has(.module-toolbar) .module-table-card .table-wrap:has(:is(table[aria-label="Lotes próximos do vencimento"],table[aria-label="Movimentações do estoque"],table[aria-label="Estoque de materiais"])){overflow:visible;margin-right:0;padding-bottom:0}
+  main.module-shell:has(.module-toolbar) .module-table-card .table-wrap:has(:is(table[aria-label="Lotes próximos do vencimento"],table[aria-label="Movimentações do estoque"],table[aria-label="Estoque de materiais"]))::after{display:none}
+  main.module-shell:has(.module-toolbar) .module-table-card :is(table[aria-label="Lotes próximos do vencimento"],table[aria-label="Movimentações do estoque"],table[aria-label="Estoque de materiais"]){display:block!important;min-width:0!important;width:100%;white-space:normal}
+  main.module-shell:has(.module-toolbar) .module-table-card :is(table[aria-label="Lotes próximos do vencimento"],table[aria-label="Movimentações do estoque"],table[aria-label="Estoque de materiais"]) thead{display:none}
+  main.module-shell:has(.module-toolbar) .module-table-card :is(table[aria-label="Lotes próximos do vencimento"],table[aria-label="Movimentações do estoque"],table[aria-label="Estoque de materiais"]) tbody{display:grid;gap:10px}
+  main.module-shell:has(.module-toolbar) .module-table-card :is(table[aria-label="Lotes próximos do vencimento"],table[aria-label="Movimentações do estoque"],table[aria-label="Estoque de materiais"]) tr{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:8px 12px;padding:12px;border:1px solid #edf0f5;border-radius:10px;background:#fafbfe}
+  main.module-shell:has(.module-toolbar) .module-table-card :is(table[aria-label="Lotes próximos do vencimento"],table[aria-label="Movimentações do estoque"],table[aria-label="Estoque de materiais"]) td{display:grid;gap:4px;min-width:0!important;max-width:none;padding:0;border:0;overflow-wrap:anywhere;white-space:normal}
+  main.module-shell:has(.module-toolbar) .module-table-card :is(table[aria-label="Lotes próximos do vencimento"],table[aria-label="Movimentações do estoque"],table[aria-label="Estoque de materiais"]) td::before{color:#a1aaba;font-size:9px;font-weight:700;letter-spacing:.5px}
+  main.module-shell:has(.module-toolbar) .module-table-card table[aria-label="Lotes próximos do vencimento"] td:nth-child(1),
+  main.module-shell:has(.module-toolbar) .module-table-card table[aria-label="Lotes próximos do vencimento"] td:nth-child(4),
+  main.module-shell:has(.module-toolbar) .module-table-card table[aria-label="Movimentações do estoque"] td:nth-child(1),
+  main.module-shell:has(.module-toolbar) .module-table-card table[aria-label="Movimentações do estoque"] td:nth-child(2),
+  main.module-shell:has(.module-toolbar) .module-table-card table[aria-label="Estoque de materiais"] td:nth-child(1),
+  main.module-shell:has(.module-toolbar) .module-table-card table[aria-label="Estoque de materiais"] td:nth-child(6){grid-column:1 / -1}
+  main.module-shell:has(.module-toolbar) .module-table-card table[aria-label="Lotes próximos do vencimento"] td:nth-child(1)::before{content:"Material"}
+  main.module-shell:has(.module-toolbar) .module-table-card table[aria-label="Lotes próximos do vencimento"] td:nth-child(2)::before{content:"Lote"}
+  main.module-shell:has(.module-toolbar) .module-table-card table[aria-label="Lotes próximos do vencimento"] td:nth-child(3)::before{content:"Saldo"}
+  main.module-shell:has(.module-toolbar) .module-table-card table[aria-label="Lotes próximos do vencimento"] td:nth-child(4)::before{content:"Validade"}
+  main.module-shell:has(.module-toolbar) .module-table-card table[aria-label="Movimentações do estoque"] td:nth-child(1)::before{content:"Data"}
+  main.module-shell:has(.module-toolbar) .module-table-card table[aria-label="Movimentações do estoque"] td:nth-child(2)::before{content:"Material"}
+  main.module-shell:has(.module-toolbar) .module-table-card table[aria-label="Movimentações do estoque"] td:nth-child(3)::before{content:"Tipo"}
+  main.module-shell:has(.module-toolbar) .module-table-card table[aria-label="Movimentações do estoque"] td:nth-child(4)::before{content:"Quantidade"}
+  main.module-shell:has(.module-toolbar) .module-table-card table[aria-label="Estoque de materiais"] td:nth-child(1)::before{content:"Código"}
+  main.module-shell:has(.module-toolbar) .module-table-card table[aria-label="Estoque de materiais"] td:nth-child(2)::before{content:"Material"}
+  main.module-shell:has(.module-toolbar) .module-table-card table[aria-label="Estoque de materiais"] td:nth-child(3)::before{content:"Tipo"}
+  main.module-shell:has(.module-toolbar) .module-table-card table[aria-label="Estoque de materiais"] td:nth-child(4)::before{content:"Estoque"}
+  main.module-shell:has(.module-toolbar) .module-table-card table[aria-label="Estoque de materiais"] td:nth-child(5)::before{content:"Mínimo"}
+  main.module-shell:has(.module-toolbar) .module-table-card table[aria-label="Estoque de materiais"] td:nth-child(6)::before{content:"Situação"}
 }
 .employee-term-menu-panel{min-width:220px}.employee-term-menu-panel .action-button{min-height:36px}.employee-delivery-sheets .table-wrap,.employee-return-sheets .table-wrap{overflow:visible}@media(max-width:760px){.employee-term-menu-panel{right:auto;left:0;max-width:calc(100vw - 48px)}}
 .employee-delivery-sheets td:last-child,.employee-return-sheets td:last-child{display:flex;align-items:center;gap:8px;flex-wrap:wrap}.employee-delivery-sheets td:last-child .employee-term-menu,.employee-return-sheets td:last-child .employee-term-menu{flex:0 0 auto}.employee-term-material{line-height:1.45}

@@ -27,17 +27,19 @@ export default function EntriesPage() {
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
   const [success, setSuccess] = useState("");
+  const [canRetryMaterials, setCanRetryMaterials] = useState(false);
   const [entriesRefreshKey, setEntriesRefreshKey] = useState(0);
 
   async function loadMaterials() {
     setLoading(true);
     setError("");
+    setCanRetryMaterials(false);
     const supabase = createClient();
     const [{ data, error: loadError }, { data: variantData, error: variantError }] = await Promise.all([
       supabase.from("materials").select("id, name, internal_code, unit, test_required").eq("status", "active").order("name"),
       supabase.from("material_variants").select("id, material_id, name, size, active").eq("active", true).order("size"),
     ]);
-    if (loadError || variantError) setError(friendlyError(loadError ?? variantError, "Não foi possível carregar os materiais."));
+    if (loadError || variantError) { setError(friendlyError(loadError ?? variantError, "Não foi possível carregar os materiais.")); setCanRetryMaterials(true); }
     else { setMaterials((data ?? []) as MaterialOption[]); setVariants((variantData ?? []) as MaterialVariant[]); }
     setLoading(false);
   }
@@ -72,17 +74,18 @@ export default function EntriesPage() {
   }
 
   async function submit(event: FormEvent) {
-    event.preventDefault(); setError(""); setSuccess("");
+    event.preventDefault(); setError(""); setSuccess(""); setCanRetryMaterials(false);
     const hasInvalidItem = items.some((item) => {
       const material = materials.find((candidate) => candidate.id === item.material_id);
       const quantity = Number(item.quantity);
       const unitCost = Number(item.unit_cost);
       const invalidTestDates = Boolean(material?.test_required && (!item.test_performed_at || !item.test_expires_at || item.test_expires_at < item.test_performed_at));
-      return !item.material_id || !Number.isFinite(quantity) || quantity <= 0 || !Number.isFinite(unitCost) || unitCost < 0
+      const invalidMaterialDates = Boolean(!material?.test_required && item.manufactured_at && item.expires_at && item.expires_at < item.manufactured_at);
+      return !item.material_id || !Number.isInteger(quantity) || quantity <= 0 || !item.unit_cost.trim() || !Number.isFinite(unitCost) || unitCost < 0
         || (variantsFor(item.material_id).length > 0 && !item.variant_id)
-        || invalidTestDates;
+        || invalidTestDates || invalidMaterialDates;
     });
-    if (hasInvalidItem) { setError("Preencha material, tamanho e quantidade. Para materiais ensaiáveis, informe também a data e a validade do ensaio."); return; }
+    if (hasInvalidItem) { setError("Preencha material, tamanho, quantidade inteira e custo. Confira também se as datas e a validade do ensaio estão corretas."); return; }
     setSaving(true); const supabase = createClient(); let uploadedPath = "";
     if (invoiceFile) {
       const { data: auth, error: authError } = await supabase.auth.getUser();
@@ -99,15 +102,15 @@ if (uploadError) { setError(friendlyError(uploadError, "Não foi possível anexa
       if (uploadedPath) await supabase.storage.from("invoice-attachments").remove([uploadedPath]);
       setError(friendlyError(entryError, "Não foi possível concluir a operação."));
     } else {
-      setSuccess(invoiceNumber.trim() ? (items.length > 1 ? "Nota fiscal e itens registrados com sucesso." : "Entrada registrada e nota fiscal anexada com sucesso.") : "Entrada registrada sem nota fiscal. O lançamento foi marcado para identificação posterior.");
-      window.dispatchEvent(new Event("stock-entry-created")); setEntriesRefreshKey((value) => value + 1); setItems([newItem()]); setMaterialSuggestionsOpen(null); setInvoiceNumber(""); setEntryDate(new Date().toISOString().slice(0, 10)); setInvoiceFile(null); setNotes("");
+      setSuccess(invoiceFile ? (items.length > 1 ? "Nota fiscal e itens registrados com sucesso." : "Entrada registrada e nota fiscal anexada com sucesso.") : invoiceNumber.trim() ? "Entrada registrada com a nota fiscal informada." : "Entrada registrada sem nota fiscal. O lançamento foi marcado para identificação posterior.");
+      window.dispatchEvent(new Event("stock-entry-created")); setEntriesRefreshKey((value) => value + 1); setItems([newItem()]); setMaterialSuggestionsOpen(null); setInvoiceNumber(""); setEntryDate(localDateValue()); setInvoiceFile(null); setNotes("");
     }
     setSaving(false);
   }
 
   return <main className="module-shell">
     <header className="module-header"><div><p className="eyebrow">MOVIMENTAÇÃO DE ESTOQUE</p><h1>Entrada de materiais</h1><p className="module-subtitle">Registre vários produtos da mesma nota fiscal em uma única operação.</p></div><Link className="secondary-button" href="/stock"><ArrowLeft size={16} /> Ver estoque</Link></header>
-    {success && <FeedbackMessage kind="success">{success}</FeedbackMessage>}{error && <FeedbackMessage onRetry={() => void loadMaterials()}>{error}</FeedbackMessage>}
+    {success && <FeedbackMessage kind="success">{success}</FeedbackMessage>}{error && <FeedbackMessage onRetry={canRetryMaterials ? () => void loadMaterials() : undefined}>{error}</FeedbackMessage>}
     <section className="panel entry-card"><div className="entry-intro"><div className="entry-icon"><ClipboardList size={22} /></div><div><h2>Nota fiscal e itens recebidos</h2><p>Informe a nota uma vez e adicione todos os produtos e lotes relacionados.</p></div></div>
       <form className="material-form" onSubmit={submit} aria-busy={loading || saving}>
         <div className="form-grid two"><label>Número da nota fiscal (opcional)<input value={invoiceNumber} onChange={(event) => setInvoiceNumber(event.target.value)} placeholder="Deixe em branco se não houver" /></label><label>Data da entrada<input type="date" value={entryDate} onChange={(event) => setEntryDate(event.target.value)} required /></label></div>
@@ -120,7 +123,7 @@ if (uploadError) { setError(friendlyError(uploadError, "Não foi possível anexa
           {selectedMaterial?.test_required ? <><label>Data do ensaio<input type="date" value={item.test_performed_at} onChange={(event) => updateItem(index, "test_performed_at", event.target.value)} required /></label><label>Validade do ensaio<input type="date" value={item.test_expires_at} onChange={(event) => updateItem(index, "test_expires_at", event.target.value)} required /></label></> : <><label>Fabricação<input type="date" value={item.manufactured_at} onChange={(event) => updateItem(index, "manufactured_at", event.target.value)} /></label><label>Validade<input type="date" value={item.expires_at} onChange={(event) => updateItem(index, "expires_at", event.target.value)} /></label></>}{items.length > 1 && <button type="button" className="remove-item" aria-label={`Remover produto ${index + 1}`} onClick={() => setItems((current) => current.filter((_, itemIndex) => itemIndex !== index))}><Trash2 size={17} /></button>}
         </div>; })}</div>
         <label>Observações da nota<textarea value={notes} onChange={(event) => setNotes(event.target.value)} placeholder="Fornecedor, conferência ou outras observações" rows={3} /></label>
-        <div className="modal-actions"><button type="reset" className="secondary-button" onClick={() => { setItems([newItem()]); setMaterialSuggestionsOpen(null); setInvoiceNumber(""); setInvoiceFile(null); setNotes(""); setError(""); }}>Limpar</button><button className="primary-button" disabled={saving || loading || !materials.length}>{saving ? "Registrando..." : "Registrar entrada"}<Plus size={16} /></button></div>
+        <div className="modal-actions"><button type="reset" className="secondary-button" onClick={() => { setItems([newItem()]); setMaterialSuggestionsOpen(null); setInvoiceNumber(""); setEntryDate(localDateValue()); setInvoiceFile(null); setNotes(""); setError(""); setSuccess(""); setCanRetryMaterials(false); }}>Limpar</button><button className="primary-button" disabled={saving || loading || !materials.length}>{saving ? "Registrando..." : "Registrar entrada"}<Plus size={16} /></button></div>
       </form>
     </section>
     <RecentStockEntries refreshKey={entriesRefreshKey} />
