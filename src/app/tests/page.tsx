@@ -106,7 +106,7 @@ export default function TestsPage() {
     const state = getOverviewState(overview);
     const days = daysUntil(test?.next_due_at ?? null);
     const text = `${overview.material.name} ${overview.material.internal_code} ${test?.certificate_number ?? ""} ${test?.art_number ?? ""}`.toLowerCase();
-    const matchesQuery = text.includes(query.toLowerCase());
+    const matchesQuery = text.includes(query.trim().toLowerCase());
     const matchesFilter = filter === "all"
       || (filter === "pending" && (!test || test.result === "pending"))
       || (filter === "overdue" && state.label === "Vencido")
