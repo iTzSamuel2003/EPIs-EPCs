@@ -1,6 +1,6 @@
 "use client";
 
-import { ChangeEvent, FormEvent, useEffect, useState } from "react";
+import { ChangeEvent, FormEvent, useEffect, useRef, useState } from "react";
 import { ArrowLeft, Check, ClipboardCheck, Plus, Trash2 } from "lucide-react";
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/client";
@@ -25,31 +25,102 @@ const reasons = [["admission", "Admissão"], ["periodic_change", "Troca periódi
 export default function DeliveriesPage() {
   const [variants, setVariants] = useState<MaterialVariant[]>([]); const [variantAvailable, setVariantAvailable] = useState<Record<string, number>>({});
   const [employees, setEmployees] = useState<Employee[]>([]); const [materials, setMaterials] = useState<Material[]>([]); const [templates, setTemplates] = useState<FunctionTemplate[]>([]); const [employeeId, setEmployeeId] = useState(""); const [employeeFunction, setEmployeeFunction] = useState(""); const [employeeQuery, setEmployeeQuery] = useState(""); const [employeeSuggestionsOpen, setEmployeeSuggestionsOpen] = useState(false); const [materialSuggestionsOpen, setMaterialSuggestionsOpen] = useState<number | null>(null); const [reason, setReason] = useState("admission"); const [deliveredAt, setDeliveredAt] = useState(localDateValue()); const [notes, setNotes] = useState(""); const [items, setItems] = useState<DeliveryItem[]>([newDeliveryItem()]); const [photoFiles, setPhotoFiles] = useState<File[]>([]); const [loading, setLoading] = useState(true); const [saving, setSaving] = useState(false); const [error, setError] = useState(""); const [success, setSuccess] = useState(""); const [canRetryLoad, setCanRetryLoad] = useState(true);
+  const loadOptionsRequestRef = useRef(0);
+  const loadVariantStockRequestRef = useRef(0);
+  const mountedRef = useRef(true);
   function selectPhotos(event: ChangeEvent<HTMLInputElement>) { setCanRetryLoad(false); const files = Array.from(event.target.files ?? []); event.target.value = ""; const invalid = files.find((file) => !["image/jpeg", "image/png", "image/webp"].includes(file.type) || file.size > 10 * 1024 * 1024); if (invalid) { setError(invalid.size > 10 * 1024 * 1024 ? "Cada foto deve ter no máximo 10 MB." : "As fotos devem estar em formato JPG, PNG ou WEBP."); return; } setPhotoFiles((current) => [...current, ...files].slice(0, 5)); }
-  async function loadOptions() { const supabase = createClient(); const [{ data: employeeData, error: employeeError }, { data: materialData, error: materialError }, { data: lotData, error: lotError }, { data: templateData, error: templateError }] = await Promise.all([supabase.from("employees").select("id, full_name, registration, department, job_title, function_name").eq("status", "active").order("full_name"), supabase.from("materials").select("id, name, internal_code, unit, replacement_interval_days, test_required").eq("status", "active").order("name"), supabase.from("material_lots").select("material_id, available_quantity"), supabase.from("function_templates").select("id, name, function_template_items(material_name, material_id, quantity)").order("name")]); if (employeeError || materialError || lotError || templateError) setError(friendlyError(employeeError ?? materialError ?? lotError ?? templateError, "Não foi possível carregar os dados.")); else { const availableByMaterial = (lotData ?? []).reduce<Record<string, number>>((sum, lot) => { sum[lot.material_id] = (sum[lot.material_id] ?? 0) + Number(lot.available_quantity); return sum; }, {}); setEmployees((employeeData ?? []) as Employee[]); setMaterials(((materialData ?? []) as Array<Omit<Material, "available_quantity">>).map((material) => ({ ...material, available_quantity: availableByMaterial[material.id] ?? 0 }))); setTemplates(((templateData ?? []) as Array<{ id: string; name: string; function_template_items: Array<{ material_name: string; material_id: string | null; quantity: number }> }>).map((template) => ({ id: template.id, name: template.name, items: template.function_template_items }))); } setLoading(false); }
-  useEffect(() => { void Promise.resolve().then(() => loadOptions()); }, []);
+  async function loadOptions() {
+    mountedRef.current = true;
+    const requestId = ++loadOptionsRequestRef.current;
+    setLoading(true);
+    try {
+      const supabase = createClient();
+      const [{ data: employeeData, error: employeeError }, { data: materialData, error: materialError }, { data: lotData, error: lotError }, { data: templateData, error: templateError }] = await Promise.all([
+        supabase.from("employees").select("id, full_name, registration, department, job_title, function_name").eq("status", "active").order("full_name"),
+        supabase.from("materials").select("id, name, internal_code, unit, replacement_interval_days, test_required").eq("status", "active").order("name"),
+        supabase.from("material_lots").select("material_id, available_quantity"),
+        supabase.from("function_templates").select("id, name, function_template_items(material_name, material_id, quantity)").order("name"),
+      ]);
+      if (!mountedRef.current || requestId !== loadOptionsRequestRef.current) return;
+      const firstError = employeeError ?? materialError ?? lotError ?? templateError;
+      if (firstError) {
+        setCanRetryLoad(true);
+        setError(friendlyError(firstError, "Não foi possível carregar os dados."));
+        return;
+      }
+      const availableByMaterial = (lotData ?? []).reduce<Record<string, number>>((sum, lot) => {
+        sum[lot.material_id] = (sum[lot.material_id] ?? 0) + Number(lot.available_quantity);
+        return sum;
+      }, {});
+      setEmployees((employeeData ?? []) as Employee[]);
+      setMaterials(((materialData ?? []) as Array<Omit<Material, "available_quantity">>).map((material) => ({ ...material, available_quantity: availableByMaterial[material.id] ?? 0 })));
+      setTemplates(((templateData ?? []) as Array<{ id: string; name: string; function_template_items: Array<{ material_name: string; material_id: string | null; quantity: number }> }>).map((template) => ({ id: template.id, name: template.name, items: template.function_template_items })));
+    } catch (unexpectedError) {
+      if (mountedRef.current && requestId === loadOptionsRequestRef.current) {
+        setCanRetryLoad(true);
+        setError(friendlyError(unexpectedError, "Não foi possível carregar os dados."));
+      }
+    } finally {
+      if (mountedRef.current && requestId === loadOptionsRequestRef.current) setLoading(false);
+    }
+  }
+  useEffect(() => { void loadOptions(); return () => { mountedRef.current = false; }; }, []);
   useEffect(() => { if (!success) return; const timer = window.setTimeout(() => setSuccess(""), 4500); return () => window.clearTimeout(timer); }, [success]);
   useEffect(() => { if (error) setCanRetryLoad(true); }, [error]);
   function retryLoadOptions() { if (!canRetryLoad && !error) return; setLoading(true); setError(""); void loadOptions(); }
-  useEffect(() => { void createClient().from("material_variants").select("id,material_id,name,size,active").eq("active", true).order("name").then(({ data }) => setVariants((data ?? []) as MaterialVariant[])); }, []);
   useEffect(() => {
-    async function loadVariantStock() {
-      const { data, error: variantStockError } = await createClient().from("material_lots").select("variant_id, available_quantity").not("variant_id", "is", null);
-      if (variantStockError) {
-        setError(friendlyError(variantStockError, "Não foi possível concluir a operação."));
-        setCanRetryLoad(true);
-        return;
+    let active = true;
+    async function loadVariants() {
+      try {
+        const { data, error: variantError } = await createClient().from("material_variants").select("id,material_id,name,size,active").eq("active", true).order("name");
+        if (!active) return;
+        if (variantError) {
+          setCanRetryLoad(true);
+          setError(friendlyError(variantError, "Não foi possível carregar as variações."));
+          return;
+        }
+        setVariants((data ?? []) as MaterialVariant[]);
+      } catch (unexpectedError) {
+        if (active) {
+          setCanRetryLoad(true);
+          setError(friendlyError(unexpectedError, "Não foi possível carregar as variações."));
+        }
       }
-      setVariantAvailable((data ?? []).reduce<Record<string, number>>((sum, lot) => {
-        if (lot.variant_id) sum[lot.variant_id] = (sum[lot.variant_id] ?? 0) + Number(lot.available_quantity);
-        return sum;
-      }, {}));
+    }
+    void loadVariants();
+    return () => { active = false; };
+  }, []);
+  useEffect(() => {
+    let active = true;
+    async function loadVariantStock() {
+      const requestId = ++loadVariantStockRequestRef.current;
+      try {
+        const { data, error: variantStockError } = await createClient().from("material_lots").select("variant_id, available_quantity").not("variant_id", "is", null);
+        if (!active || requestId !== loadVariantStockRequestRef.current) return;
+        if (variantStockError) {
+          setError(friendlyError(variantStockError, "Não foi possível concluir a operação."));
+          setCanRetryLoad(true);
+          return;
+        }
+        setVariantAvailable((data ?? []).reduce<Record<string, number>>((sum, lot) => {
+          if (lot.variant_id) sum[lot.variant_id] = (sum[lot.variant_id] ?? 0) + Number(lot.available_quantity);
+          return sum;
+        }, {}));
+      } catch (unexpectedError) {
+        if (active && requestId === loadVariantStockRequestRef.current) {
+          setError(friendlyError(unexpectedError, "Não foi possível carregar o estoque das variações."));
+          setCanRetryLoad(true);
+        }
+      }
     }
     void loadVariantStock();
     const refresh = () => { void loadVariantStock(); void loadOptions(); };
     const events = ["delivery-created", "return-created", "stock-entry-created", "stock-entry-updated", "stock-entry-deleted"];
     events.forEach((eventName) => window.addEventListener(eventName, refresh));
-    return () => events.forEach((eventName) => window.removeEventListener(eventName, refresh));
+    return () => {
+      active = false;
+      events.forEach((eventName) => window.removeEventListener(eventName, refresh));
+    };
   }, []);
   useEffect(() => { if (materialSuggestionsOpen !== null && items[materialSuggestionsOpen]?.material_id) setMaterialSuggestionsOpen(null); }, [items, materialSuggestionsOpen]);
   const normalizedEmployeeQuery = normalize(employeeQuery);

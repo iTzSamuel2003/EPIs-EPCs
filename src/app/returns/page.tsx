@@ -1,6 +1,6 @@
 "use client";
 
-import { ChangeEvent, FormEvent, useEffect, useMemo, useState } from "react";
+import { ChangeEvent, FormEvent, useEffect, useMemo, useRef, useState } from "react";
 import { ArrowLeft, Check, ClipboardCheck, X } from "lucide-react";
 import Link from "next/link";
 import { jsPDF } from "jspdf";
@@ -23,8 +23,50 @@ const safeFileName = (value: string) => value.normalize("NFD").replace(/[\u0300-
 export default function ReturnsPage() {
   const [retryKey, setRetryKey] = useState(0);
   const [employees, setEmployees] = useState<Employee[]>([]); const [items, setItems] = useState<DeliveredItem[]>([]); const [employeeId, setEmployeeId] = useState(""); const [employeeQuery, setEmployeeQuery] = useState(""); const [suggestionsOpen, setSuggestionsOpen] = useState(false); const [selectedIds, setSelectedIds] = useState<string[]>([]); const [lines, setLines] = useState<Record<string, ReturnLine>>({}); const [reason, setReason] = useState("replacement"); const [returnedAt, setReturnedAt] = useState(localDateValue()); const [signature, setSignature] = useState(""); const [notes, setNotes] = useState(""); const [photoFiles, setPhotoFiles] = useState<File[]>([]); const [loading, setLoading] = useState(true); const [saving, setSaving] = useState(false); const [error, setError] = useState(""); const [success, setSuccess] = useState("");
-  async function loadData() { setLoading(true); const supabase = createClient(); const [{ data: employeeData, error: employeeError }, { data: itemData, error: itemError }, { data: returnData, error: returnError }] = await Promise.all([supabase.from("employees").select("id,full_name,registration").order("full_name"), supabase.from("delivery_items").select("id,quantity,variant_id,variant:material_variants(name,size),material:materials(name,internal_code,unit),delivery:deliveries(employee_id,delivered_at,employee:employees(full_name,registration))").order("created_at", { ascending: false }), supabase.from("return_items").select("delivery_item_id,quantity")]); if (employeeError || itemError || returnError) setError(friendlyError(employeeError ?? itemError ?? returnError, "Não foi possível carregar os dados.")); else { const returnedByItem = new Map<string, number>(); (returnData ?? []).forEach((item) => { const quantity = Number(item.quantity); if (item.delivery_item_id && Number.isFinite(quantity)) returnedByItem.set(item.delivery_item_id, (returnedByItem.get(item.delivery_item_id) ?? 0) + quantity); }); setEmployees((employeeData ?? []) as Employee[]); setItems(((itemData ?? []) as unknown as DeliveredItem[]).map((item) => ({ ...item, quantity: Number(item.quantity) || 0, material: item.variant && item.material ? { ...item.material, name: `${item.material.name} · Tamanho ${item.variant.size || item.variant.name}` } : item.material, returned: returnedByItem.get(item.id) ?? 0 }))); } setLoading(false); }
-  useEffect(() => { void loadData(); }, [retryKey]);
+  const loadRequestRef = useRef(0);
+  const mountedRef = useRef(true);
+  async function loadData() {
+    mountedRef.current = true;
+    const requestId = ++loadRequestRef.current;
+    setLoading(true);
+    try {
+      const supabase = createClient();
+      const [{ data: employeeData, error: employeeError }, { data: itemData, error: itemError }, { data: returnData, error: returnError }] = await Promise.all([
+        supabase.from("employees").select("id,full_name,registration").order("full_name"),
+        supabase.from("delivery_items").select("id,quantity,variant_id,variant:material_variants(name,size),material:materials(name,internal_code,unit),delivery:deliveries(employee_id,delivered_at,employee:employees(full_name,registration))").order("created_at", { ascending: false }),
+        supabase.from("return_items").select("delivery_item_id,quantity"),
+      ]);
+      if (!mountedRef.current || requestId !== loadRequestRef.current) return;
+      const firstError = employeeError ?? itemError ?? returnError;
+      if (firstError) {
+        setEmployees([]);
+        setItems([]);
+        setError(friendlyError(firstError, "Não foi possível carregar os dados."));
+        return;
+      }
+      const returnedByItem = new Map<string, number>();
+      (returnData ?? []).forEach((item) => {
+        const quantity = Number(item.quantity);
+        if (item.delivery_item_id && Number.isFinite(quantity)) returnedByItem.set(item.delivery_item_id, (returnedByItem.get(item.delivery_item_id) ?? 0) + quantity);
+      });
+      setEmployees((employeeData ?? []) as Employee[]);
+      setItems(((itemData ?? []) as unknown as DeliveredItem[]).map((item) => ({
+        ...item,
+        quantity: Number(item.quantity) || 0,
+        material: item.variant && item.material ? { ...item.material, name: `${item.material.name} · Tamanho ${item.variant.size || item.variant.name}` } : item.material,
+        returned: returnedByItem.get(item.id) ?? 0,
+      })));
+    } catch (unexpectedError) {
+      if (mountedRef.current && requestId === loadRequestRef.current) {
+        setEmployees([]);
+        setItems([]);
+        setError(friendlyError(unexpectedError, "Não foi possível carregar os dados."));
+      }
+    } finally {
+      if (mountedRef.current && requestId === loadRequestRef.current) setLoading(false);
+    }
+  }
+  useEffect(() => { void loadData(); return () => { mountedRef.current = false; }; }, [retryKey]);
   useEffect(() => { const refresh = () => setRetryKey((current) => current + 1); const events = ["delivery-created", "return-created", "stock-entry-created", "stock-entry-updated", "stock-entry-deleted"]; events.forEach((eventName) => window.addEventListener(eventName, refresh)); return () => events.forEach((eventName) => window.removeEventListener(eventName, refresh)); }, []);
   function retryLoad() { setError(""); setEmployees([]); setItems([]); setRetryKey((current) => current + 1); }
   const employeeItems = useMemo(() => items.filter((item) => item.delivery?.employee_id === employeeId && item.quantity > item.returned), [items, employeeId]);

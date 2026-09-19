@@ -24,7 +24,44 @@ export default function Home() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [alertDays, setAlertDays] = useState(30);
-  useEffect(() => { async function load() { setLoading(true); setError(""); setMaterials([]); setLots([]); setEmployees(0); setDeliveries([]); const supabase = createClient(); const [{ data: materialData, error: materialError }, { data: lotData, error: lotError }, { count: employeeCount, error: employeeError }, { data: deliveryData, error: deliveryError }, { data: organizationData, error: organizationError }] = await Promise.all([supabase.from("materials").select("id,name,internal_code,type,minimum_stock,unit").eq("status", "active"), supabase.from("material_lots").select("material_id,available_quantity,received_quantity,unit_cost,expires_at,material:materials(id,name,internal_code,type,minimum_stock,unit)"), supabase.from("employees").select("id", { count: "exact", head: true }).eq("status", "active"), supabase.from("deliveries").select("id,delivered_at,reason,employee:employees(full_name,registration),delivery_items(quantity,material:materials(name,unit))").order("delivered_at", { ascending: false }).order("created_at", { ascending: false }).limit(5), supabase.from("organizations").select("validity_alert_days").single()]); const firstError = materialError || lotError || employeeError || deliveryError || organizationError; if (firstError) setError(friendlyError(firstError, "Não foi possível carregar o painel.")); else { setMaterials((materialData ?? []) as Material[]); setLots((lotData ?? []) as unknown as Lot[]); setEmployees(employeeCount ?? 0); setDeliveries((deliveryData ?? []) as unknown as Delivery[]); setAlertDays(Math.max(0, Number(organizationData?.validity_alert_days ?? 30))); } setLoading(false); } void load(); }, []);
+  useEffect(() => {
+    let active = true;
+    async function load() {
+      setLoading(true);
+      setError("");
+      setMaterials([]);
+      setLots([]);
+      setEmployees(0);
+      setDeliveries([]);
+      try {
+        const supabase = createClient();
+        const [{ data: materialData, error: materialError }, { data: lotData, error: lotError }, { count: employeeCount, error: employeeError }, { data: deliveryData, error: deliveryError }, { data: organizationData, error: organizationError }] = await Promise.all([
+          supabase.from("materials").select("id,name,internal_code,type,minimum_stock,unit").eq("status", "active"),
+          supabase.from("material_lots").select("material_id,available_quantity,received_quantity,unit_cost,expires_at,material:materials(id,name,internal_code,type,minimum_stock,unit)"),
+          supabase.from("employees").select("id", { count: "exact", head: true }).eq("status", "active"),
+          supabase.from("deliveries").select("id,delivered_at,reason,employee:employees(full_name,registration),delivery_items(quantity,material:materials(name,unit))").order("delivered_at", { ascending: false }).order("created_at", { ascending: false }).limit(5),
+          supabase.from("organizations").select("validity_alert_days").single(),
+        ]);
+        if (!active) return;
+        const firstError = materialError || lotError || employeeError || deliveryError || organizationError;
+        if (firstError) {
+          setError(friendlyError(firstError, "Não foi possível carregar o painel."));
+        } else {
+          setMaterials((materialData ?? []) as Material[]);
+          setLots((lotData ?? []) as unknown as Lot[]);
+          setEmployees(employeeCount ?? 0);
+          setDeliveries((deliveryData ?? []) as unknown as Delivery[]);
+          setAlertDays(Math.max(0, Number(organizationData?.validity_alert_days ?? 30)));
+        }
+      } catch (unexpectedError) {
+        if (active) setError(friendlyError(unexpectedError, "Não foi possível carregar o painel."));
+      } finally {
+        if (active) setLoading(false);
+      }
+    }
+    void load();
+    return () => { active = false; };
+  }, []);
   const stock = useMemo(() => { const result = new Map<string, StockRow>(); materials.forEach((material) => result.set(material.id, { material, quantity: 0, value: 0, receivedQuantity: 0, receivedValue: 0 })); lots.forEach((lot) => { const material = lot.material ?? materials.find((item) => item.id === lot.material_id); if (!material) return; const row = result.get(lot.material_id) ?? { material, quantity: 0, value: 0, receivedQuantity: 0, receivedValue: 0 }; const availableQuantity = Number(lot.available_quantity); const receivedQuantity = Number(lot.received_quantity); const unitCost = Number(lot.unit_cost); row.quantity += availableQuantity; row.value += availableQuantity * unitCost; row.receivedQuantity += receivedQuantity; row.receivedValue += receivedQuantity * unitCost; result.set(lot.material_id, row); }); return [...result.values()].sort((a, b) => a.material.name.localeCompare(b.material.name, "pt-BR")); }, [materials, lots]);
   const acquired = lots.reduce((sum, lot) => sum + Number(lot.received_quantity) * Number(lot.unit_cost), 0); const currentValue = lots.reduce((sum, lot) => sum + Number(lot.available_quantity) * Number(lot.unit_cost), 0); const outOfStock = stock.filter((row) => row.quantity === 0); const lowStock = stock.filter((row) => row.quantity > 0 && Number(row.material.minimum_stock) > 0 && row.quantity < Number(row.material.minimum_stock)); const expiring = lots.filter((lot) => lot.expires_at && new Date(`${lot.expires_at}T00:00:00`).getTime() <= Date.now() + alertDays * 86400000); const forecast = stock.reduce((sum, row) => sum + Math.max(0, Number(row.material.minimum_stock) - row.quantity) * (row.receivedQuantity ? row.receivedValue / row.receivedQuantity : 0), 0); const hasAlerts = outOfStock.length > 0 || lowStock.length > 0 || expiring.length > 0;
   if (loading) return <main className="page-content"><div className="module-loading"><LoaderCircle className="spin" size={22} /> Carregando Dashboard...</div></main>;

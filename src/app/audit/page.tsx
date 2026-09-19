@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { ClipboardList, ExternalLink, LoaderCircle, Search, X } from "lucide-react";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { createClient } from "@/lib/supabase/client";
 import { friendlyError, formatDateTimeBR } from "@/lib/ui-feedback";
 
@@ -41,23 +41,50 @@ export default function AuditPage() {
   const [toDate, setToDate] = useState("");
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
+  const mountedRef = useRef(true);
+  const loadRequestRef = useRef(0);
 
   async function load() {
+    mountedRef.current = true;
+    const requestId = ++loadRequestRef.current;
     setLoading(true); setError("");
     setRows([]); setActors({});
-    const supabase = createClient();
-    const { data, error: loadError } = await supabase.from("audit_logs").select("id,action,table_name,record_id,created_at,actor_id,old_data,new_data").order("created_at", { ascending: false }).limit(500);
-    if (loadError) { setError(friendlyError(loadError, "Não foi possível carregar a auditoria.")); setLoading(false); return; }
-    const auditRows = (data ?? []) as Audit[]; setRows(auditRows);
-    const actorIds = [...new Set(auditRows.map((row) => row.actor_id).filter((id): id is string => Boolean(id)))];
-    if (actorIds.length) {
-      const { data: actorData } = await supabase.from("profiles").select("id,full_name,email").in("id", actorIds);
-      setActors(Object.fromEntries(((actorData ?? []) as Actor[]).map((actor) => [actor.id, actor])));
+    try {
+      const supabase = createClient();
+      const { data, error: loadError } = await supabase.from("audit_logs").select("id,action,table_name,record_id,created_at,actor_id,old_data,new_data").order("created_at", { ascending: false }).limit(500);
+      if (!mountedRef.current || requestId !== loadRequestRef.current) return;
+      if (loadError) {
+        setRows([]); setActors({});
+        setError(friendlyError(loadError, "Não foi possível carregar a auditoria."));
+        return;
+      }
+      const auditRows = (data ?? []) as Audit[];
+      setRows(auditRows);
+      const actorIds = [...new Set(auditRows.map((row) => row.actor_id).filter((id): id is string => Boolean(id)))];
+      if (actorIds.length) {
+        const { data: actorData, error: actorError } = await supabase.from("profiles").select("id,full_name,email").in("id", actorIds);
+        if (!mountedRef.current || requestId !== loadRequestRef.current) return;
+        if (actorError) {
+          setActors({});
+          setError(friendlyError(actorError, "Não foi possível carregar os usuários da auditoria."));
+          return;
+        }
+        setActors(Object.fromEntries(((actorData ?? []) as Actor[]).map((actor) => [actor.id, actor])));
+      }
+    } catch (unexpectedError) {
+      if (mountedRef.current && requestId === loadRequestRef.current) {
+        setRows([]); setActors({});
+        setError(friendlyError(unexpectedError, "Não foi possível carregar a auditoria."));
+      }
+    } finally {
+      if (mountedRef.current && requestId === loadRequestRef.current) setLoading(false);
     }
-    setLoading(false);
   }
 
-  useEffect(() => { void load(); }, []);
+  useEffect(() => {
+    void load();
+    return () => { mountedRef.current = false; };
+  }, []);
 
   const modules = useMemo(() => [...new Set(rows.map((row) => row.table_name))].sort(), [rows]);
   const users = useMemo(() => [...new Set(rows.map((row) => row.actor_id).filter((id): id is string => Boolean(id)))], [rows]);

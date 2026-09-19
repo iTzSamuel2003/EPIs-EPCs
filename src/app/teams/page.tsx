@@ -1,6 +1,6 @@
 "use client";
 
-import { FormEvent, useEffect, useState } from "react";
+import { FormEvent, useEffect, useRef, useState } from "react";
 import { Check, LoaderCircle, Plus, ShieldCheck, Users, X } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 import { friendlyError } from "@/lib/ui-feedback";
@@ -14,8 +14,43 @@ const emptyForm = { name: "", scenario_id: "", vehicle_identifier: "", notes: ""
 export default function TeamsPage() {
   const [retryKey, setRetryKey] = useState(0);
   const [scenarios, setScenarios] = useState<Scenario[]>([]); const [employees, setEmployees] = useState<Employee[]>([]); const [teams, setTeams] = useState<Team[]>([]); const [form, setForm] = useState(emptyForm); const [teamId, setTeamId] = useState(""); const [employeeId, setEmployeeId] = useState(""); const [role, setRole] = useState(""); const [showForm, setShowForm] = useState(false); const [loading, setLoading] = useState(true); const [saving, setSaving] = useState(false); const [error, setError] = useState(""); const [success, setSuccess] = useState("");
-  async function load() { const supabase = createClient(); const [{ data: scenarioData, error: scenarioError }, { data: employeeData, error: employeeError }, { data: teamData, error: teamError }] = await Promise.all([supabase.from("contract_scenarios").select("id,name,source_annex,team_size,active").eq("active", true).order("name"), supabase.from("employees").select("id,full_name,registration").eq("status", "active").order("full_name"), supabase.from("contract_teams").select("id,name,vehicle_identifier,status,scenario:contract_scenarios(id,name,source_annex,team_size,active),members:contract_team_members(employee_id,role,employee:employees(id,full_name,registration))").order("name")]); if (scenarioError || employeeError || teamError) setError(friendlyError(scenarioError ?? employeeError ?? teamError, "Não foi possível carregar as equipes.")); else { setScenarios((scenarioData ?? []) as Scenario[]); setEmployees((employeeData ?? []) as Employee[]); setTeams((teamData ?? []) as unknown as Team[]); } setLoading(false); }
-  useEffect(() => { void load(); }, [retryKey]);
+  const loadRequestRef = useRef(0);
+  const mountedRef = useRef(true);
+  async function load() {
+    mountedRef.current = true;
+    const requestId = ++loadRequestRef.current;
+    setLoading(true);
+    try {
+      const supabase = createClient();
+      const [{ data: scenarioData, error: scenarioError }, { data: employeeData, error: employeeError }, { data: teamData, error: teamError }] = await Promise.all([
+        supabase.from("contract_scenarios").select("id,name,source_annex,team_size,active").eq("active", true).order("name"),
+        supabase.from("employees").select("id,full_name,registration").eq("status", "active").order("full_name"),
+        supabase.from("contract_teams").select("id,name,vehicle_identifier,status,scenario:contract_scenarios(id,name,source_annex,team_size,active),members:contract_team_members(employee_id,role,employee:employees(id,full_name,registration))").order("name"),
+      ]);
+      if (!mountedRef.current || requestId !== loadRequestRef.current) return;
+      const firstError = scenarioError ?? employeeError ?? teamError;
+      if (firstError) {
+        setScenarios([]);
+        setEmployees([]);
+        setTeams([]);
+        setError(friendlyError(firstError, "Não foi possível carregar as equipes."));
+        return;
+      }
+      setScenarios((scenarioData ?? []) as Scenario[]);
+      setEmployees((employeeData ?? []) as Employee[]);
+      setTeams((teamData ?? []) as unknown as Team[]);
+    } catch (unexpectedError) {
+      if (mountedRef.current && requestId === loadRequestRef.current) {
+        setScenarios([]);
+        setEmployees([]);
+        setTeams([]);
+        setError(friendlyError(unexpectedError, "Não foi possível carregar as equipes."));
+      }
+    } finally {
+      if (mountedRef.current && requestId === loadRequestRef.current) setLoading(false);
+    }
+  }
+  useEffect(() => { void load(); return () => { mountedRef.current = false; }; }, [retryKey]);
   useEffect(() => { if (!success) return; const timer = window.setTimeout(() => setSuccess(""), 4500); return () => window.clearTimeout(timer); }, [success]);
   function retryLoad() { setError(""); setScenarios([]); setEmployees([]); setTeams([]); setRetryKey((current) => current + 1); }
   async function saveTeam(event: FormEvent) { event.preventDefault(); setSaving(true); setError(""); const supabase = createClient(); const { data: auth, error: authError } = await supabase.auth.getUser(); if (authError) { setError(friendlyError(authError, "Não foi possível concluir a operação.")); setSaving(false); return; } if (!auth.user) { setError("Sua sessão expirou. Entre novamente."); setSaving(false); return; } const { data: profile, error: profileError } = await supabase.from("profiles").select("organization_id").eq("id", auth.user.id).single(); if (profileError) { setError(friendlyError(profileError, "Não foi possível concluir a operação.")); setSaving(false); return; } if (!profile?.organization_id) { setError("Não foi possível identificar a organização do usuário."); setSaving(false); return; } const { error: saveError } = await supabase.from("contract_teams").insert({ ...form, organization_id: profile.organization_id }); if (saveError) setError(friendlyError(saveError, "Não foi possível concluir a operação.")); else { setSuccess("Equipe contratual cadastrada."); setForm(emptyForm); setShowForm(false); await load(); } setSaving(false); }
