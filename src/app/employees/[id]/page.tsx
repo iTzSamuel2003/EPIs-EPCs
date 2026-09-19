@@ -19,10 +19,16 @@ type Course = { id: string; name: string; provider: string | null; expires_at: s
 type ReturnSheet = { id: string; returned_at: string; reason: string; term_file_path: string | null; term_signature_method: string | null; term_signed_at: string | null; items: Array<{ quantity: number; material: { name: string; unit: string } | null; variant: { name: string; size: string | null } | null }> };
 
 const reasonLabels: Record<string, string> = { admission: "Admissão", periodic_change: "Troca periódica", damaged: "Equipamento danificado", lost: "Equipamento perdido", role_change: "Alteração de função", replacement: "Substituição", other: "Outro" };
-function date(value: string | null) { return value ? new Date(`${value}T00:00:00`).toLocaleDateString("pt-BR") : "—"; }
+function date(value: string | null) {
+  if (!value) return "—";
+  const parsed = new Date(`${value.slice(0, 10)}T00:00:00`);
+  return Number.isNaN(parsed.getTime()) ? "Data inválida" : parsed.toLocaleDateString("pt-BR");
+}
 function replacementStatus(value: string | null) {
   if (!value) return { label: "Sem previsão", tone: "neutral" };
-  const days = Math.ceil((new Date(`${value}T00:00:00`).getTime() - new Date().setHours(0, 0, 0, 0)) / 86400000);
+  const replacementDate = new Date(`${value.slice(0, 10)}T00:00:00`);
+  if (Number.isNaN(replacementDate.getTime())) return { label: "Data inválida", tone: "danger" };
+  const days = Math.ceil((replacementDate.getTime() - new Date().setHours(0, 0, 0, 0)) / 86400000);
   if (days < 0) return { label: "Troca vencida", tone: "danger" };
   if (days <= 30) return { label: "Troca próxima", tone: "warning" };
   return { label: "Em dia", tone: "success" };
@@ -51,6 +57,7 @@ export default function EmployeeMaterialsPage() {
   const [uploadingId, setUploadingId] = useState("");
 
   useEffect(() => {
+    let cancelled = false;
     async function load() {
       setLoading(true);
       setError("");
@@ -65,6 +72,7 @@ export default function EmployeeMaterialsPage() {
         supabase.from("employee_courses").select("id,name,provider,expires_at").eq("employee_id", id).order("expires_at", { ascending: true, nullsFirst: false }),
         supabase.from("returns").select("id,returned_at,reason,term_file_path,term_signature_method,term_signed_at,return_items(quantity,material:materials(name,unit),delivery_item:delivery_items(variant:material_variants(name,size)))").eq("employee_id", id).order("returned_at", { ascending: false }),
       ]);
+      if (cancelled) return;
       if (employeeError || deliveryError || courseError || returnError) setError(friendlyError(employeeError ?? deliveryError ?? courseError ?? returnError, "Não foi possível carregar a ficha."));
       setEmployee(employeeData as Employee);
       setCourses((courseData ?? []) as Course[]);
@@ -79,6 +87,7 @@ export default function EmployeeMaterialsPage() {
       setLoading(false);
     }
     void load();
+    return () => { cancelled = true; };
   }, [id]);
 
   const summary = useMemo(() => {
