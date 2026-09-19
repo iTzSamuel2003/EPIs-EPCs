@@ -10,6 +10,9 @@ type Material = { id: string; internal_code: string; name: string; type: "EPI" |
 type Lot = { id: string; material_id: string; lot_number: string; available_quantity: number; expires_at: string | null; material: { name: string; internal_code: string; unit: string } | null };
 type Movement = { id: string; movement_type: string; quantity: number; created_at: string; material: { name: string; internal_code: string; unit: string } | null };
 
+function localDateKey(value: Date) { return `${value.getFullYear()}-${String(value.getMonth() + 1).padStart(2, "0")}-${String(value.getDate()).padStart(2, "0")}`; }
+function daysUntil(value: string | null) { return value ? Math.ceil((new Date(value + "T00:00:00").getTime() - new Date(`${localDateKey(new Date())}T00:00:00`).getTime()) / 86400000) : null; }
+
 const reportTypes = [["stock", "Relatório de estoque"], ["low", "Estoque abaixo do mínimo"], ["validity", "Lotes próximos do vencimento"], ["movements", "Movimentações do estoque"]] as const;
 
 export default function ReportsPage() {
@@ -52,7 +55,6 @@ export default function ReportsPage() {
     void load();
   }, [reloadKey]);
 
-  const daysUntil = (value: string | null) => value ? Math.ceil((new Date(value + "T00:00:00").getTime() - new Date(new Date().toDateString()).getTime()) / 86400000) : null;
   const filteredMaterials = useMemo(() => materials.filter((item) => {
     const matches = (item.name + " " + item.internal_code).toLowerCase().includes(query.toLowerCase());
     return matches && (report !== "low" || Number(item.minimum_stock) > 0 && (totals[item.id] ?? 0) < Number(item.minimum_stock));
@@ -62,9 +64,9 @@ export default function ReportsPage() {
     return (lot.material?.name + " " + lot.material?.internal_code + " " + lot.lot_number).toLowerCase().includes(query.toLowerCase()) && days !== null && days <= alertDays;
   }), [lots, query, alertDays]);
   const filteredMovements = useMemo(() => movements.filter((item) => {
-    const date = item.created_at.slice(0, 10);
-    const textMatch = (item.material?.name + " " + item.material?.internal_code).toLowerCase().includes(query.toLowerCase());
-    return textMatch && (!fromDate || date >= fromDate) && (!toDate || date <= toDate);
+    const movementDate = localDateKey(new Date(item.created_at));
+    const textMatch = (item.material?.name + " " + item.material?.internal_code).toLowerCase().includes(query.trim().toLowerCase());
+    return textMatch && (!fromDate || movementDate >= fromDate) && (!toDate || movementDate <= toDate);
   }), [movements, query, fromDate, toDate]);
 
   const pageSize = 50;
@@ -74,7 +76,7 @@ export default function ReportsPage() {
   const visibleLots = filteredLots.slice((page - 1) * pageSize, page * pageSize);
   const visibleMovements = filteredMovements.slice((page - 1) * pageSize, page * pageSize);
 
-  useEffect(() => { setPage(1); }, [report, query, fromDate, toDate]);
+  useEffect(() => { setPage(1); }, [report, query, fromDate, toDate, alertDays]);
   useEffect(() => { setPage((current) => Math.min(current, pageCount)); }, [pageCount]);
 
   if (error && !loading) return <main className="module-shell"><header className="module-header"><div><p className="eyebrow">GESTÃO E CONFORMIDADE</p><h1>Relatórios</h1><p className="module-subtitle">Consulte indicadores operacionais e exporte os dados para CSV.</p></div></header><section className="panel runtime-error-card"><FeedbackMessage onRetry={() => setReloadKey((current) => current + 1)}>{error}</FeedbackMessage></section></main>;

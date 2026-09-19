@@ -12,7 +12,10 @@ const requestLabels: Record<string, string> = { replacement: "Troca de material"
 const statusLabels: Record<string, string> = { pending: "Pendente", in_review: "Em análise", approved: "Aprovada", rejected: "Recusada", completed: "Entregue" };
 const statusTone: Record<string, string> = { pending: "warning", in_review: "warning", approved: "success", completed: "success", rejected: "danger" };
 
-function date(value: string) { return new Date(value).toLocaleString("pt-BR", { dateStyle: "short", timeStyle: "short" }); }
+function date(value: string) {
+  const parsed = new Date(value);
+  return Number.isNaN(parsed.getTime()) ? "Data não informada" : parsed.toLocaleString("pt-BR", { dateStyle: "short", timeStyle: "short" });
+}
 function localDateValue(value = new Date()) { return `${value.getFullYear()}-${String(value.getMonth() + 1).padStart(2, "0")}-${String(value.getDate()).padStart(2, "0")}`; }
 
 export default function RequestsPage() {
@@ -41,11 +44,11 @@ export default function RequestsPage() {
   }
 
   const filtered = useMemo(() => requests.filter((item) => {
-    const text = `${item.employee?.full_name ?? ""} ${item.employee?.registration ?? ""} ${item.delivery_item?.material?.name ?? ""} ${item.description}`.toLowerCase();
-    return text.includes(query.toLowerCase()) && (typeFilter === "all" || item.request_type === typeFilter) && (statusFilter === "all" || item.status === statusFilter);
+    const text = `${item.employee?.full_name ?? ""} ${item.employee?.registration ?? ""} ${item.delivery_item?.material?.name ?? ""} ${item.description ?? ""}`.toLowerCase();
+    return text.includes(query.trim().toLowerCase()) && (typeFilter === "all" || item.request_type === typeFilter) && (statusFilter === "all" || item.status === statusFilter);
   }), [requests, query, typeFilter, statusFilter]);
 
-  function beginUpdate(item: RequestRow, status: string) { setNoteDraft(item.review_notes ?? ""); setDeliveredAtDraft(item.delivered_at ?? localDateValue()); setConfirming({ item, status }); }
+  function beginUpdate(item: RequestRow, status: string) { setNoteDraft(item.review_notes ?? ""); setDeliveredAtDraft(item.delivered_at?.slice(0, 10) ?? localDateValue()); setConfirming({ item, status }); }
   function closeConfirmation() { if (!savingId) setConfirming(null); }
 
   async function updateRequest(item: RequestRow, status: string, note: string) {
