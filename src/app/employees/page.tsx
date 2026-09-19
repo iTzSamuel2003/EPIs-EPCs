@@ -56,7 +56,15 @@ export default function EmployeesPage() {
   function update(field: keyof EmployeeForm, value: string) { setForm((current) => ({ ...current, [field]: value })); }
 
   async function saveEmployee(event: FormEvent) {
-    event.preventDefault(); setError(""); setSuccess(""); setSaving(true);
+    event.preventDefault();
+    if (saving) return;
+    setError("");
+    setSuccess("");
+    if (!form.full_name.trim() || !form.cpf.trim()) {
+      setError("Informe o nome completo e o CPF do funcionário.");
+      return;
+    }
+    setSaving(true);
     const typedClassification = form.cargo_funcao.match(/\s+(VI|V|IV|III|II|I)$/i)?.[1]?.toUpperCase() ?? "";
     const supabase = createClient();
     const { data: auth, error: authError } = await supabase.auth.getUser();
