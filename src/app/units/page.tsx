@@ -13,8 +13,23 @@ const emptyForm = { material_id: "", unit_identifier: "", lot_number: "", serial
 
 export default function UnitsPage() {
   const [materials, setMaterials] = useState<Material[]>([]); const [units, setUnits] = useState<Unit[]>([]); const [form, setForm] = useState(emptyForm); const [query, setQuery] = useState(""); const [showForm, setShowForm] = useState(false); const [loading, setLoading] = useState(true); const [retryKey, setRetryKey] = useState(0); const [saving, setSaving] = useState(false); const [error, setError] = useState(""); const [success, setSuccess] = useState("");
-  async function load() { setLoading(true); setError(""); setMaterials([]); setUnits([]); const supabase = createClient(); const [{ data: materialData, error: materialError }, { data: unitData, error: unitError }] = await Promise.all([supabase.from("materials").select("id,name,internal_code,type").eq("status", "active").order("name"), supabase.from("material_units").select("id,unit_identifier,lot_number,serial_number,manufacturer,model,size,manufactured_at,expires_at,status,material:materials(id,name,internal_code,type)").order("created_at", { ascending: false })]); if (materialError || unitError) setError(friendlyError(materialError ?? unitError, "Não foi possível carregar as unidades.")); else { setMaterials((materialData ?? []) as Material[]); setUnits((unitData ?? []) as unknown as Unit[]); } setLoading(false); }
-  useEffect(() => { void load().finally(() => setLoading(false)); }, [retryKey]);
+  async function load() {
+    setLoading(true); setError(""); setMaterials([]); setUnits([]);
+    try {
+      const supabase = createClient();
+      const [{ data: materialData, error: materialError }, { data: unitData, error: unitError }] = await Promise.all([
+        supabase.from("materials").select("id,name,internal_code,type").eq("status", "active").order("name"),
+        supabase.from("material_units").select("id,unit_identifier,lot_number,serial_number,manufacturer,model,size,manufactured_at,expires_at,status,material:materials(id,name,internal_code,type)").order("created_at", { ascending: false }),
+      ]);
+      if (materialError || unitError) { setError(friendlyError(materialError ?? unitError, "Não foi possível carregar as unidades.")); return; }
+      setMaterials((materialData ?? []) as Material[]); setUnits((unitData ?? []) as unknown as Unit[]);
+    } catch (caught) {
+      setError(friendlyError(caught, "Não foi possível carregar as unidades."));
+    } finally {
+      setLoading(false);
+    }
+  }
+  useEffect(() => { void load(); }, [retryKey]);
   useEffect(() => { if (!success) return; const timer = window.setTimeout(() => setSuccess(""), 4500); return () => window.clearTimeout(timer); }, [success]);
   function retryLoad() { setRetryKey((current) => current + 1); }
   const filtered = units.filter((unit) => `${unit.unit_identifier} ${unit.serial_number ?? ""} ${unit.lot_number ?? ""} ${unit.material?.name ?? ""}`.toLowerCase().includes(query.toLowerCase()));

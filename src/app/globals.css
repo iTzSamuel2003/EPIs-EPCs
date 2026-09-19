@@ -941,3 +941,110 @@ body{overflow-wrap:normal}
   .function-template-layout .template-detail td:nth-child(2)::before{content:"Tipo";}
   .function-template-layout .template-detail td:nth-child(3)::before{content:"Quantidade";}
 }
+
+.pagination{
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  gap:12px;
+  margin-top:14px;
+  padding:12px 4px 2px;
+  color:#8995aa;
+  font-size:11px;
+}
+
+.pagination span{
+  min-width:0;
+  text-align:center;
+  overflow-wrap:anywhere;
+}
+
+.pagination button{
+  min-height:40px;
+  padding:8px 12px;
+  border:1px solid #e1e5ed;
+  border-radius:8px;
+  background:#f2f3f7;
+  color:#66728a;
+  font-weight:600;
+}
+
+.pagination button:hover:not(:disabled){background:#e8eaf0;}
+.pagination button:disabled{cursor:not-allowed;opacity:.55;}
+
+.modal-card .modal-actions,
+.signature-modal .modal-actions,
+.signature-modal-actions{
+  position:sticky;
+  bottom:-1px;
+  z-index:3;
+  margin-left:-2px;
+  margin-right:-2px;
+  padding:14px 2px 2px;
+  background:linear-gradient(to bottom,rgba(255,255,255,0),#fff 22%);
+}
+
+.stock-entry-edit-item input,
+.stock-entry-edit-item select,
+.stock-entry-edit-item textarea{
+  min-width:0;
+  max-width:100%;
+}
+
+@media (max-width:760px){
+  .entry-card,
+  .delivery-card{padding:20px 16px;}
+
+  .entry-intro{align-items:flex-start;padding-bottom:18px;margin-bottom:18px;}
+  .delivery-items-header{align-items:flex-start;flex-wrap:wrap;}
+  .delivery-items-header>div{min-width:0;flex:1 1 100%;}
+  .delivery-items-header>button{min-width:0;max-width:100%;white-space:normal;}
+  .form-grid.four{grid-template-columns:repeat(2,minmax(0,1fr));}
+}
+
+@media (max-width:600px){
+  .module-table-card .table-wrap{overflow-x:hidden;}
+  .module-table-card .table-wrap::after{display:none;}
+  .module-table-card .table-wrap table{
+    width:100%;
+    min-width:0;
+    table-layout:auto;
+    white-space:normal;
+  }
+  .module-table-card .table-wrap th,
+  .module-table-card .table-wrap td{
+    min-width:0;
+    max-width:none;
+    white-space:normal;
+    overflow-wrap:anywhere;
+    word-break:break-word;
+  }
+  .module-table-card .table-wrap td .row-actions{
+    align-items:stretch;
+    flex-wrap:wrap;
+  }
+  .module-table-card .table-wrap td .row-actions .action-button{
+    max-width:100%;
+    white-space:normal;
+  }
+  .form-grid.four{grid-template-columns:1fr;}
+  .stock-entry-edit-item{grid-template-columns:1fr;}
+  .stock-entry-edit-item>div{grid-column:auto;}
+  .pagination{align-items:stretch;flex-direction:column;gap:8px;}
+  .pagination button{width:100%;}
+  .pagination span{order:-1;line-height:1.45;}
+  .modal-card .modal-actions,
+  .signature-modal .modal-actions,
+  .signature-modal-actions{
+    margin-left:0;
+    margin-right:0;
+    padding-top:12px;
+  }
+}
+
+@media (max-width:380px){
+  .entry-card,
+  .delivery-card{padding-left:12px;padding-right:12px;}
+  .modal-card,
+  .signature-modal{border-radius:12px;}
+}
