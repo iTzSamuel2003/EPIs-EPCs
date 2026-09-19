@@ -83,7 +83,7 @@ export default function TestsPage() {
     return latest;
   }, [tests]);
 
-  const overviews = useMemo<TestOverview[]>(() => materials.filter((material) => material.test_required && (stockByMaterial[material.id] ?? 0) > 0).map((material) => ({
+  const overviews = useMemo<TestOverview[]>(() => materials.filter((material) => material.test_required).map((material) => ({
     material,
     latestTest: latestTestsByMaterial.get(material.id) ?? null,
     stockQuantity: stockByMaterial[material.id] ?? 0,
@@ -94,6 +94,7 @@ export default function TestsPage() {
     const days = daysUntil(test?.next_due_at ?? null);
     if (!test) return { label: "Pendente de ensaio", className: "warning", detail: "Registre o primeiro ensaio" };
     if (!test.next_due_at) return { label: "Validade pendente", className: "warning", detail: "Informe a data do próximo ensaio" };
+    if (test.result === "pending") return { label: "Resultado pendente", className: "warning", detail: "Conclua a avaliação do ensaio" };
     if (test.result === "failed") return { label: "Reprovado", className: "danger", detail: "Novo ensaio necessário" };
     if (days !== null && days < 0) return { label: "Vencido", className: "danger", detail: `Vencido há ${Math.abs(days)} dia(s)` };
     if (days !== null && days <= 30) return { label: "Próximo do vencimento", className: "warning", detail: `Em ${days} dia(s)` };
@@ -107,7 +108,7 @@ export default function TestsPage() {
     const text = `${overview.material.name} ${overview.material.internal_code} ${test?.certificate_number ?? ""} ${test?.art_number ?? ""}`.toLowerCase();
     const matchesQuery = text.includes(query.toLowerCase());
     const matchesFilter = filter === "all"
-      || (filter === "pending" && !test)
+      || (filter === "pending" && (!test || test.result === "pending"))
       || (filter === "overdue" && state.label === "Vencido")
       || (filter === "urgent" && days !== null && days >= 0 && days <= 30)
       || (filter === "approved" && (test?.result === "approved" || test?.result === "approved_with_restrictions"));
@@ -116,7 +117,7 @@ export default function TestsPage() {
 
   const counts = useMemo(() => ({
     total: overviews.length,
-    pending: overviews.filter((overview) => !overview.latestTest).length,
+    pending: overviews.filter((overview) => !overview.latestTest || overview.latestTest.result === "pending").length,
     overdue: overviews.filter((overview) => getOverviewState(overview).label === "Vencido").length,
     urgent: overviews.filter((overview) => { const days = daysUntil(overview.latestTest?.next_due_at ?? null); return days !== null && days >= 0 && days <= 30; }).length,
   }), [overviews]);

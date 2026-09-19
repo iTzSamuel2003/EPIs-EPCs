@@ -44,15 +44,17 @@ export function AppShell({ children }: { children: React.ReactNode }) {
     setMobileMenu(false);
   }, [pathname]);
   useEffect(() => {
+    let frame: number | undefined;
     if (mobileMenu) {
       menuWasOpen.current = true;
-      requestAnimationFrame(() => closeMenuRef.current?.focus());
-      return;
-    }
-    if (menuWasOpen.current) {
+      frame = requestAnimationFrame(() => closeMenuRef.current?.focus());
+    } else if (menuWasOpen.current) {
       menuWasOpen.current = false;
-      requestAnimationFrame(() => menuToggleRef.current?.focus());
+      frame = requestAnimationFrame(() => menuToggleRef.current?.focus());
     }
+    return () => {
+      if (frame !== undefined) cancelAnimationFrame(frame);
+    };
   }, [mobileMenu]);
   useEffect(() => {
     if (publicRoute) return;
