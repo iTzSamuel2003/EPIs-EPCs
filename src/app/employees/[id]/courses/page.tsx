@@ -15,7 +15,8 @@ const emptyCourse = { name: "", provider: "", completed_at: "", expires_at: "", 
 const acceptedCertificateTypes = ["application/pdf", "image/jpeg", "image/png", "image/webp"];
 function normalize(value: string) { return value.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase(); }
 function matchesGroup(functionName: string, group: string) { if (group === "Todos os grupos") return true; const text = normalize(functionName); return text.includes(normalize(group)) || (group === "Poda" && text.includes("pod")) || (group === "Operador de Guindauto" && (text.includes("munck") || text.includes("guindauto"))); }
-function hasValidCourse(courses: Course[], requirement: Requirement) { return courses.some((item) => normalize(item.name).includes(normalize(requirement.course_name.split(" - ")[0])) && (!item.expires_at || item.expires_at >= new Date().toISOString().slice(0, 10))); }
+function localDateKey(value = new Date()) { const year = value.getFullYear(); const month = String(value.getMonth() + 1).padStart(2, "0"); const day = String(value.getDate()).padStart(2, "0"); return `${year}-${month}-${day}`; }
+function hasValidCourse(courses: Course[], requirement: Requirement) { return courses.some((item) => normalize(item.name).includes(normalize(requirement.course_name.split(" - ")[0])) && (!item.expires_at || item.expires_at >= localDateKey())); }
 function formatDate(value: string | null) { return value ? new Date(`${value}T00:00:00`).toLocaleDateString("pt-BR") : "—"; }
 function safeFileName(value: string) { return value.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().replace(/[^a-z0-9._-]+/g, "-").replace(/^-|-$/g, ""); }
 
@@ -41,7 +42,7 @@ export default function EmployeeCoursesPage() {
   const pendingRequired = requiredCourses.filter((item) => !hasValidCourse(courses, item)).length;
   function selectCertificate(event: ChangeEvent<HTMLInputElement>) { const file = event.target.files?.[0] ?? null; event.target.value = ""; setError(""); if (file && !acceptedCertificateTypes.includes(file.type)) { setError("Anexe o certificado em PDF, JPG, PNG ou WEBP."); setCertificateFile(null); return; } if (file && file.size > 10 * 1024 * 1024) { setError("O certificado deve ter no máximo 10 MB."); setCertificateFile(null); return; } setCertificateFile(file); }
   async function addCourse(event: FormEvent) {
-    event.preventDefault(); if (!course.name.trim()) return; setSaving(true); setError(""); setSuccess("");
+    event.preventDefault(); if (!course.name.trim()) return; if (course.completed_at && course.expires_at && course.expires_at < course.completed_at) { setError("A validade não pode ser anterior à data de conclusão."); return; } setSaving(true); setError(""); setSuccess("");
     const supabase = createClient(); const { data: auth, error: authError } = await supabase.auth.getUser(); if (authError) { setError(friendlyError(authError, "Não foi possível concluir a operação.")); setSaving(false); return; } if (!auth.user) { setError("Sua sessão expirou. Entre novamente."); setSaving(false); return; }
     const { data: profile, error: profileError } = await supabase.from("profiles").select("organization_id").eq("id", auth.user.id).single(); if (profileError) { setError(friendlyError(profileError, "Não foi possível concluir a operação.")); setSaving(false); return; } if (!profile?.organization_id) { setError("Não foi possível identificar a organização do usuário."); setSaving(false); return; }
     let uploadedPath = "";
