@@ -581,6 +581,25 @@ body{overflow-wrap:normal}
   .delivery-items-header .primary-button,.delivery-items-header .secondary-button{width:100%;justify-content:center}
 }
 
+/* Public screens: keep content reachable with mobile browser chrome and long values. */
+.login-shell,.employee-portal,.public-measurements{min-height:100svh;min-height:100dvh;padding-bottom:max(24px,env(safe-area-inset-bottom));}
+.login-card,.employee-portal-card,.public-measurement-card{min-width:0;}
+.portal-material-list>div,.portal-course-list>div,.portal-request-list>div{min-width:0;}
+.portal-material-list>div>div,.portal-course-list>div>div,.portal-request-list>div>div{min-width:0;}
+.portal-material-list strong,.portal-material-list span,.portal-course-list strong,.portal-course-list span,.portal-request-list strong,.portal-request-list span{overflow-wrap:anywhere;}
+
+@media (max-width:600px){
+  .login-shell,.employee-portal,.public-measurements{padding-left:max(14px,env(safe-area-inset-left));padding-right:max(14px,env(safe-area-inset-right));}
+  .portal-material-list>div,.portal-course-list>div,.portal-request-list>div{align-items:flex-start;flex-wrap:wrap;}
+  .portal-material-list>div>div,.portal-course-list>div>div,.portal-request-list>div>div{flex:1 1 180px;}
+  .portal-material-list .status-pill,.portal-course-list .status-pill,.portal-request-list .status-pill{margin-left:auto;}
+}
+
+@media (max-height:720px) and (max-width:760px){
+  .login-shell,.employee-portal,.public-measurements{place-items:start center;overflow-y:auto;padding-top:24px;}
+  .login-shell{padding-top:72px;}
+}
+
 @media (max-width:380px){
   .login-card{padding:22px 16px}
   .brand strong{font-size:17px}
