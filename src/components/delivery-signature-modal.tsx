@@ -47,7 +47,7 @@ export function DeliverySignatureModal({ deliveryId, employeeName, employeeCpf, 
   function close() { if (saving) return; setOpen(false); setError(""); clearSignature(); setCpf(""); setAccepted(false); }
 
   async function submit() {
-    if (digits(cpf) !== digits(employeeCpf)) { setError("O CPF informado não corresponde ao cadastro do colaborador."); return; }
+    if (!digits(employeeCpf) || digits(cpf) !== digits(employeeCpf)) { setError("Informe o CPF cadastrado do colaborador para confirmar a assinatura."); return; }
     if (!hasSignature) { setError("Faça a assinatura no campo indicado."); return; }
     if (!accepted) { setError("Confirme que o colaborador leu e concorda com o termo."); return; }
     setSaving(true); setError("");
