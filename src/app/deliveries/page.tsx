@@ -46,9 +46,10 @@ export default function DeliveriesPage() {
       }, {}));
     }
     void loadVariantStock();
-    const refresh = () => void loadVariantStock();
-    window.addEventListener("delivery-created", refresh);
-    return () => window.removeEventListener("delivery-created", refresh);
+    const refresh = () => { void loadVariantStock(); void loadOptions(); };
+    const events = ["delivery-created", "return-created", "stock-entry-created", "stock-entry-updated", "stock-entry-deleted"];
+    events.forEach((eventName) => window.addEventListener(eventName, refresh));
+    return () => events.forEach((eventName) => window.removeEventListener(eventName, refresh));
   }, []);
   useEffect(() => { if (materialSuggestionsOpen !== null && items[materialSuggestionsOpen]?.material_id) setMaterialSuggestionsOpen(null); }, [items, materialSuggestionsOpen]);
   const normalizedEmployeeQuery = normalize(employeeQuery);
@@ -65,7 +66,7 @@ export default function DeliveriesPage() {
   function updateItem(index: number, field: keyof DeliveryItem, value: string) { setItems((current) => current.map((item, itemIndex) => { if (itemIndex !== index) return item; const next = { ...item, [field]: value }; if (field === "variant_id" && value) { const variantStock = variantAvailable[value] ?? 0; next.quantity = variantStock > 0 ? String(Math.min(Math.max(Number(item.quantity) || 1, 1), variantStock)) : item.quantity; } return next; })); }
   const requestedByStockKey = items.reduce<Record<string, number>>((sum, item) => { const key = item.variant_id || item.material_id; const quantity = Number(item.quantity); if (key) sum[key] = (sum[key] ?? 0) + (Number.isFinite(quantity) ? quantity : 0); return sum; }, {});
   const hasInsufficientStock = items.some((item) => { const available = availableFor(item); const requested = requestedByStockKey[item.variant_id || item.material_id] ?? Number(item.quantity); return !item.material_id || !Number.isInteger(Number(item.quantity)) || available <= 0 || requested <= 0 || requested > available; });
-  const hasMissingRequiredVariant = items.some((item) => variantsFor(item.material_id).length > 0 && !item.variant_id); const hasMissingTestValidity = items.some((item) => { const material = materials.find((candidate) => candidate.id === item.material_id); return Boolean(material?.test_required && (!isValidDateValue(item.test_performed_at) || !isValidDateValue(item.test_expires_at) || item.test_expires_at < item.test_performed_at)); });
+  const hasMissingRequiredVariant = items.some((item) => variantsFor(item.material_id).length > 0 && !item.variant_id); const hasMissingTestValidity = items.some((item) => { const material = materials.find((candidate) => candidate.id === item.material_id); return Boolean(material?.test_required && (!isValidDateValue(item.test_performed_at) || !isValidDateValue(item.test_expires_at) || item.test_expires_at < item.test_performed_at || item.test_expires_at < deliveredAt)); });
   async function submit(event: FormEvent) {
     event.preventDefault();
     if (saving) return;

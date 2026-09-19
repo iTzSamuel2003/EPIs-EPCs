@@ -1,6 +1,6 @@
 "use client";
 
-import { ChangeEvent, FormEvent, useEffect, useState } from "react";
+import { ChangeEvent, FormEvent, useEffect, useRef, useState } from "react";
 import { ArrowLeft, ClipboardList, FileImage, Plus, Trash2 } from "lucide-react";
 import Link from "next/link";
 import { RecentStockEntries } from "@/components/recent-stock-entries";
@@ -13,6 +13,7 @@ type MaterialVariant = { id: string; material_id: string; name: string; size: st
 type EntryItem = { material_id: string; materialQuery: string; variant_id: string; quantity: string; unit_cost: string; manufactured_at: string; expires_at: string; test_performed_at: string; test_expires_at: string };
 const newItem = (): EntryItem => ({ material_id: "", materialQuery: "", variant_id: "", quantity: "1", unit_cost: "0", manufactured_at: "", expires_at: "", test_performed_at: "", test_expires_at: "" });
 const localDateValue = (value = new Date()) => `${value.getFullYear()}-${String(value.getMonth() + 1).padStart(2, "0")}-${String(value.getDate()).padStart(2, "0")}`;
+function isValidDateValue(value: string) { if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) return false; const [year, month, day] = value.split("-").map(Number); const date = new Date(year, month - 1, day); return date.getFullYear() === year && date.getMonth() === month - 1 && date.getDate() === day; }
 
 export default function EntriesPage() {
   const [materials, setMaterials] = useState<MaterialOption[]>([]);
@@ -29,8 +30,10 @@ export default function EntriesPage() {
   const [success, setSuccess] = useState("");
   const [canRetryMaterials, setCanRetryMaterials] = useState(false);
   const [entriesRefreshKey, setEntriesRefreshKey] = useState(0);
+  const loadRequestRef = useRef(0);
 
   async function loadMaterials() {
+    const requestId = ++loadRequestRef.current;
     setLoading(true);
     setError("");
     setCanRetryMaterials(false);
@@ -39,6 +42,7 @@ export default function EntriesPage() {
       supabase.from("materials").select("id, name, internal_code, unit, test_required").eq("status", "active").order("name"),
       supabase.from("material_variants").select("id, material_id, name, size, active").eq("active", true).order("size"),
     ]);
+    if (requestId !== loadRequestRef.current) return;
     if (loadError || variantError) { setError(friendlyError(loadError ?? variantError, "Não foi possível carregar os materiais.")); setCanRetryMaterials(true); }
     else { setMaterials((data ?? []) as MaterialOption[]); setVariants((variantData ?? []) as MaterialVariant[]); }
     setLoading(false);
@@ -67,6 +71,7 @@ export default function EntriesPage() {
 
   function chooseFile(event: ChangeEvent<HTMLInputElement>) {
     const file = event.target.files?.[0] ?? null;
+    event.target.value = "";
     setError("");
     if (file && !["application/pdf", "image/jpeg", "image/png", "image/webp"].includes(file.type)) { setError("Anexe a nota em PDF, JPG, PNG ou WEBP."); setInvoiceFile(null); return; }
     if (file && file.size > 10 * 1024 * 1024) { setError("A nota fiscal deve ter no máximo 10 MB."); setInvoiceFile(null); return; }
@@ -75,6 +80,7 @@ export default function EntriesPage() {
 
   async function submit(event: FormEvent) {
     event.preventDefault(); setError(""); setSuccess(""); setCanRetryMaterials(false);
+    if (!isValidDateValue(entryDate)) { setError("Informe uma data de entrada válida."); return; }
     const hasInvalidItem = items.some((item) => {
       const material = materials.find((candidate) => candidate.id === item.material_id);
       const quantity = Number(item.quantity);
