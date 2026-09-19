@@ -754,14 +754,6 @@ body{overflow-wrap:normal}
   min-height:0;
 }
 
-.modal-card .modal-actions,
-.signature-modal .modal-actions{
-  margin-top:4px;
-  padding-top:14px;
-  border-top:1px solid #edf0f5;
-  background:linear-gradient(to bottom,rgba(255,255,255,.94),#fff 24%);
-}
-
 .modal-card .material-form label,
 .signature-modal form label{
   min-width:0;
@@ -978,9 +970,11 @@ body{overflow-wrap:normal}
   position:sticky;
   bottom:-1px;
   z-index:3;
+  margin-top:4px;
   margin-left:-2px;
   margin-right:-2px;
   padding:14px 2px 2px;
+  border-top:1px solid #edf0f5;
   background:linear-gradient(to bottom,rgba(255,255,255,0),#fff 22%);
 }
 
@@ -1003,7 +997,7 @@ body{overflow-wrap:normal}
 }
 
 @media (max-width:600px){
-  .module-table-card .table-wrap{overflow-x:hidden;}
+  .module-table-card .table-wrap{overflow-x:auto;}
   .module-table-card .table-wrap::after{display:none;}
   .module-table-card .table-wrap table{
     width:100%;
@@ -1047,4 +1041,33 @@ body{overflow-wrap:normal}
   .delivery-card{padding-left:12px;padding-right:12px;}
   .modal-card,
   .signature-modal{border-radius:12px;}
+}
+
+.module-table-card table.stock-table{min-width:1600px;}
+
+@media (max-width:1024px) and (min-width:761px){
+  .topbar,.page-content,.module-shell{padding-left:22px;padding-right:22px;}
+  .top-actions,.global-search,.search,.profile{min-width:0;}
+  .top-actions{flex:1;}
+  .search{max-width:100%;}
+}
+
+@media (max-width:600px){
+  .material-form input,
+  .material-form select,
+  .material-form textarea,
+  .delivery-item-row input,
+  .delivery-item-row select,
+  .entry-item-row input,
+  .entry-item-row select{min-height:44px;}
+  .module-table-card .table-wrap table{width:100%;}
+  .module-table-card .table-wrap td,
+  .module-table-card .table-wrap th{max-width:100%;}
+}
+
+@media (max-width:380px){
+  .module-summary{grid-template-columns:minmax(0,1fr);}
+  .module-toolbar,.module-table-card,.entry-card,.delivery-card{padding-left:12px;padding-right:12px;}
+  .modal-card,.signature-modal{padding-left:12px;padding-right:12px;}
+  .modal-card .modal-header,.signature-modal .modal-header{gap:8px;}
 }
