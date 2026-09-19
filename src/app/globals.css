@@ -408,7 +408,6 @@ button:disabled{cursor:not-allowed}
   .signature-modal{padding:18px 14px}
 }
 
-/* Dashboard: mantém leitura estável em larguras intermediárias e no celular. */
 .metrics-grid .metric-card,
 .metrics-grid .metric-copy,
 .dashboard-grid .panel,

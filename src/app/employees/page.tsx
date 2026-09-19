@@ -15,6 +15,7 @@ const emptyForm: EmployeeForm = { registration: "", full_name: "", cpf: "", carg
 const statusLabels = { active: ["Ativo", "success"], away: ["Afastado", "warning"], terminated: ["Desligado", "danger"] } as const;
 const functionLabel = (value: string) => value.replace(/\s+(VI|V|IV|III|II|I)$/i, "");
 const classificationOptions = ["I", "II", "III", "IV", "V", "VI"];
+function normalizeSearch(value: string) { return value.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().trim(); }
 
 export default function EmployeesPage() {
   const router = useRouter();
@@ -45,7 +46,8 @@ export default function EmployeesPage() {
 
   useEffect(() => { void Promise.resolve().then(() => loadEmployees()); }, []);
 
-  const filtered = employees.filter((employee) => `${employee.full_name} ${employee.registration ?? ""} ${employee.cpf} ${employee.department ?? ""} ${employee.function_name ?? ""} ${employee.function_classification ?? ""}`.toLowerCase().includes(query.toLowerCase()) && (statusFilter === "all" || employee.status === statusFilter));
+  const normalizedQuery = normalizeSearch(query);
+  const filtered = employees.filter((employee) => normalizeSearch(`${employee.full_name} ${employee.registration ?? ""} ${employee.cpf} ${employee.department ?? ""} ${employee.function_name ?? ""} ${employee.function_classification ?? ""}`).includes(normalizedQuery) && (statusFilter === "all" || employee.status === statusFilter));
   const pageSize = 40;
   const pageCount = Math.max(1, Math.ceil(filtered.length / pageSize));
   const paginatedEmployees = filtered.slice((page - 1) * pageSize, page * pageSize);
