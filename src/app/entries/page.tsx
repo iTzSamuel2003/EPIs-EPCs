@@ -37,15 +37,20 @@ export default function EntriesPage() {
     setLoading(true);
     setError("");
     setCanRetryMaterials(false);
-    const supabase = createClient();
-    const [{ data, error: loadError }, { data: variantData, error: variantError }] = await Promise.all([
-      supabase.from("materials").select("id, name, internal_code, unit, test_required").eq("status", "active").order("name"),
-      supabase.from("material_variants").select("id, material_id, name, size, active").eq("active", true).order("size"),
-    ]);
-    if (requestId !== loadRequestRef.current) return;
-    if (loadError || variantError) { setError(friendlyError(loadError ?? variantError, "Não foi possível carregar os materiais.")); setCanRetryMaterials(true); }
-    else { setMaterials((data ?? []) as MaterialOption[]); setVariants((variantData ?? []) as MaterialVariant[]); }
-    setLoading(false);
+    try {
+      const supabase = createClient();
+      const [{ data, error: loadError }, { data: variantData, error: variantError }] = await Promise.all([
+        supabase.from("materials").select("id, name, internal_code, unit, test_required").eq("status", "active").order("name"),
+        supabase.from("material_variants").select("id, material_id, name, size, active").eq("active", true).order("size"),
+      ]);
+      if (requestId !== loadRequestRef.current) return;
+      if (loadError || variantError) { setError(friendlyError(loadError ?? variantError, "Não foi possível carregar os materiais.")); setCanRetryMaterials(true); }
+      else { setMaterials((data ?? []) as MaterialOption[]); setVariants((variantData ?? []) as MaterialVariant[]); }
+    } catch (caught) {
+      if (requestId === loadRequestRef.current) { setError(friendlyError(caught, "Não foi possível carregar os materiais.")); setCanRetryMaterials(true); }
+    } finally {
+      if (requestId === loadRequestRef.current) setLoading(false);
+    }
   }
 
   useEffect(() => { void Promise.resolve().then(() => loadMaterials()); }, []);
