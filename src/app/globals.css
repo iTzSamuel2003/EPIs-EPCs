@@ -473,3 +473,73 @@ button:disabled{cursor:not-allowed}
   .recent-deliveries td:nth-child(6)::before{content:"Status"}
   .dashboard-delivery-materials{min-width:0}
 }
+
+.stock-variations{display:grid;gap:7px;margin-top:8px;padding-top:7px;border-top:1px solid #edf0f5}
+.stock-variations summary{color:#6954c9;font-size:10px;font-weight:700;cursor:pointer;line-height:1.35}
+.stock-variations>div{display:grid;gap:6px;padding-top:2px}
+.stock-variations span{display:grid;gap:2px;padding:6px 7px;background:#fafbfe;border-radius:6px}
+.stock-variations span strong{font-size:10px;line-height:1.35}
+.stock-variations span small{margin-top:0;font-size:9px;line-height:1.35}
+
+@media (min-width:761px) and (max-width:1024px){
+  .materials-page .module-table-card .table-wrap{overflow-x:visible}
+  .materials-page .module-table-card table{width:100%;table-layout:fixed}
+  .materials-page .module-table-card th,.materials-page .module-table-card td{padding:9px 6px;white-space:normal;overflow-wrap:anywhere;word-break:break-word}
+  .materials-page .module-table-card th:nth-child(1),.materials-page .module-table-card td:nth-child(1){width:29%}
+  .materials-page .module-table-card th:nth-child(2),.materials-page .module-table-card td:nth-child(2){width:11%}
+  .materials-page .module-table-card th:nth-child(3),.materials-page .module-table-card td:nth-child(3){width:14%}
+  .materials-page .module-table-card th:nth-child(4),.materials-page .module-table-card td:nth-child(4){width:12%}
+  .materials-page .module-table-card th:nth-child(5),.materials-page .module-table-card td:nth-child(5){width:14%}
+  .materials-page .module-table-card th:nth-child(6),.materials-page .module-table-card td:nth-child(6){width:11%}
+  .materials-page .module-table-card th:nth-child(7),.materials-page .module-table-card td:nth-child(7){width:9%}
+  .materials-page .material-cell{min-width:0;max-width:none;align-items:flex-start;gap:7px}
+  .materials-page .material-cell strong{font-size:10px}
+  .materials-page .material-type-icon{width:28px;height:28px;flex:0 0 auto}
+  .materials-page .action-button{padding:7px 6px;font-size:9px}
+}
+
+@media (max-width:760px) and (min-width:601px){
+  .materials-page .module-table-card .table-wrap{overflow:visible;margin-right:0;padding-bottom:0}
+  .materials-page .module-table-card .table-wrap::after{display:none}
+  .materials-page .module-table-card table{display:block;min-width:0;width:100%;white-space:normal}
+  .materials-page .module-table-card thead{display:none}
+  .materials-page .module-table-card tbody{display:grid;gap:10px}
+  .materials-page .module-table-card tr{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:8px 12px;padding:12px;border:1px solid #edf0f5;border-radius:10px;background:#fafbfe}
+  .materials-page .module-table-card td{display:grid;gap:4px;min-width:0;padding:0;border:0;overflow-wrap:anywhere;white-space:normal}
+  .materials-page .module-table-card td::before{color:#a1aaba;font-size:9px;font-weight:700;letter-spacing:.5px}
+  .materials-page .module-table-card td:nth-child(1),.materials-page .module-table-card td:nth-child(7){grid-column:1 / -1}
+  .materials-page .module-table-card td:nth-child(1)::before{content:"Material"}
+  .materials-page .module-table-card td:nth-child(2)::before{content:"Tipo"}
+  .materials-page .module-table-card td:nth-child(3)::before{content:"CA"}
+  .materials-page .module-table-card td:nth-child(4)::before{content:"Estoque"}
+  .materials-page .module-table-card td:nth-child(5)::before{content:"Localiza\00e7\00e3o"}
+  .materials-page .module-table-card td:nth-child(6)::before{content:"Situa\00e7\00e3o"}
+  .materials-page .module-table-card td:nth-child(7)::before{content:"A\00e7\00f5es"}
+  .materials-page .module-table-card td:nth-child(7) .action-button{width:max-content}
+  .materials-page .material-cell{min-width:0;max-width:none}
+}
+
+@media (max-width:1024px) and (min-width:601px){
+  main.module-shell:has(.stock-table) .module-table-card .table-wrap{overflow:visible;margin-right:0;padding-bottom:0}
+  main.module-shell:has(.stock-table) .module-table-card .table-wrap::after{display:none}
+  main.module-shell:has(.stock-table) .stock-table{display:block!important;min-width:0!important;width:100%!important;table-layout:auto;white-space:normal!important}
+  main.module-shell:has(.stock-table) .stock-table thead{display:none}
+  main.module-shell:has(.stock-table) .stock-table tbody{display:grid;gap:10px}
+  main.module-shell:has(.stock-table) .stock-table tr{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:8px 12px;padding:12px;border:1px solid #edf0f5;border-radius:10px;background:#fafbfe}
+  main.module-shell:has(.stock-table) .stock-table td{display:grid!important;grid-column:auto!important;gap:4px;min-width:0!important;padding:0!important;border:0!important;overflow-wrap:anywhere;white-space:normal}
+  main.module-shell:has(.stock-table) .stock-table td::before{color:#a1aaba;font-size:9px;font-weight:700;letter-spacing:.5px}
+  main.module-shell:has(.stock-table) .stock-table td:nth-child(1){grid-column:1 / -1!important}
+  main.module-shell:has(.stock-table) .stock-table td:nth-child(1)::before{content:"Material"}
+  main.module-shell:has(.stock-table) .stock-table td:nth-child(2)::before{content:"Tipo"}
+  main.module-shell:has(.stock-table) .stock-table td:nth-child(3)::before{content:"Situa\00e7\00e3o"}
+  main.module-shell:has(.stock-table) .stock-table td:nth-child(4)::before{content:"Total recebido"}
+  main.module-shell:has(.stock-table) .stock-table td:nth-child(5)::before{content:"Dispon\00edvel"}
+  main.module-shell:has(.stock-table) .stock-table td:nth-child(6)::before{content:"Em uso / entregue"}
+  main.module-shell:has(.stock-table) .stock-table td:nth-child(7)::before{content:"Custo unit\00e1rio"}
+  main.module-shell:has(.stock-table) .stock-table td:nth-child(8)::before{content:"Valor dispon\00edvel"}
+  main.module-shell:has(.stock-table) .stock-table td:nth-child(9)::before{content:"Valor total"}
+  main.module-shell:has(.stock-table) .stock-table td:nth-child(10)::before{content:"Estoque m\00ednimo"}
+  main.module-shell:has(.stock-table) .stock-table td:nth-child(11)::before{content:"Localiza\00e7\00e3o"}
+  main.module-shell:has(.stock-table) .stock-table .material-cell{min-width:0;max-width:none;align-items:flex-start}
+  main.module-shell:has(.stock-table) .stock-table .material-cell strong{overflow-wrap:anywhere}
+}

@@ -140,7 +140,7 @@ export default function MaterialsPage() {
     setSaving(false);
   }
 
-  return <main className="module-shell">
+  return <main className="module-shell materials-page">
     <header className="module-header"><div><p className="eyebrow">CADASTRO E CONTROLE</p><h1>Materiais</h1><p className="module-subtitle">Gerencie EPIs, EPCs e ferramentais, certificados e níveis mínimos de estoque.</p></div><button type="button" className="primary-button" onClick={openNew}><Plus size={17} /> Novo material</button></header>
     {success && <div className="feedback success-feedback" role="status"><Check size={17} /> {success}</div>}
     {error && !showForm && <FeedbackMessage onRetry={() => void loadMaterials()}>{error}</FeedbackMessage>}
