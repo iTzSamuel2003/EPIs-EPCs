@@ -992,8 +992,16 @@ body{overflow-wrap:normal}
   .entry-intro{align-items:flex-start;padding-bottom:18px;margin-bottom:18px;}
   .delivery-items-header{align-items:flex-start;flex-wrap:wrap;}
   .delivery-items-header>div{min-width:0;flex:1 1 100%;}
-  .delivery-items-header>button{min-width:0;max-width:100%;white-space:normal;}
+  .delivery-items-header>button{flex:1 1 100%;width:100%;min-width:0;max-width:100%;white-space:normal;justify-content:center;}
   .form-grid.four{grid-template-columns:repeat(2,minmax(0,1fr));}
+}
+
+@media (max-width:600px){
+  .module-toolbar .check-filter{display:flex;align-items:center;gap:7px;width:auto;min-height:42px;padding:5px 2px;white-space:nowrap;}
+  .module-toolbar .check-filter input{width:16px;min-width:16px;height:16px;flex:0 0 16px;margin:0;}
+  .recent-entries-card .table-wrap{overflow-x:auto;}
+  .recent-entries-card .table-wrap table{min-width:680px;width:max-content;white-space:normal;}
+  .recent-entries-card .table-wrap th{white-space:nowrap;overflow-wrap:normal;}
 }
 
 @media (max-width:600px){
