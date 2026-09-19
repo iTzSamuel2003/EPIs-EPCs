@@ -56,8 +56,9 @@ export function RecentDeliveries() {
       uploadedPath = path; const uploadedAt = new Date().toISOString();
       const { data: updatedDelivery, error: updateError } = await supabase.from("deliveries").update({ term_file_path: path, term_uploaded_at: uploadedAt, term_uploaded_by: auth.user.id, term_signature_method: "physical_upload", term_signed_at: uploadedAt, term_signer_name: delivery.employee?.full_name || null, term_signer_cpf: delivery.employee?.cpf || null }).eq("id", delivery.id).select("id").maybeSingle();
       if (updateError || !updatedDelivery) { setError(friendlyError(updateError, "Não foi possível atualizar o termo.")); return; }
+      uploadedPath = null;
       const previousAttachmentError = delivery.term_file_path ? (await supabase.storage.from("delivery-terms").remove([delivery.term_file_path])).error : null;
-      setDeliveries((current) => current.map((item) => item.id === delivery.id ? { ...item, term_file_path: path, term_uploaded_at: uploadedAt, term_signature_method: "physical_upload" } : item)); uploadedPath = null;
+      setDeliveries((current) => current.map((item) => item.id === delivery.id ? { ...item, term_file_path: path, term_uploaded_at: uploadedAt, term_signature_method: "physical_upload" } : item));
       if (previousAttachmentError) setError("O termo foi atualizado, mas o anexo anterior não pôde ser removido.");
     } catch (caughtError) { setError(friendlyError(caughtError, "Não foi possível anexar o termo.")); }
     finally { if (uploadedPath && supabase) await supabase.storage.from("delivery-terms").remove([uploadedPath]); uploadingRef.current = ""; setUploadingId(""); }

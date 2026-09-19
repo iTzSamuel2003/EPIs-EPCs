@@ -31,6 +31,7 @@ export function RecentStockEntries({ refreshKey = 0 }: Props) {
     setLoading(true);
     setError("");
     setEntries([]);
+    try {
     const supabase = createClient();
     const { data: invoiceData, error: invoiceError } = await supabase.from("stock_invoices").select("id,invoice_number,without_invoice,issued_at,notes").order("created_at", { ascending: false }).limit(10);
     if (invoiceError) { setError(friendlyError(invoiceError, "Não foi possível carregar as entradas.")); setLoading(false); return; }
@@ -41,6 +42,11 @@ export function RecentStockEntries({ refreshKey = 0 }: Props) {
     const lots = (lotData ?? []) as unknown as Array<{ id: string; invoice_id: string; lot_number: string; received_quantity: number; available_quantity: number; unit_cost: number; manufactured_at: string | null; expires_at: string | null; materials: { name: string; internal_code: string; unit: string } | null }>;
     setEntries(invoices.map((invoice) => ({ id: invoice.id, invoice_number: invoice.invoice_number, without_invoice: invoice.without_invoice, issued_at: invoice.issued_at, notes: invoice.notes, items: lots.filter((lot) => lot.invoice_id === invoice.id).map((lot) => ({ lot_id: lot.id, lot_number: lot.lot_number, material_name: lot.materials?.name ?? "Material", material_code: lot.materials?.internal_code || "Código não informado", unit: lot.materials?.unit ?? "un.", quantity: String(lot.received_quantity), available: lot.available_quantity, unit_cost: String(lot.unit_cost ?? 0), manufactured_at: lot.manufactured_at ?? "", expires_at: lot.expires_at ?? "" })) })));
     setLoading(false);
+    } catch (caughtError) {
+      setError(friendlyError(caughtError, "Não foi possível carregar as entradas."));
+    } finally {
+      setLoading(false);
+    }
   }
   useEffect(() => { void load(); }, [refreshKey, retryKey]);
   useEffect(() => { if (!success) return; const timer = window.setTimeout(() => setSuccess(""), 4500); return () => window.clearTimeout(timer); }, [success]);

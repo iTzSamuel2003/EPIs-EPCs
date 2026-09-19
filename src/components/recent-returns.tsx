@@ -84,9 +84,9 @@ export function RecentReturns() {
       uploadedPath = path; const uploadedAt = new Date().toISOString();
       const { data: updatedReturn, error: updateError } = await supabase.from("returns").update({ term_file_path: path, term_uploaded_at: uploadedAt, term_uploaded_by: auth.user.id, term_signature_method: "physical_upload", term_signed_at: uploadedAt, term_signer_name: item.employee?.full_name || null, term_signer_cpf: item.employee?.cpf || null }).eq("id", item.id).select("id").maybeSingle();
       if (updateError || !updatedReturn) { setError(friendlyError(updateError, "Não foi possível atualizar o termo.")); return; }
+      uploadedPath = null;
       const previousAttachmentError = item.term_file_path ? (await supabase.storage.from("delivery-terms").remove([item.term_file_path])).error : null;
       setReturns((current) => current.map((currentItem): ReturnRecord => currentItem.id === item.id ? { ...currentItem, term_file_path: path, term_uploaded_at: uploadedAt, term_signature_method: "physical_upload", term_signed_at: uploadedAt } as ReturnRecord : currentItem));
-      uploadedPath = null;
       if (previousAttachmentError) setError("O termo foi atualizado, mas o anexo anterior não pôde ser removido.");
     } catch (caughtError) { setError(friendlyError(caughtError, "Não foi possível anexar o termo.")); }
     finally { if (uploadedPath && supabase) await supabase.storage.from("delivery-terms").remove([uploadedPath]); uploadingRef.current = ""; setUploadingId(""); }

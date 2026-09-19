@@ -722,6 +722,187 @@ body{overflow-wrap:normal}
   .pagination-controls .secondary-button{width:100%;justify-content:center;}
 }
 
+.modal-card,
+.signature-modal{
+  min-width:0;
+  display:flex;
+  flex-direction:column;
+}
+
+.modal-card .modal-header,
+.signature-modal .modal-header{
+  gap:12px;
+}
+
+.modal-card .modal-header > div,
+.signature-modal .modal-header > div,
+.modal-card .material-form,
+.signature-modal form,
+.modal-card .form-grid,
+.signature-modal .form-grid{
+  min-width:0;
+}
+
+.modal-card .modal-header h2,
+.signature-modal .modal-header h2{
+  overflow-wrap:anywhere;
+  line-height:1.25;
+}
+
+.modal-card .material-form,
+.signature-modal form{
+  min-height:0;
+}
+
+.modal-card .modal-actions,
+.signature-modal .modal-actions{
+  margin-top:4px;
+  padding-top:14px;
+  border-top:1px solid #edf0f5;
+  background:linear-gradient(to bottom,rgba(255,255,255,.94),#fff 24%);
+}
+
+.modal-card .material-form label,
+.signature-modal form label{
+  min-width:0;
+}
+
+.modal-card .material-form input,
+.modal-card .material-form select,
+.modal-card .material-form textarea,
+.signature-modal form input,
+.signature-modal form select,
+.signature-modal form textarea{
+  max-width:100%;
+}
+
+.module-table-card .table-wrap{
+  -webkit-overflow-scrolling:touch;
+  scrollbar-gutter:stable both-edges;
+}
+
+.module-table-card table{
+  min-width:0;
+}
+
+.module-table-card td,
+.module-table-card th{
+  line-height:1.4;
+}
+
+.module-table-card td > strong,
+.module-table-card td > small,
+.module-table-card td > .status-pill,
+.module-table-card td > .action-button{
+  max-width:100%;
+}
+
+.employee-required-courses,
+.employee-required-courses .required-course-list,
+.employee-required-courses .required-course-item,
+.employee-required-courses .required-course-copy{
+  min-width:0;
+}
+
+.employee-required-courses .required-course-item{
+  align-items:flex-start;
+}
+
+.employee-required-courses .required-course-copy strong,
+.employee-required-courses .required-course-copy small{
+  overflow-wrap:anywhere;
+}
+
+@media (max-width:1100px) and (min-width:761px){
+  .modal-card .form-grid.three,
+  .signature-modal .form-grid.three,
+  .material-edit-modal .form-grid.three{
+    grid-template-columns:repeat(2,minmax(0,1fr));
+  }
+
+  .modal-card .form-grid,
+  .signature-modal .form-grid{
+    gap:11px;
+  }
+
+  .module-table-card .table-wrap:has(table .material-cell){
+    overflow-x:auto;
+  }
+
+  .module-table-card .table-wrap:has(table .material-cell) table{
+    min-width:760px;
+  }
+}
+
+@media (max-width:760px){
+  .modal-backdrop,
+  .signature-modal-backdrop{
+    min-height:100dvh;
+    padding-top:max(12px,env(safe-area-inset-top));
+    padding-bottom:max(12px,env(safe-area-inset-bottom));
+  }
+
+  .modal-card,
+  .signature-modal{
+    width:min(100%,730px);
+    max-height:calc(100dvh - 24px - env(safe-area-inset-top) - env(safe-area-inset-bottom));
+  }
+
+  .modal-card .modal-actions,
+  .signature-modal .modal-actions,
+  .signature-modal-actions{
+    flex-direction:column-reverse;
+    gap:8px;
+  }
+
+  .modal-card .modal-actions > button,
+  .signature-modal .modal-actions > button,
+  .signature-modal-actions > button{
+    width:100%;
+    justify-content:center;
+  }
+
+  .modal-card .form-grid.three,
+  .modal-card .form-grid.two,
+  .signature-modal .form-grid.three,
+  .signature-modal .form-grid.two{
+    grid-template-columns:minmax(0,1fr);
+  }
+
+  .employee-required-courses .required-course-item{
+    display:grid;
+    grid-template-columns:auto minmax(0,1fr);
+    gap:9px 10px;
+  }
+
+  .employee-required-courses .required-course-item .status-pill{
+    grid-column:2;
+    justify-self:start;
+  }
+
+  .module-table-card .table-wrap:has(table .material-cell){
+    margin-right:0;
+  }
+}
+
+@media (max-width:420px){
+  .modal-card,
+  .signature-modal{
+    padding-left:14px;
+    padding-right:14px;
+  }
+
+  .modal-card .modal-header h2,
+  .signature-modal .modal-header h2{
+    font-size:18px;
+  }
+
+  .module-table-card td,
+  .module-table-card th{
+    line-height:1.35;
+  }
+}
+
 @media (max-width:1024px) and (min-width:601px){
   .module-toolbar{align-items:stretch;row-gap:9px;}
   .module-toolbar .module-search{flex:1 1 100%;min-width:0;}
