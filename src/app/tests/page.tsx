@@ -72,6 +72,7 @@ export default function TestsPage() {
   }
 
   useEffect(() => { void Promise.resolve().then(() => loadData()); }, [retryKey]);
+  useEffect(() => { if (!success) return; const timer = window.setTimeout(() => setSuccess(""), 4500); return () => window.clearTimeout(timer); }, [success]);
 
   function retryLoad() { setRetryKey((current) => current + 1); }
 
