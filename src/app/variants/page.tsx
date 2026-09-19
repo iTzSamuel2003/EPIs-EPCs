@@ -10,8 +10,23 @@ type Material = { id: string; name: string; internal_code: string; unit: string 
 type Variant = { id: string; material_id: string; name: string; size: string | null; color: string | null; model: string | null; sku: string | null; unit_cost: number; active: boolean };
 const empty = { material_id: "", name: "", size: "", color: "", model: "", sku: "", unit_cost: "0" };
 export default function VariantsPage() { const [confirmingVariantId, setConfirmingVariantId] = useState<string | null>(null); const [materials, setMaterials] = useState<Material[]>([]); const [variants, setVariants] = useState<Variant[]>([]); const [form, setForm] = useState(empty); const [loading, setLoading] = useState(true); const [retryKey, setRetryKey] = useState(0); const [error, setError] = useState(""); const [success, setSuccess] = useState("");
-  async function load() { setLoading(true); setError(""); setMaterials([]); setVariants([]); const supabase = createClient(); const [{ data: materialData, error: materialError }, { data: variantData, error: variantError }] = await Promise.all([supabase.from("materials").select("id,name,internal_code,unit").eq("status", "active").order("name"), supabase.from("material_variants").select("id,material_id,name,size,color,model,sku,unit_cost,active,materials(name,internal_code)").eq("active", true).order("created_at", { ascending: false })]); if (materialError || variantError) setError(friendlyError(materialError ?? variantError, "Não foi possível carregar as variações.")); else { setMaterials((materialData ?? []) as Material[]); setVariants((variantData ?? []) as Variant[]); } }
-  useEffect(() => { void load().finally(() => setLoading(false)); }, [retryKey]);
+  async function load() {
+    setLoading(true); setError(""); setMaterials([]); setVariants([]);
+    try {
+      const supabase = createClient();
+      const [{ data: materialData, error: materialError }, { data: variantData, error: variantError }] = await Promise.all([
+        supabase.from("materials").select("id,name,internal_code,unit").eq("status", "active").order("name"),
+        supabase.from("material_variants").select("id,material_id,name,size,color,model,sku,unit_cost,active,materials(name,internal_code)").eq("active", true).order("created_at", { ascending: false }),
+      ]);
+      if (materialError || variantError) setError(friendlyError(materialError ?? variantError, "Não foi possível carregar as variações."));
+      else { setMaterials((materialData ?? []) as Material[]); setVariants((variantData ?? []) as Variant[]); }
+    } catch (caught) {
+      setError(friendlyError(caught, "Não foi possível carregar as variações."));
+    } finally {
+      setLoading(false);
+    }
+  }
+  useEffect(() => { void load(); }, [retryKey]);
   function retryLoad() { setRetryKey((current) => current + 1); }
   async function save(event: FormEvent) { event.preventDefault(); setError(""); setSuccess(""); const supabase = createClient(); const { data: auth, error: authError } = await supabase.auth.getUser(); if (authError) { setError(friendlyError(authError, "Não foi possível concluir a operação.")); return; } if (!auth.user) { setError("Sua sessão expirou. Entre novamente."); return; } const { data: profile, error: profileError } = await supabase.from("profiles").select("organization_id").eq("id", auth.user.id).single(); if (profileError) { setError(friendlyError(profileError, "Não foi possível concluir a operação.")); return; } if (!profile?.organization_id) { setError("Não foi possível identificar a organização do usuário."); return; } const { error: saveError } = await supabase.from("material_variants").insert({ ...form, organization_id: profile.organization_id, unit_cost: Number(form.unit_cost) || 0, size: form.size || null, color: form.color || null, model: form.model || null, sku: form.sku || null }); if (saveError) setError(friendlyError(saveError, "Não foi possível concluir a operação.")); else { setForm(empty); setSuccess("Variação cadastrada."); await load(); } }
   async function remove(id: string) { const { error: removeError } = await createClient().from("material_variants").update({ active: false }).eq("id", id); if (removeError) setError(friendlyError(removeError, "Não foi possível concluir a operação.")); else setVariants((current) => current.filter((item) => item.id !== id)); }
