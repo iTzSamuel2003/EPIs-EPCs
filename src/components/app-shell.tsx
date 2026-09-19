@@ -27,16 +27,18 @@ export function AppShell({ children }: { children: React.ReactNode }) {
       const sidebar = document.querySelector(".sidebar");
       if (sidebar && !sidebar.contains(event.target as Node)) setMobileMenu(false);
     }
-    document.addEventListener("pointerdown", closeOnOutsidePointer);
-    return () => document.removeEventListener("pointerdown", closeOnOutsidePointer);
-  }, [mobileMenu]);
-  useEffect(() => {
-    if (!mobileMenu) return;
     function closeOnEscape(event: KeyboardEvent) {
-      if (event.key === "Escape") setMobileMenu(false);
+      if (event.key !== "Escape") return;
+      event.preventDefault();
+      event.stopPropagation();
+      setMobileMenu(false);
     }
+    document.addEventListener("pointerdown", closeOnOutsidePointer);
     document.addEventListener("keydown", closeOnEscape);
-    return () => document.removeEventListener("keydown", closeOnEscape);
+    return () => {
+      document.removeEventListener("pointerdown", closeOnOutsidePointer);
+      document.removeEventListener("keydown", closeOnEscape);
+    };
   }, [mobileMenu]);
   useEffect(() => {
     setMobileMenu(false);
