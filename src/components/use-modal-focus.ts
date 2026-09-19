@@ -19,9 +19,12 @@ export function useModalFocus(open: boolean, modalRef: RefObject<HTMLElement | n
     const modal = modalRef.current;
     if (!modal) return;
 
-    const focusableElements = () => Array.from(modal.querySelectorAll<HTMLElement>(focusableSelector)).filter((element) => element.offsetParent !== null);
+    const focusableElements = () => Array.from(modal.querySelectorAll<HTMLElement>(focusableSelector)).filter((element) => element.getClientRects().length > 0);
     const initialElement = initialFocusSelector ? modal.querySelector<HTMLElement>(initialFocusSelector) : null;
-    requestAnimationFrame(() => (initialElement ?? focusableElements()[0] ?? modal).focus());
+    const initialFocusRequest = requestAnimationFrame(() => {
+      const target = initialElement && initialElement.getClientRects().length > 0 ? initialElement : focusableElements()[0] ?? modal;
+      target.focus();
+    });
 
     function keepFocusInside(event: KeyboardEvent) {
       if (event.key !== "Tab") return;
@@ -53,7 +56,8 @@ export function useModalFocus(open: boolean, modalRef: RefObject<HTMLElement | n
     return () => {
       document.removeEventListener("keydown", keepFocusInside);
       document.removeEventListener("focusin", restoreFocusInside);
-      requestAnimationFrame(() => previousActiveElement?.focus());
+      cancelAnimationFrame(initialFocusRequest);
+      if (previousActiveElement?.isConnected) requestAnimationFrame(() => previousActiveElement.focus());
     };
   }, [initialFocusSelector, modalRef, open]);
 }
