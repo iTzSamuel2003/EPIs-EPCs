@@ -97,26 +97,33 @@ export default function EntriesPage() {
         || invalidTestDates || invalidMaterialDates;
     });
     if (hasInvalidItem) { setError("Preencha material, tamanho, quantidade inteira e custo. Confira também se as datas e a validade do ensaio estão corretas."); return; }
-    setSaving(true); const supabase = createClient(); let uploadedPath = "";
+    setSaving(true); const supabase = createClient(); let uploadedPath = ""; try {
     if (invoiceFile) {
       const { data: auth, error: authError } = await supabase.auth.getUser();
-      if (authError || !auth.user) { setError(friendlyError(authError, "Sua sessão expirou. Entre novamente.")); setSaving(false); return; }
+      if (authError || !auth.user) { setError(friendlyError(authError, "Sua sessão expirou. Entre novamente.")); return; }
       const { data: profile, error: profileError } = await supabase.from("profiles").select("organization_id").eq("id", auth.user.id).single();
-      if (profileError) { setError(friendlyError(profileError, "Não foi possível concluir a operação.")); setSaving(false); return; }
-      if (!profile?.organization_id) { setError("Não foi possível identificar a organização do usuário."); setSaving(false); return; }
+      if (profileError) { setError(friendlyError(profileError, "Não foi possível concluir a operação.")); return; }
+      if (!profile?.organization_id) { setError("Não foi possível identificar a organização do usuário."); return; }
       uploadedPath = `${profile.organization_id}/${crypto.randomUUID()}-${invoiceFile.name.replace(/[^a-zA-Z0-9._-]/g, "_")}`;
       const { error: uploadError } = await supabase.storage.from("invoice-attachments").upload(uploadedPath, invoiceFile, { contentType: invoiceFile.type, upsert: false });
-if (uploadError) { setError(friendlyError(uploadError, "Não foi possível anexar a nota fiscal.")); setSaving(false); return; }
+if (uploadError) { setError(friendlyError(uploadError, "Não foi possível anexar a nota fiscal.")); if (uploadedPath) { try { await supabase.storage.from("invoice-attachments").remove([uploadedPath]); } catch {} } uploadedPath = ""; return; }
     }
     const { error: entryError } = await supabase.rpc("register_stock_entry_batch", { p_invoice_number: invoiceNumber || null, p_entry_date: entryDate || null, p_items: items.map((item) => ({ material_id: item.material_id, variant_id: item.variant_id || null, quantity: Number(item.quantity), unit_cost: Number(item.unit_cost) || 0, manufactured_at: item.manufactured_at || null, expires_at: item.expires_at || null, test_performed_at: item.test_performed_at || null, test_expires_at: item.test_expires_at || null })), p_invoice_file_path: uploadedPath || null, p_notes: notes || null });
     if (entryError) {
-      if (uploadedPath) await supabase.storage.from("invoice-attachments").remove([uploadedPath]);
+      if (uploadedPath) { try { await supabase.storage.from("invoice-attachments").remove([uploadedPath]); } catch {} }
+      uploadedPath = "";
       setError(friendlyError(entryError, "Não foi possível concluir a operação."));
     } else {
+      uploadedPath = "";
       setSuccess(invoiceFile ? (items.length > 1 ? "Nota fiscal e itens registrados com sucesso." : "Entrada registrada e nota fiscal anexada com sucesso.") : invoiceNumber.trim() ? "Entrada registrada com a nota fiscal informada." : "Entrada registrada sem nota fiscal. O lançamento foi marcado para identificação posterior.");
       window.dispatchEvent(new Event("stock-entry-created")); setEntriesRefreshKey((value) => value + 1); setItems([newItem()]); setMaterialSuggestionsOpen(null); setInvoiceNumber(""); setEntryDate(localDateValue()); setInvoiceFile(null); setNotes("");
     }
-    setSaving(false);
+    } catch (caught) {
+      if (uploadedPath) { try { await supabase.storage.from("invoice-attachments").remove([uploadedPath]); } catch {} }
+      setError(friendlyError(caught, "Não foi possível concluir a operação."));
+    } finally {
+      setSaving(false);
+    }
   }
 
   return <main className="module-shell">

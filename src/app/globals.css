@@ -1079,3 +1079,12 @@ body{overflow-wrap:normal}
   .modal-card,.signature-modal{padding-left:12px;padding-right:12px;}
   .modal-card .modal-header,.signature-modal .modal-header{gap:8px;}
 }
+
+@media (max-width:600px){
+  .delivery-items-header{display:grid;grid-template-columns:minmax(0,1fr);width:100%;align-items:stretch;}
+  .delivery-items-header>div,.delivery-items-header>button{width:100%;min-width:0;max-width:none;}
+  .delivery-items-header>button{justify-content:center;}
+  .recent-entries-card .table-wrap{overflow-x:auto;}
+  .recent-entries-card .table-wrap table{min-width:680px;width:max-content;white-space:normal;}
+  .recent-entries-card .table-wrap th{white-space:nowrap;overflow-wrap:normal;}
+}
