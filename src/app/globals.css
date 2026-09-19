@@ -407,3 +407,59 @@ button:disabled{cursor:not-allowed}
   .search-results{width:calc(100vw - 24px)}
   .signature-modal{padding:18px 14px}
 }
+
+/* Dashboard: mantém leitura estável em larguras intermediárias e no celular. */
+.metrics-grid .metric-card,
+.metrics-grid .metric-copy,
+.dashboard-grid .panel,
+.dashboard-alert-group summary > span:first-child,
+.dashboard-alert-group .alert-item > div:last-child{
+  min-width:0;
+}
+
+.metrics-grid .metric-copy small,
+.dashboard-alert-group .alert-item strong,
+.dashboard-alert-group .alert-item p{
+  overflow-wrap:anywhere;
+}
+
+.dashboard-alert-group summary:focus-visible,
+.dashboard-alert-group .alert-item:focus-visible{
+  outline:3px solid #7762d633;
+  outline-offset:2px;
+}
+
+@media (max-width:1100px) and (min-width:601px){
+  .metrics-grid{grid-template-columns:repeat(2,minmax(0,1fr))}
+  .dashboard-grid{grid-template-columns:minmax(0,1fr)}
+  .dashboard-alert-list{max-height:none}
+  .recent-deliveries .table-wrap{overflow-x:auto}
+}
+
+@media (max-width:600px){
+  .metrics-grid{grid-template-columns:minmax(0,1fr)}
+  .dashboard-grid{grid-template-columns:minmax(0,1fr)}
+  .dashboard-alert-list{max-height:none;overflow:visible}
+  .dashboard-alert-group summary{align-items:flex-start;padding:12px}
+  .dashboard-alert-group summary > span:last-child{flex:0 0 auto}
+  .dashboard-alert-group .alert-item{align-items:flex-start;padding:10px}
+  .dashboard-alert-group .alert-item p{line-height:1.45}
+  .recent-deliveries .table-wrap{overflow:visible}
+  .recent-deliveries .table-wrap::after{display:none}
+  .recent-deliveries table{display:block;width:100%;white-space:normal}
+  .recent-deliveries thead{display:none}
+  .recent-deliveries tbody{display:grid;gap:10px}
+  .recent-deliveries tr{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px 12px;padding:13px;border:1px solid #edf0f5;border-radius:10px;background:#fafbfe}
+  .recent-deliveries td{display:grid;gap:4px;min-width:0;padding:0;border:0;white-space:normal;overflow-wrap:anywhere}
+  .recent-deliveries td::before{color:#a1aaba;font-size:9px;font-weight:700;letter-spacing:.5px}
+  .recent-deliveries td:nth-child(1),
+  .recent-deliveries td:nth-child(3),
+  .recent-deliveries td:nth-child(6){grid-column:1 / -1}
+  .recent-deliveries td:nth-child(1)::before{content:"Funcionário"}
+  .recent-deliveries td:nth-child(2)::before{content:"Matrícula"}
+  .recent-deliveries td:nth-child(3)::before{content:"Materiais"}
+  .recent-deliveries td:nth-child(4)::before{content:"Data"}
+  .recent-deliveries td:nth-child(5)::before{content:"Motivo"}
+  .recent-deliveries td:nth-child(6)::before{content:"Status"}
+  .dashboard-delivery-materials{min-width:0}
+}
