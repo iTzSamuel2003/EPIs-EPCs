@@ -587,3 +587,118 @@ body{overflow-wrap:normal}
   .topbar{padding-left:8px;padding-right:8px}
   .module-shell{padding-left:10px;padding-right:10px}
 }
+
+.module-table-card,
+.module-table-card .table-wrap,
+.module-table-card table,
+.module-table-card tbody,
+.module-table-card tr,
+.module-table-card td,
+.module-table-card th,
+.material-cell,
+.material-cell > div:last-child,
+.delivery-item-row,
+.delivery-item-row label,
+.entry-item-row,
+.entry-item-row label{
+  min-width:0;
+}
+
+.module-table-card .table-wrap{max-width:100%;}
+.module-table-card td,
+.module-table-card th{vertical-align:top;}
+.module-table-card td strong,
+.module-table-card td small,
+.module-table-card .material-cell strong,
+.module-table-card .material-cell small{overflow-wrap:anywhere;word-break:break-word;}
+.delivery-item-row input,
+.delivery-item-row select,
+.entry-item-row input,
+.entry-item-row select{min-width:0;max-width:100%;}
+.delivery-item-row .material-picker,
+.entry-item-row .material-picker{min-width:0;}
+.transaction-photo-field{min-width:0;}
+.transaction-photo-list span{max-width:100%;overflow-wrap:anywhere;}
+.pagination-controls{flex-wrap:wrap;}
+.pagination-controls > span{min-width:0;text-align:center;overflow-wrap:anywhere;}
+
+@media (max-width:1024px) and (min-width:601px){
+  .module-shell{padding-left:22px;padding-right:22px;}
+  .module-header{align-items:flex-start;}
+  .module-header .secondary-button,
+  .module-header .primary-button{white-space:normal;}
+  .materials-page .module-table-card .table-wrap{overflow:visible;}
+  .materials-page .module-table-card table{display:block;width:100%;min-width:0;table-layout:auto;white-space:normal;}
+  .materials-page .module-table-card thead{display:none;}
+  .materials-page .module-table-card tbody{display:grid;gap:10px;}
+  .materials-page .module-table-card tr{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:8px 12px;padding:12px;border:1px solid #edf0f5;border-radius:10px;background:#fafbfe;}
+  .materials-page .module-table-card td{display:grid;gap:4px;padding:0;border:0;white-space:normal;}
+  .materials-page .module-table-card td::before{color:#a1aaba;font-size:9px;font-weight:700;letter-spacing:.5px;}
+  .materials-page .module-table-card td:nth-child(1),
+  .materials-page .module-table-card td:nth-child(7){grid-column:1 / -1;}
+  .materials-page .module-table-card td:nth-child(1)::before{content:"Material";}
+  .materials-page .module-table-card td:nth-child(2)::before{content:"Tipo";}
+  .materials-page .module-table-card td:nth-child(3)::before{content:"CA";}
+  .materials-page .module-table-card td:nth-child(4)::before{content:"Estoque";}
+  .materials-page .module-table-card td:nth-child(5)::before{content:"Localização";}
+  .materials-page .module-table-card td:nth-child(6)::before{content:"Situação";}
+  .materials-page .module-table-card td:nth-child(7)::before{content:"Ações";}
+}
+
+@media (max-width:900px) and (min-width:601px){
+  .entry-card .form-grid.three,
+  .delivery-card .form-grid.three{grid-template-columns:repeat(2,minmax(0,1fr));}
+  .delivery-card .employee-picker{grid-column:1 / -1;}
+  .delivery-item-row,
+  .delivery-item-row-testable,
+  .entry-item-row,
+  .entry-item-row-with-size{grid-template-columns:28px minmax(0,1fr) 36px;gap:9px;padding:12px;align-items:start;}
+  .delivery-item-row label,
+  .entry-item-row label,
+  .entry-item-row-with-size label{grid-column:2 / 4!important;grid-row:auto!important;}
+  .delivery-item-row .item-index,
+  .entry-item-row .item-index{grid-column:1;grid-row:1;margin-top:29px;}
+  .delivery-item-row .remove-item,
+  .entry-item-row .remove-item{grid-column:3;grid-row:1;margin:29px 0 0;}
+}
+
+@media (max-width:900px){
+  main.module-shell:has(.module-toolbar) .module-table-card .table-wrap:has(table[aria-label="Histórico de movimentações do estoque"]){overflow:visible;margin-right:0;padding-bottom:0;}
+  main.module-shell:has(.module-toolbar) .module-table-card table[aria-label="Histórico de movimentações do estoque"]{display:block;width:100%;min-width:0;white-space:normal;}
+  main.module-shell:has(.module-toolbar) .module-table-card table[aria-label="Histórico de movimentações do estoque"] thead{display:none;}
+  main.module-shell:has(.module-toolbar) .module-table-card table[aria-label="Histórico de movimentações do estoque"] tbody{display:grid;gap:10px;}
+  main.module-shell:has(.module-toolbar) .module-table-card table[aria-label="Histórico de movimentações do estoque"] tr{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:8px 12px;padding:12px;border:1px solid #edf0f5;border-radius:10px;background:#fafbfe;}
+  main.module-shell:has(.module-toolbar) .module-table-card table[aria-label="Histórico de movimentações do estoque"] td{display:grid;gap:4px;min-width:0!important;padding:0;border:0;white-space:normal;overflow-wrap:anywhere;}
+  main.module-shell:has(.module-toolbar) .module-table-card table[aria-label="Histórico de movimentações do estoque"] td::before{color:#a1aaba;font-size:9px;font-weight:700;letter-spacing:.5px;}
+  main.module-shell:has(.module-toolbar) .module-table-card table[aria-label="Histórico de movimentações do estoque"] td:nth-child(1),
+  main.module-shell:has(.module-toolbar) .module-table-card table[aria-label="Histórico de movimentações do estoque"] td:nth-child(2),
+  main.module-shell:has(.module-toolbar) .module-table-card table[aria-label="Histórico de movimentações do estoque"] td:nth-child(3),
+  main.module-shell:has(.module-toolbar) .module-table-card table[aria-label="Histórico de movimentações do estoque"] td:nth-child(5),
+  main.module-shell:has(.module-toolbar) .module-table-card table[aria-label="Histórico de movimentações do estoque"] td:nth-child(8){grid-column:1 / -1;}
+  main.module-shell:has(.module-toolbar) .module-table-card table[aria-label="Histórico de movimentações do estoque"] td:nth-child(1)::before{content:"Data";}
+  main.module-shell:has(.module-toolbar) .module-table-card table[aria-label="Histórico de movimentações do estoque"] td:nth-child(2)::before{content:"Material / código";}
+  main.module-shell:has(.module-toolbar) .module-table-card table[aria-label="Histórico de movimentações do estoque"] td:nth-child(3)::before{content:"Funcionário";}
+  main.module-shell:has(.module-toolbar) .module-table-card table[aria-label="Histórico de movimentações do estoque"] td:nth-child(4)::before{content:"Matrícula";}
+  main.module-shell:has(.module-toolbar) .module-table-card table[aria-label="Histórico de movimentações do estoque"] td:nth-child(5)::before{content:"Destino / origem";}
+  main.module-shell:has(.module-toolbar) .module-table-card table[aria-label="Histórico de movimentações do estoque"] td:nth-child(6)::before{content:"Tipo";}
+  main.module-shell:has(.module-toolbar) .module-table-card table[aria-label="Histórico de movimentações do estoque"] td:nth-child(7)::before{content:"Quantidade";}
+  main.module-shell:has(.module-toolbar) .module-table-card table[aria-label="Histórico de movimentações do estoque"] td:nth-child(8)::before{content:"Observação";}
+}
+
+@media (max-width:600px){
+  .module-header .primary-button,
+  .module-header .secondary-button,
+  .delivery-items-header .secondary-button{width:100%;justify-content:center;}
+  .module-toolbar label,
+  .module-toolbar select,
+  .module-toolbar .module-search{width:100%;max-width:none;}
+  .module-table-card .panel-header .select-button{width:100%;justify-content:center;}
+  .module-table-card .material-cell{align-items:flex-start;}
+  .module-table-card .material-cell strong{line-height:1.4;}
+  .delivery-item-row .item-index,
+  .entry-item-row .item-index{margin-top:29px;}
+  .delivery-item-row .remove-item,
+  .entry-item-row .remove-item{margin-top:29px;}
+  .pagination-controls{gap:8px;}
+  .pagination-controls .secondary-button{width:100%;justify-content:center;}
+}
