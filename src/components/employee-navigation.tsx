@@ -19,7 +19,7 @@ export function EmployeeNavigation({ id, current }: EmployeeNavigationProps) {
   return (
     <nav className="employee-navigation" aria-label="Navegação do colaborador">
       {items.map((item) => (
-        <Link className={item.key === current ? "active" : ""} href={item.href} key={item.key}>
+        <Link className={item.key === current ? "active" : ""} href={item.href} key={item.key} aria-current={item.key === current ? "page" : undefined}>
           {item.label}
         </Link>
       ))}

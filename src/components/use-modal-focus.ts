@@ -42,9 +42,17 @@ export function useModalFocus(open: boolean, modalRef: RefObject<HTMLElement | n
       }
     }
 
+    function restoreFocusInside(event: FocusEvent) {
+      const currentModal = modalRef.current;
+      if (!currentModal || currentModal.contains(event.target as Node)) return;
+      (focusableElements()[0] ?? currentModal).focus();
+    }
+
     document.addEventListener("keydown", keepFocusInside);
+    document.addEventListener("focusin", restoreFocusInside);
     return () => {
       document.removeEventListener("keydown", keepFocusInside);
+      document.removeEventListener("focusin", restoreFocusInside);
       requestAnimationFrame(() => previousActiveElement?.focus());
     };
   }, [initialFocusSelector, modalRef, open]);
