@@ -38,6 +38,7 @@ export default function SettingsPage() {
     }
     void load();
   }, []);
+  useEffect(() => { if (!success) return; const timer = window.setTimeout(() => setSuccess(""), 4500); return () => window.clearTimeout(timer); }, [success]);
 
   async function save(event: FormEvent) {
     event.preventDefault();
