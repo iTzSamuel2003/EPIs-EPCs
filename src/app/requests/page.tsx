@@ -13,6 +13,7 @@ const statusLabels: Record<string, string> = { pending: "Pendente", in_review: "
 const statusTone: Record<string, string> = { pending: "warning", in_review: "warning", approved: "success", completed: "success", rejected: "danger" };
 
 function date(value: string) { return new Date(value).toLocaleString("pt-BR", { dateStyle: "short", timeStyle: "short" }); }
+function localDateValue(value = new Date()) { return `${value.getFullYear()}-${String(value.getMonth() + 1).padStart(2, "0")}-${String(value.getDate()).padStart(2, "0")}`; }
 
 export default function RequestsPage() {
   const [requests, setRequests] = useState<RequestRow[]>([]);
@@ -29,6 +30,7 @@ export default function RequestsPage() {
   const [deliveredAtDraft, setDeliveredAtDraft] = useState("");
 
   useEffect(() => { void load(); }, []);
+  useEffect(() => { if (!success) return; const timer = window.setTimeout(() => setSuccess(""), 4500); return () => window.clearTimeout(timer); }, [success]);
 
   async function load() {
     setLoading(true); setError("");
@@ -43,14 +45,15 @@ export default function RequestsPage() {
     return text.includes(query.toLowerCase()) && (typeFilter === "all" || item.request_type === typeFilter) && (statusFilter === "all" || item.status === statusFilter);
   }), [requests, query, typeFilter, statusFilter]);
 
-  function beginUpdate(item: RequestRow, status: string) { setNoteDraft(item.review_notes ?? ""); setDeliveredAtDraft(item.delivered_at ?? new Date().toISOString().slice(0, 10)); setConfirming({ item, status }); }
+  function beginUpdate(item: RequestRow, status: string) { setNoteDraft(item.review_notes ?? ""); setDeliveredAtDraft(item.delivered_at ?? localDateValue()); setConfirming({ item, status }); }
   function closeConfirmation() { if (!savingId) setConfirming(null); }
 
   async function updateRequest(item: RequestRow, status: string, note: string) {
     setSavingId(item.id); setError(""); setSuccess("");
-    const { error: updateError } = await createClient().from("employee_portal_requests").update({ status, review_notes: note.trim() || null, delivered_at: status === "completed" ? deliveredAtDraft || new Date().toISOString().slice(0, 10) : null }).eq("id", item.id);
+    const deliveredAt = deliveredAtDraft || localDateValue();
+    const { error: updateError } = await createClient().from("employee_portal_requests").update({ status, review_notes: note.trim() || null, delivered_at: status === "completed" ? deliveredAt : null }).eq("id", item.id);
     if (updateError) setError(friendlyError(updateError, "Não foi possível atualizar a solicitação.")); else {
-      setRequests((current) => current.map((currentItem) => currentItem.id === item.id ? { ...currentItem, status, review_notes: note.trim() || null, delivered_at: status === "completed" ? deliveredAtDraft || new Date().toISOString().slice(0, 10) : null, updated_at: new Date().toISOString() } : currentItem));
+      setRequests((current) => current.map((currentItem) => currentItem.id === item.id ? { ...currentItem, status, review_notes: note.trim() || null, delivered_at: status === "completed" ? deliveredAt : null, updated_at: new Date().toISOString() } : currentItem));
       setSuccess("Solicitação atualizada."); setConfirming(null);
     }
     setSavingId("");

@@ -12,6 +12,7 @@ type MaterialOption = { id: string; name: string; internal_code: string; unit: s
 type MaterialVariant = { id: string; material_id: string; name: string; size: string | null; active: boolean };
 type EntryItem = { material_id: string; materialQuery: string; variant_id: string; quantity: string; unit_cost: string; manufactured_at: string; expires_at: string; test_performed_at: string; test_expires_at: string };
 const newItem = (): EntryItem => ({ material_id: "", materialQuery: "", variant_id: "", quantity: "1", unit_cost: "0", manufactured_at: "", expires_at: "", test_performed_at: "", test_expires_at: "" });
+const localDateValue = (value = new Date()) => `${value.getFullYear()}-${String(value.getMonth() + 1).padStart(2, "0")}-${String(value.getDate()).padStart(2, "0")}`;
 
 export default function EntriesPage() {
   const [materials, setMaterials] = useState<MaterialOption[]>([]);
@@ -19,7 +20,7 @@ export default function EntriesPage() {
   const [items, setItems] = useState<EntryItem[]>([newItem()]);
   const [materialSuggestionsOpen, setMaterialSuggestionsOpen] = useState<number | null>(null);
   const [invoiceNumber, setInvoiceNumber] = useState("");
-  const [entryDate, setEntryDate] = useState(new Date().toISOString().slice(0, 10));
+  const [entryDate, setEntryDate] = useState(localDateValue());
   const [invoiceFile, setInvoiceFile] = useState<File | null>(null);
   const [notes, setNotes] = useState("");
   const [loading, setLoading] = useState(true);
@@ -50,7 +51,7 @@ export default function EntriesPage() {
 
   function filteredMaterials(value: string) {
     const normalized = value.trim().toLowerCase();
-    return materials.filter((material) => material.name.toLowerCase().includes(normalized));
+    return materials.filter((material) => `${material.name} ${material.internal_code}`.toLowerCase().includes(normalized));
   }
 
   function variantsFor(materialId: string) {
@@ -58,7 +59,7 @@ export default function EntriesPage() {
   }
 
   function selectMaterial(index: number, material: MaterialOption) {
-    setItems((current) => current.map((item, itemIndex) => itemIndex === index ? { ...item, material_id: material.id, materialQuery: material.name, variant_id: "", test_performed_at: "", test_expires_at: "" } : item));
+    setItems((current) => current.map((item, itemIndex) => itemIndex === index ? { ...item, material_id: material.id, materialQuery: material.name, variant_id: "", manufactured_at: "", expires_at: "", test_performed_at: "", test_expires_at: "" } : item));
     setMaterialSuggestionsOpen(null);
   }
 
@@ -74,9 +75,12 @@ export default function EntriesPage() {
     event.preventDefault(); setError(""); setSuccess("");
     const hasInvalidItem = items.some((item) => {
       const material = materials.find((candidate) => candidate.id === item.material_id);
-      return !item.material_id || Number(item.quantity) <= 0
+      const quantity = Number(item.quantity);
+      const unitCost = Number(item.unit_cost);
+      const invalidTestDates = Boolean(material?.test_required && (!item.test_performed_at || !item.test_expires_at || item.test_expires_at < item.test_performed_at));
+      return !item.material_id || !Number.isFinite(quantity) || quantity <= 0 || !Number.isFinite(unitCost) || unitCost < 0
         || (variantsFor(item.material_id).length > 0 && !item.variant_id)
-        || Boolean(material?.test_required && (!item.test_performed_at || !item.test_expires_at));
+        || invalidTestDates;
     });
     if (hasInvalidItem) { setError("Preencha material, tamanho e quantidade. Para materiais ensaiáveis, informe também a data e a validade do ensaio."); return; }
     setSaving(true); const supabase = createClient(); let uploadedPath = "";
