@@ -721,3 +721,42 @@ body{overflow-wrap:normal}
   .pagination-controls{gap:8px;}
   .pagination-controls .secondary-button{width:100%;justify-content:center;}
 }
+
+@media (max-width:1024px) and (min-width:601px){
+  .module-toolbar{align-items:stretch;row-gap:9px;}
+  .module-toolbar .module-search{flex:1 1 100%;min-width:0;}
+  .module-toolbar>label{display:grid;gap:6px;flex:1 1 180px;min-width:0;color:#536078;font-size:11px;font-weight:600;}
+  .module-toolbar>label input,.module-toolbar>label select{width:100%;min-width:0;}
+  .module-toolbar .check-filter{display:flex;align-items:center;flex:1 1 180px;}
+}
+
+.sidebar nav a:focus-visible,.sidebar-bottom>a:focus-visible{outline:3px solid #7762d655;outline-offset:2px;position:relative;z-index:1;}
+.sidebar-section h2{margin:0 13px 7px;color:#a6adbc;font-size:10px;font-weight:700;letter-spacing:.8px;}
+.sidebar-section+.sidebar-section{margin-top:16px;}
+.sidebar-sections{padding-right:3px;}
+.modal-backdrop{padding-top:max(20px,env(safe-area-inset-top));padding-bottom:max(20px,env(safe-area-inset-bottom));}
+.modal-card{scroll-padding-block:18px;scrollbar-width:thin;scrollbar-color:#c7c1ed transparent;}
+.modal-card .modal-header{position:sticky;top:-1px;z-index:2;padding-top:1px;padding-bottom:12px;background:#fff;}
+.function-template-layout .template-options button strong,.function-template-layout .template-options button small{overflow-wrap:anywhere;}
+.function-template-layout .template-detail .table-wrap{max-width:100%;}
+.function-template-layout .template-detail table{table-layout:fixed;}
+.function-template-layout .template-detail th:first-child,.function-template-layout .template-detail td:first-child{width:62%;}
+.function-template-layout .template-detail td{white-space:normal;overflow-wrap:anywhere;}
+
+@media (max-width:600px){
+  .module-toolbar{row-gap:10px;}
+  .module-toolbar .module-search{min-height:44px;}
+  .module-toolbar label{display:grid;gap:6px;}
+  .module-toolbar label input,.module-toolbar label select{min-height:42px;}
+  .function-template-layout .template-detail .table-wrap{overflow:visible;}
+  .function-template-layout .template-detail table{display:block;min-width:0;width:100%;white-space:normal;}
+  .function-template-layout .template-detail thead{display:none;}
+  .function-template-layout .template-detail tbody{display:grid;gap:10px;}
+  .function-template-layout .template-detail tr{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:8px 12px;padding:12px;border:1px solid #edf0f5;border-radius:10px;background:#fafbfe;}
+  .function-template-layout .template-detail td{display:grid;gap:4px;min-width:0;padding:0;border:0;}
+  .function-template-layout .template-detail td::before{color:#a1aaba;font-size:9px;font-weight:700;letter-spacing:.5px;}
+  .function-template-layout .template-detail td:first-child{grid-column:1 / -1;width:auto;}
+  .function-template-layout .template-detail td:first-child::before{content:"Material";}
+  .function-template-layout .template-detail td:nth-child(2)::before{content:"Tipo";}
+  .function-template-layout .template-detail td:nth-child(3)::before{content:"Quantidade";}
+}

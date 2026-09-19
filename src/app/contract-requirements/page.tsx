@@ -1,7 +1,7 @@
 "use client";
 
 import { ClipboardCheck, FileText, LoaderCircle, PackageCheck, ShieldAlert } from "lucide-react";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { createClient } from "@/lib/supabase/client";
 import { FeedbackMessage } from "@/components/feedback-message";
 import { friendlyError } from "@/lib/ui-feedback";
@@ -21,29 +21,35 @@ export default function ContractRequirementsPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [retryKey, setRetryKey] = useState(0);
+  const loadVersion = useRef(0);
 
   useEffect(() => {
+    const version = ++loadVersion.current;
     async function load() {
       setLoading(true);
       setError("");
-      setScenarios([]);
-      setRequirements([]);
-      setStock({});
-      const supabase = createClient();
-      const [{ data: scenarioData, error: scenarioError }, { data: requirementData, error: requirementError }, { data: lotData, error: lotError }] = await Promise.all([
-        supabase.from("contract_scenarios").select("id, code, name, source_annex, team_size, composition, active").eq("active", true).order("name"),
-        supabase.from("contract_requirements").select("id, scenario_id, source_annex, quantity, unit, usage_scope, notes, materials(id, name, type, contract_item_code, contract_category, contract_specification, ca_required, ca_number, ca_expires_at, test_required)"),
-        supabase.from("material_lots").select("material_id, available_quantity"),
-      ]);
-      if (scenarioError || requirementError || lotError) setError(friendlyError(scenarioError ?? requirementError ?? lotError, "Não foi possível carregar os requisitos contratuais."));
-      const rows = (scenarioData ?? []) as Scenario[];
-      const lots = (lotData ?? []) as Lot[];
-      setScenarios(rows);
-      setRequirements((requirementData ?? []) as unknown as Requirement[]);
-      setStock(lots.reduce<Record<string, number>>((total, lot) => ({ ...total, [lot.material_id]: (total[lot.material_id] ?? 0) + lot.available_quantity }), {}));
-      setScenarioId(rows[0]?.id ?? "");
-      setTeamMembers(rows[0]?.team_size ?? 0);
-      setLoading(false);
+      try {
+        const supabase = createClient();
+        const [{ data: scenarioData, error: scenarioError }, { data: requirementData, error: requirementError }, { data: lotData, error: lotError }] = await Promise.all([
+          supabase.from("contract_scenarios").select("id, code, name, source_annex, team_size, composition, active").eq("active", true).order("name"),
+          supabase.from("contract_requirements").select("id, scenario_id, source_annex, quantity, unit, usage_scope, notes, materials(id, name, type, contract_item_code, contract_category, contract_specification, ca_required, ca_number, ca_expires_at, test_required)"),
+          supabase.from("material_lots").select("material_id, available_quantity"),
+        ]);
+        if (version !== loadVersion.current) return;
+        const loadError = scenarioError ?? requirementError ?? lotError;
+        if (loadError) { setError(friendlyError(loadError, "Não foi possível carregar os requisitos contratuais.")); return; }
+        const rows = (scenarioData ?? []) as Scenario[];
+        const lots = (lotData ?? []) as Lot[];
+        setScenarios(rows);
+        setRequirements((requirementData ?? []) as unknown as Requirement[]);
+        setStock(lots.reduce<Record<string, number>>((total, lot) => ({ ...total, [lot.material_id]: (total[lot.material_id] ?? 0) + Number(lot.available_quantity ?? 0) }), {}));
+        setScenarioId((current) => rows.some((row) => row.id === current) ? current : rows[0]?.id ?? "");
+        setTeamMembers((current) => current > 0 ? current : rows[0]?.team_size ?? 0);
+      } catch (caught) {
+        if (version === loadVersion.current) setError(friendlyError(caught, "Não foi possível carregar os requisitos contratuais."));
+      } finally {
+        if (version === loadVersion.current) setLoading(false);
+      }
     }
     void load();
   }, [retryKey]);
@@ -61,7 +67,7 @@ export default function ContractRequirementsPage() {
     <header className="module-header"><div><p className="eyebrow">CONTROLE CONTRATUAL</p><h1>Requisitos por equipe</h1><p className="module-subtitle">Confira os materiais mínimos dos anexos contratuais e compare com o estoque disponível.</p></div><div className="header-actions"><a className="secondary-button" href="/function-templates"><FileText size={16} /> Listas por função</a></div></header>
     {error && <FeedbackMessage onRetry={retryLoad}>{error}</FeedbackMessage>}
     {loading ? <div className="module-loading"><LoaderCircle className="spin" size={22} /> Carregando requisitos...</div> : <>
-      <section className="module-toolbar"><label className="contract-scenario-select">Cenário contratual<select value={scenarioId} onChange={(event) => { const next = scenarios.find((scenario) => scenario.id === event.target.value); setScenarioId(event.target.value); setTeamMembers(next?.team_size ?? 0); }}>{scenarios.map((scenario) => <option key={scenario.id} value={scenario.id}>{scenario.name} · {scenario.source_annex}</option>)}</select></label><label className="contract-scenario-select">Efetivo real da equipe<input type="number" min="1" value={teamMembers || ""} onChange={(event) => setTeamMembers(Number(event.target.value) || 0)} placeholder="Ex.: 7" /></label>{selected && <div className="contract-composition"><strong>Base: {selected.team_size ?? "—"} integrantes</strong><span>{selected.composition}</span></div>}</section>
+      <section className="module-toolbar"><label className="contract-scenario-select">Cenário contratual<select value={scenarioId} onChange={(event) => { const next = scenarios.find((scenario) => scenario.id === event.target.value); setScenarioId(event.target.value); setTeamMembers(next?.team_size ?? 0); }}>{scenarios.map((scenario) => <option key={scenario.id} value={scenario.id}>{scenario.name} · {scenario.source_annex}</option>)}</select></label><label className="contract-scenario-select">Efetivo real da equipe<input type="number" min="1" step="1" value={teamMembers || ""} onChange={(event) => { const value = Number(event.target.value); setTeamMembers(Number.isInteger(value) && value > 0 ? value : 0); }} placeholder="Ex.: 7" /></label>{selected && <div className="contract-composition"><strong>Base: {selected.team_size ?? "—"} integrantes</strong><span>{selected.composition}</span></div>}</section>
       {!loading && (<section className="module-summary"><div><ClipboardCheck size={18} /><strong>{visible.length}</strong><span>itens exigidos</span></div><div><PackageCheck size={18} /><strong>{totalRequired}</strong><span>quantidade mínima</span></div><div><ShieldAlert size={18} /><strong>{deficitCount}</strong><span>com saldo insuficiente</span></div><div><FileText size={18} /><strong>{complianceCount}</strong><span>pendências de CA/ensaio</span></div></section>)}
       <section className="panel module-table-card"><div className="panel-header"><div><h2>Materiais mínimos do cenário</h2><p>Quantidades ajustadas proporcionalmente ao efetivo informado.</p></div></div>{visible.length ? <div className="table-wrap"><table><thead><tr><th>ITEM CONTRATUAL</th><th>CATEGORIA</th><th>USO</th><th>REQUERIDO</th><th>DISPONÍVEL</th><th>CONFORMIDADE</th></tr></thead><tbody>{visible.map((item) => { const required = requiredQuantity(item); const available = stock[item.materials?.id ?? ""] ?? 0; const enough = available >= required; const caPending = Boolean(item.materials?.ca_required && (!item.materials.ca_number || item.materials.ca_number === "PENDENTE")); const hasTechnicalControl = Boolean(item.materials?.test_required); const status = !enough ? "Repor estoque" : caPending ? "CA pendente" : hasTechnicalControl ? "Ensaio requerido" : "Conforme"; const statusClass = !enough || caPending ? "danger" : hasTechnicalControl ? "warning" : "success"; return <tr key={item.id}><td><div className="material-cell"><div className="material-type-icon epi"><ClipboardCheck size={15} /></div><div><strong>{item.materials?.name ?? "Material não encontrado"}</strong><small>{item.materials?.contract_item_code ?? "Sem código"}</small></div></div></td><td><span className="type-badge epi">{categoryLabel[item.materials?.contract_category ?? ""] ?? item.materials?.type ?? "—"}</span></td><td>{item.usage_scope === "individual" ? "Individual" : "Coletivo"}</td><td><strong>{required} {item.unit}</strong><small className="muted-cell">Base: {item.quantity}</small></td><td><strong className={enough ? "history-positive" : "history-negative"}>{available} {item.unit}</strong></td><td><span className={`status-pill ${statusClass}`}>{status}</span></td></tr>})}</tbody></table></div> : <div className="empty-state"><ClipboardCheck size={27} /><strong>Nenhum requisito cadastrado</strong><span>Selecione outro cenário ou importe os itens do anexo contratual.</span></div>}</section>
     </>}

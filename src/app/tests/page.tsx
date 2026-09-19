@@ -1,6 +1,6 @@
 "use client";
 
-import { FormEvent, useEffect, useMemo, useState } from "react";
+import { FormEvent, useEffect, useMemo, useRef, useState } from "react";
 import { CalendarCheck, Check, ClipboardCheck, LoaderCircle, Plus, Search, X } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 import { friendlyError } from "@/lib/ui-feedback";
@@ -48,27 +48,32 @@ export default function TestsPage() {
   const [success, setSuccess] = useState("");
   const [stockByMaterial, setStockByMaterial] = useState<Record<string, number>>({});
   const [retryKey, setRetryKey] = useState(0);
+  const loadVersion = useRef(0);
 
   async function loadData() {
+    const version = ++loadVersion.current;
     setLoading(true);
     setError("");
-    setMaterials([]);
-    setTests([]);
-    setStockByMaterial({});
-    const supabase = createClient();
-    const [{ data: materialData, error: materialError }, { data: testData, error: testError }, { data: lotData, error: lotError }] = await Promise.all([
-      supabase.from("materials").select("id, name, internal_code, type, unit, test_required").eq("status", "active").order("name"),
-      supabase.from("material_tests").select("id, performed_at, interval_months, next_due_at, result, examiner, professional_registration, art_number, certificate_number, report_reference, report_url, material:materials(id, name, internal_code, type, unit, test_required)").order("performed_at", { ascending: false }),
-      supabase.from("material_lots").select("material_id, available_quantity"),
-    ]);
-
-    if (materialError || testError || lotError) setError(friendlyError(materialError ?? testError ?? lotError, "Não foi possível carregar os ensaios."));
-    else {
+    try {
+      const supabase = createClient();
+      const [{ data: materialData, error: materialError }, { data: testData, error: testError }, { data: lotData, error: lotError }] = await Promise.all([
+        supabase.from("materials").select("id, name, internal_code, type, unit, test_required").eq("status", "active").order("name"),
+        supabase.from("material_tests").select("id, performed_at, interval_months, next_due_at, result, examiner, professional_registration, art_number, certificate_number, report_reference, report_url, material:materials(id, name, internal_code, type, unit, test_required)").order("performed_at", { ascending: false }),
+        supabase.from("material_lots").select("material_id, available_quantity"),
+      ]);
+      if (version !== loadVersion.current) return;
+      if (materialError || testError || lotError) {
+        setError(friendlyError(materialError ?? testError ?? lotError, "Não foi possível carregar os ensaios."));
+        return;
+      }
       setMaterials((materialData ?? []) as Material[]);
       setTests((testData ?? []) as unknown as MaterialTest[]);
       setStockByMaterial((lotData ?? []).reduce<Record<string, number>>((stock, lot) => ({ ...stock, [lot.material_id]: (stock[lot.material_id] ?? 0) + Number(lot.available_quantity ?? 0) }), {}));
+    } catch (caught) {
+      if (version === loadVersion.current) setError(friendlyError(caught, "Não foi possível carregar os ensaios."));
+    } finally {
+      if (version === loadVersion.current) setLoading(false);
     }
-    setLoading(false);
   }
 
   useEffect(() => { void Promise.resolve().then(() => loadData()); }, [retryKey]);
@@ -131,17 +136,31 @@ export default function TestsPage() {
 
   async function saveTest(event: FormEvent) {
     event.preventDefault(); setError(""); setSuccess("");
+    if (!materialId) { setError("Selecione um material ensaiável."); return; }
+    if (!isRealDate(performedAt)) { setError("Informe uma data de ensaio válida."); return; }
+    if (performedAt > todayLocal()) { setError("A data do ensaio não pode ser futura."); return; }
+    if (!([6, 12] as number[]).includes(Number(interval))) { setError("A periodicidade deve ser de 6 ou 12 meses."); return; }
     if (reportUrl && !isHttpUrl(reportUrl)) { setError("O link do laudo deve começar com http:// ou https://."); return; }
     setSaving(true);
-    const supabase = createClient();
-    const { data: testId, error: saveError } = await supabase.rpc("register_material_test", { p_material_id: materialId, p_performed_at: performedAt, p_interval_months: Number(interval), p_result: result, p_examiner: examiner || null, p_certificate_number: certificate || null, p_notes: notes || null });
-    if (saveError || !testId) setError(friendlyError(saveError, "Não foi possível registrar o ensaio."));
-    else {
+    try {
+      const supabase = createClient();
+      const { data: testId, error: saveError } = await supabase.rpc("register_material_test", { p_material_id: materialId, p_performed_at: performedAt, p_interval_months: Number(interval), p_result: result, p_examiner: examiner || null, p_certificate_number: certificate || null, p_notes: notes || null });
+      if (saveError || !testId) { setError(friendlyError(saveError, "Não foi possível registrar o ensaio.")); return; }
       const { error: detailsError } = await supabase.from("material_tests").update({ professional_registration: registration || null, art_number: artNumber || null, report_reference: reportReference || null, report_url: reportUrl || null }).eq("id", testId);
-      if (detailsError) setError(`O ensaio foi registrado, mas não foi possível salvar os detalhes complementares: ${friendlyError(detailsError, "tente novamente")}`);
-      else { setSuccess("Ensaio, responsável técnico, ART e laudo registrados com sucesso."); setShowForm(false); resetForm(); await loadData(); }
+      if (detailsError) {
+        await supabase.from("material_tests").delete().eq("id", testId);
+        setError(`Não foi possível concluir o registro do ensaio: ${friendlyError(detailsError, "tente novamente")}`);
+        return;
+      }
+      setSuccess("Ensaio, responsável técnico, ART e laudo registrados com sucesso.");
+      setShowForm(false);
+      resetForm();
+      await loadData();
+    } catch (caught) {
+      setError(friendlyError(caught, "Não foi possível registrar o ensaio."));
+    } finally {
+      setSaving(false);
     }
-    setSaving(false);
   }
 
   return <main className="module-shell">
@@ -157,3 +176,4 @@ export default function TestsPage() {
 }
 
 function isHttpUrl(value: string) { try { const url = new URL(value); return url.protocol === "http:" || url.protocol === "https:"; } catch { return false; } }
+function isRealDate(value: string) { const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(value); if (!match) return false; const date = new Date(`${value}T00:00:00`); return !Number.isNaN(date.getTime()) && date.getFullYear() === Number(match[1]) && date.getMonth() + 1 === Number(match[2]) && date.getDate() === Number(match[3]); }

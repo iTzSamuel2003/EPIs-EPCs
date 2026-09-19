@@ -1,6 +1,6 @@
 "use client";
 
-import { ChangeEvent, FormEvent, useCallback, useEffect, useMemo, useState } from "react";
+import { ChangeEvent, FormEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { ArrowLeft, BookOpenCheck, Check, CheckCircle2, ClipboardList, Download, LoaderCircle, Plus, Trash2, X } from "lucide-react";
 import Link from "next/link";
 import { useParams } from "next/navigation";
@@ -22,37 +22,106 @@ function safeFileName(value: string) { return value.normalize("NFD").replace(/[\
 
 export default function EmployeeCoursesPage() {
   const { id } = useParams<{ id: string }>();
-  const [name, setName] = useState(""); const [functionName, setFunctionName] = useState(""); const [courses, setCourses] = useState<Course[]>([]); const [requirements, setRequirements] = useState<Requirement[]>([]); const [course, setCourse] = useState(emptyCourse); const [certificateFile, setCertificateFile] = useState<File | null>(null); const [loading, setLoading] = useState(true); const [saving, setSaving] = useState(false); const [error, setError] = useState(""); const [success, setSuccess] = useState(""); const [confirmingCourseId, setConfirmingCourseId] = useState<string | null>(null);
+  const [name, setName] = useState(""); const [functionName, setFunctionName] = useState(""); const [courses, setCourses] = useState<Course[]>([]); const [requirements, setRequirements] = useState<Requirement[]>([]); const [course, setCourse] = useState(emptyCourse); const [certificateFile, setCertificateFile] = useState<File | null>(null); const [loading, setLoading] = useState(true); const [saving, setSaving] = useState(false); const [removingCourseId, setRemovingCourseId] = useState<string | null>(null); const [openingCertificatePath, setOpeningCertificatePath] = useState<string | null>(null); const [error, setError] = useState(""); const [success, setSuccess] = useState(""); const [confirmingCourseId, setConfirmingCourseId] = useState<string | null>(null); const loadVersion = useRef(0);
   const load = useCallback(async () => {
+    const version = ++loadVersion.current;
     setLoading(true);
     setError("");
-    setCourses([]);
-    setRequirements([]);
-    const supabase = createClient();
-    const [{ data: employee, error: employeeError }, { data, error: loadError }, { data: requirementData, error: requirementError }] = await Promise.all([
-      supabase.from("employees").select("full_name,job_title,function_name").eq("id", id).single(),
-      supabase.from("employee_courses").select("id,name,provider,completed_at,expires_at,certificate_number,certificate_file_path").eq("employee_id", id).order("expires_at", { ascending: true, nullsFirst: false }),
-      supabase.from("contract_training_requirements").select("id,function_group,course_name,source_annex,mandatory,validity_months,notes").order("function_group").order("course_name"),
-    ]);
-    if (employeeError || loadError || requirementError) setError(friendlyError(employeeError ?? loadError ?? requirementError, "Não foi possível carregar os cursos."));
-    setName(employee?.full_name ?? ""); setFunctionName(employee?.job_title || employee?.function_name || ""); setCourses((data ?? []) as Course[]); setRequirements((requirementData ?? []) as Requirement[]); setLoading(false);
+    try {
+      const supabase = createClient();
+      const [{ data: employee, error: employeeError }, { data, error: loadError }, { data: requirementData, error: requirementError }] = await Promise.all([
+        supabase.from("employees").select("full_name,job_title,function_name").eq("id", id).single(),
+        supabase.from("employee_courses").select("id,name,provider,completed_at,expires_at,certificate_number,certificate_file_path").eq("employee_id", id).order("expires_at", { ascending: true, nullsFirst: false }),
+        supabase.from("contract_training_requirements").select("id,function_group,course_name,source_annex,mandatory,validity_months,notes").order("function_group").order("course_name"),
+      ]);
+      if (version !== loadVersion.current) return;
+      const loadErrorResult = employeeError ?? loadError ?? requirementError;
+      if (loadErrorResult) { setError(friendlyError(loadErrorResult, "Não foi possível carregar os cursos.")); return; }
+      setName(employee?.full_name ?? "");
+      setFunctionName(employee?.job_title || employee?.function_name || "");
+      setCourses((data ?? []) as Course[]);
+      setRequirements((requirementData ?? []) as Requirement[]);
+    } catch (caught) {
+      if (version === loadVersion.current) setError(friendlyError(caught, "Não foi possível carregar os cursos."));
+    } finally {
+      if (version === loadVersion.current) setLoading(false);
+    }
   }, [id]);
   useEffect(() => { void load(); }, [load]);
+  useEffect(() => { if (!success) return; const timer = window.setTimeout(() => setSuccess(""), 4500); return () => window.clearTimeout(timer); }, [success]);
   const requiredCourses = useMemo(() => requirements.filter((item) => matchesGroup(functionName, item.function_group)), [requirements, functionName]);
   const pendingRequired = requiredCourses.filter((item) => !hasValidCourse(courses, item)).length;
   function selectCertificate(event: ChangeEvent<HTMLInputElement>) { const file = event.target.files?.[0] ?? null; event.target.value = ""; setError(""); if (file && !acceptedCertificateTypes.includes(file.type)) { setError("Anexe o certificado em PDF, JPG, PNG ou WEBP."); setCertificateFile(null); return; } if (file && file.size > 10 * 1024 * 1024) { setError("O certificado deve ter no máximo 10 MB."); setCertificateFile(null); return; } setCertificateFile(file); }
   async function addCourse(event: FormEvent) {
-    event.preventDefault(); if (!course.name.trim()) return; if (course.completed_at && course.expires_at && course.expires_at < course.completed_at) { setError("A validade não pode ser anterior à data de conclusão."); return; } setSaving(true); setError(""); setSuccess("");
-    const supabase = createClient(); const { data: auth, error: authError } = await supabase.auth.getUser(); if (authError) { setError(friendlyError(authError, "Não foi possível concluir a operação.")); setSaving(false); return; } if (!auth.user) { setError("Sua sessão expirou. Entre novamente."); setSaving(false); return; }
-    const { data: profile, error: profileError } = await supabase.from("profiles").select("organization_id").eq("id", auth.user.id).single(); if (profileError) { setError(friendlyError(profileError, "Não foi possível concluir a operação.")); setSaving(false); return; } if (!profile?.organization_id) { setError("Não foi possível identificar a organização do usuário."); setSaving(false); return; }
+    event.preventDefault();
+    if (!course.name.trim()) return;
+    if (course.completed_at && !isRealDate(course.completed_at)) { setError("Informe uma data de conclusão válida."); return; }
+    if (course.expires_at && !isRealDate(course.expires_at)) { setError("Informe uma data de validade válida."); return; }
+    if (course.completed_at && course.completed_at > localDateKey()) { setError("A data de conclusão não pode ser futura."); return; }
+    if (course.completed_at && course.expires_at && course.expires_at < course.completed_at) { setError("A validade não pode ser anterior à data de conclusão."); return; }
+    setSaving(true); setError(""); setSuccess("");
     let uploadedPath = "";
-    if (certificateFile) { uploadedPath = `portal/${crypto.randomUUID()}-${safeFileName(certificateFile.name)}`; const { error: uploadError } = await supabase.storage.from("employee-course-documents").upload(uploadedPath, certificateFile, { contentType: certificateFile.type, upsert: false }); if (uploadError) { setError(friendlyError(uploadError, "Não foi possível anexar o certificado.")); setSaving(false); return; } }
-    const { error: saveError } = await supabase.from("employee_courses").insert({ ...course, name: course.name.trim(), provider: course.provider.trim() || null, certificate_number: course.certificate_number.trim() || null, completed_at: course.completed_at || null, expires_at: course.expires_at || null, certificate_file_path: uploadedPath || null, employee_id: id, organization_id: profile.organization_id });
-    if (saveError) { if (uploadedPath) await supabase.storage.from("employee-course-documents").remove([uploadedPath]); setError(friendlyError(saveError, "Não foi possível concluir a operação.")); } else { setCourse(emptyCourse); setCertificateFile(null); await load(); setSuccess("Curso adicionado à ficha."); } setSaving(false);
+    try {
+      const supabase = createClient();
+      const { data: auth, error: authError } = await supabase.auth.getUser();
+      if (authError) throw authError;
+      if (!auth.user) throw new Error("Sua sessão expirou. Entre novamente.");
+      const { data: profile, error: profileError } = await supabase.from("profiles").select("organization_id").eq("id", auth.user.id).single();
+      if (profileError) throw profileError;
+      if (!profile?.organization_id) throw new Error("Não foi possível identificar a organização do usuário.");
+      if (certificateFile) {
+        uploadedPath = `portal/${crypto.randomUUID()}-${safeFileName(certificateFile.name)}`;
+        const { error: uploadError } = await supabase.storage.from("employee-course-documents").upload(uploadedPath, certificateFile, { contentType: certificateFile.type, upsert: false });
+        if (uploadError) throw uploadError;
+      }
+      const { error: saveError } = await supabase.from("employee_courses").insert({ ...course, name: course.name.trim(), provider: course.provider.trim() || null, certificate_number: course.certificate_number.trim() || null, completed_at: course.completed_at || null, expires_at: course.expires_at || null, certificate_file_path: uploadedPath || null, employee_id: id, organization_id: profile.organization_id });
+      if (saveError) throw saveError;
+      setCourse(emptyCourse); setCertificateFile(null); setSuccess("Curso adicionado à ficha.");
+      await load();
+    } catch (caught) {
+      if (uploadedPath) await createClient().storage.from("employee-course-documents").remove([uploadedPath]);
+      setError(friendlyError(caught, "Não foi possível concluir a operação."));
+    } finally {
+      setSaving(false);
+    }
   }
-  async function removeCourse(courseOrId: Course | string) { const item = typeof courseOrId === "string" ? courses.find((courseItem) => courseItem.id === courseOrId) : courseOrId; if (!item) return; const supabase = createClient(); const { error: removeError } = await supabase.from("employee_courses").delete().eq("id", item.id); if (removeError) setError(friendlyError(removeError, "Não foi possível concluir a operação.")); else { if (item.certificate_file_path) { const { error: fileError } = await supabase.storage.from("employee-course-documents").remove([item.certificate_file_path]); if (fileError) setError(friendlyError(fileError, "Não foi possível excluir o certificado.")); } setCourses((current) => current.filter((courseItem) => courseItem.id !== item.id)); } }
-  async function openCertificate(path: string) { setError(""); const { data, error: signedUrlError } = await createClient().storage.from("employee-course-documents").createSignedUrl(path, 300); if (signedUrlError || !data?.signedUrl) { setError(friendlyError(signedUrlError, "Não foi possível abrir o comprovante.")); return; } window.open(data.signedUrl, "_blank", "noopener,noreferrer"); }
+  async function removeCourse(courseOrId: Course | string) {
+    const item = typeof courseOrId === "string" ? courses.find((courseItem) => courseItem.id === courseOrId) : courseOrId;
+    if (!item || removingCourseId) return;
+    setRemovingCourseId(item.id); setError(""); setSuccess("");
+    try {
+      const supabase = createClient();
+      const { error: removeError } = await supabase.from("employee_courses").delete().eq("id", item.id);
+      if (removeError) throw removeError;
+      setCourses((current) => current.filter((courseItem) => courseItem.id !== item.id));
+      setConfirmingCourseId(null);
+      setSuccess("Curso removido da ficha.");
+      if (item.certificate_file_path) {
+        const { error: fileError } = await supabase.storage.from("employee-course-documents").remove([item.certificate_file_path]);
+        if (fileError) setError(`Curso removido, mas não foi possível excluir o certificado: ${friendlyError(fileError, "tente novamente")}`);
+      }
+    } catch (caught) {
+      setError(friendlyError(caught, "Não foi possível concluir a operação."));
+    } finally {
+      setRemovingCourseId(null);
+    }
+  }
+  async function openCertificate(path: string) {
+    if (openingCertificatePath) return;
+    setOpeningCertificatePath(path); setError("");
+    try {
+      const { data, error: signedUrlError } = await createClient().storage.from("employee-course-documents").createSignedUrl(path, 300);
+      if (signedUrlError || !data?.signedUrl) throw signedUrlError ?? new Error("Não foi possível abrir o comprovante.");
+      window.open(data.signedUrl, "_blank", "noopener,noreferrer");
+    } catch (caught) {
+      setError(friendlyError(caught, "Não foi possível abrir o comprovante."));
+    } finally {
+      setOpeningCertificatePath(null);
+    }
+  }
   if (loading) return <main className="module-shell"><div className="module-loading"><LoaderCircle className="spin" size={22} /> Carregando cursos...</div></main>;
   if (error && !name) return <main className="module-shell"><section className="panel runtime-error-card"><FeedbackMessage onRetry={() => void load()}>{error}</FeedbackMessage></section><Link className="secondary-button" href="/employees"><ArrowLeft size={16} /> Funcionários</Link></main>;
-  return <main className="module-shell"><header className="module-header"><div><Link className="employee-back-link" href="/employees"><ArrowLeft size={14} /> Funcionários</Link><p className="eyebrow">PERFIL DO COLABORADOR</p><h1>Cursos</h1><p className="module-subtitle">Cursos e treinamentos cadastrados para {name}.</p></div><div className="employee-header-tools"><EmployeeNavigation id={id} current="courses" /></div></header>{success && <div className="feedback success-feedback"><Check size={17} /> {success}</div>}{error && <div className="feedback error-feedback"><X size={17} /> {error}</div>}{requiredCourses.length > 0 && <section className="panel employee-required-courses"><div className="form-section-title"><h2><BookOpenCheck size={17} /> Cursos necessários para a função</h2><p>{functionName || "Função não informada"} · {pendingRequired} pendência(s) identificada(s)</p></div><div className="required-course-list">{requiredCourses.map((requirement) => { const matched = courses.find((item) => normalize(item.name).includes(normalize(requirement.course_name.split(" - ")[0]))); const complete = hasValidCourse(courses, requirement); return <div className="required-course-item" key={requirement.id}><div className={`required-course-icon ${complete ? "complete" : "pending"}`}>{complete ? <CheckCircle2 size={17} /> : <ClipboardList size={17} />}</div><div className="required-course-copy"><strong>{requirement.course_name}</strong><small>{requirement.source_annex}{requirement.validity_months ? ` · validade sugerida: ${requirement.validity_months} meses` : ""}{requirement.notes ? ` · ${requirement.notes}` : ""}{matched?.certificate_file_path ? " · Comprovante anexado" : ""}</small></div><span className={`status-pill ${complete ? "success" : "danger"}`}>{complete ? "Concluído" : "Pendente"}</span></div>; })}</div></section>}{requiredCourses.length === 0 && <section className="panel employee-required-courses"><div className="form-section-title"><h2><BookOpenCheck size={17} /> Cursos necessários para a função</h2><p>{functionName ? "Não há requisitos de treinamento cadastrados para esta função." : "Informe a função do colaborador para carregar os cursos necessários."}</p></div></section>}<section className="panel edit-employee-card"><div className="form-section-title"><h2>Novo curso ou treinamento</h2><p>Registre capacitações, vencimentos e comprovantes para consulta na ficha.</p></div><form className="material-form" onSubmit={addCourse}><div className="form-grid three"><label>Nome do curso<input value={course.name} onChange={(event) => setCourse({ ...course, name: event.target.value })} placeholder="NR-10, NR-35..." required /></label><label>Instituição<input value={course.provider} onChange={(event) => setCourse({ ...course, provider: event.target.value })} /></label><label>Certificado<input value={course.certificate_number} onChange={(event) => setCourse({ ...course, certificate_number: event.target.value })} /></label></div><div className="form-grid two"><label>Conclusão<input type="date" value={course.completed_at} onChange={(event) => setCourse({ ...course, completed_at: event.target.value })} /></label><label>Validade<input type="date" value={course.expires_at} onChange={(event) => setCourse({ ...course, expires_at: event.target.value })} /></label></div><label className="file-upload">Foto ou PDF do certificado<input type="file" accept="application/pdf,image/jpeg,image/png,image/webp" onChange={selectCertificate} /><span>{certificateFile ? certificateFile.name : "Selecionar arquivo (máx. 10 MB)"}</span></label><button type="submit" className="secondary-button" disabled={saving}><Plus size={16} /> {saving ? "Salvando..." : "Adicionar curso"}</button></form></section><section className="panel edit-employee-card"><div className="form-section-title"><h2>Cursos cadastrados</h2><p>{courses.length} curso(s) vinculado(s) ao colaborador.</p></div>{courses.length ? <div className="table-wrap"><table><thead><tr><th>CURSO</th><th>INSTITUIÇÃO</th><th>CONCLUSÃO</th><th>VALIDADE</th><th>ANEXO</th><th>AÇÕES</th></tr></thead><tbody>{courses.map((item) => <tr key={item.id}><td><strong>{item.name}</strong><small>{item.certificate_number || "Sem certificado informado"}</small></td><td>{item.provider || "—"}</td><td>{formatDate(item.completed_at)}</td><td>{formatDate(item.expires_at)}</td><td>{item.certificate_file_path ? <button className="action-button" type="button" onClick={() => void openCertificate(item.certificate_file_path!)}><Download size={14} /> Ver anexo</button> : <span className="muted-cell">Não anexado</span>}</td><td><button className="action-button" type="button" onClick={() => { if (confirmingCourseId === item.id) void removeCourse(item.id); else setConfirmingCourseId(item.id); }} aria-label={confirmingCourseId === item.id ? `Confirmar remoção de ${item.name}` : `Remover ${item.name}`}><Trash2 size={14} /> {confirmingCourseId === item.id ? "Confirmar remoção" : "Remover"}</button></td></tr>)}</tbody></table></div> : <div className="empty-state"><strong>Nenhum curso cadastrado</strong><span>Adicione os treinamentos obrigatórios ou complementares.</span></div>}</section></main>;
+  return <main className="module-shell"><header className="module-header"><div><Link className="employee-back-link" href="/employees"><ArrowLeft size={14} /> Funcionários</Link><p className="eyebrow">PERFIL DO COLABORADOR</p><h1>Cursos</h1><p className="module-subtitle">Cursos e treinamentos cadastrados para {name}.</p></div><div className="employee-header-tools"><EmployeeNavigation id={id} current="courses" /></div></header>{success && <div className="feedback success-feedback"><Check size={17} /> {success}</div>}{error && <div className="feedback error-feedback"><X size={17} /> {error}</div>}{requiredCourses.length > 0 && <section className="panel employee-required-courses"><div className="form-section-title"><h2><BookOpenCheck size={17} /> Cursos necessários para a função</h2><p>{functionName || "Função não informada"} · {pendingRequired} pendência(s) identificada(s)</p></div><div className="required-course-list">{requiredCourses.map((requirement) => { const matched = courses.find((item) => normalize(item.name).includes(normalize(requirement.course_name.split(" - ")[0]))); const complete = hasValidCourse(courses, requirement); return <div className="required-course-item" key={requirement.id}><div className={`required-course-icon ${complete ? "complete" : "pending"}`}>{complete ? <CheckCircle2 size={17} /> : <ClipboardList size={17} />}</div><div className="required-course-copy"><strong>{requirement.course_name}</strong><small>{requirement.source_annex}{requirement.validity_months ? ` · validade sugerida: ${requirement.validity_months} meses` : ""}{requirement.notes ? ` · ${requirement.notes}` : ""}{matched?.certificate_file_path ? " · Comprovante anexado" : ""}</small></div><span className={`status-pill ${complete ? "success" : "danger"}`}>{complete ? "Concluído" : "Pendente"}</span></div>; })}</div></section>}{requiredCourses.length === 0 && <section className="panel employee-required-courses"><div className="form-section-title"><h2><BookOpenCheck size={17} /> Cursos necessários para a função</h2><p>{functionName ? "Não há requisitos de treinamento cadastrados para esta função." : "Informe a função do colaborador para carregar os cursos necessários."}</p></div></section>}<section className="panel edit-employee-card"><div className="form-section-title"><h2>Novo curso ou treinamento</h2><p>Registre capacitações, vencimentos e comprovantes para consulta na ficha.</p></div><form className="material-form" onSubmit={addCourse}><div className="form-grid three"><label>Nome do curso<input value={course.name} onChange={(event) => setCourse({ ...course, name: event.target.value })} placeholder="NR-10, NR-35..." required /></label><label>Instituição<input value={course.provider} onChange={(event) => setCourse({ ...course, provider: event.target.value })} /></label><label>Certificado<input value={course.certificate_number} onChange={(event) => setCourse({ ...course, certificate_number: event.target.value })} /></label></div><div className="form-grid two"><label>Conclusão<input type="date" value={course.completed_at} onChange={(event) => setCourse({ ...course, completed_at: event.target.value })} /></label><label>Validade<input type="date" value={course.expires_at} onChange={(event) => setCourse({ ...course, expires_at: event.target.value })} /></label></div><label className="file-upload">Foto ou PDF do certificado<input type="file" accept="application/pdf,image/jpeg,image/png,image/webp" onChange={selectCertificate} /><span>{certificateFile ? certificateFile.name : "Selecionar arquivo (máx. 10 MB)"}</span></label><button type="submit" className="secondary-button" disabled={saving}><Plus size={16} /> {saving ? "Salvando..." : "Adicionar curso"}</button></form></section><section className="panel edit-employee-card"><div className="form-section-title"><h2>Cursos cadastrados</h2><p>{courses.length} curso(s) vinculado(s) ao colaborador.</p></div>{courses.length ? <div className="table-wrap"><table><thead><tr><th>CURSO</th><th>INSTITUIÇÃO</th><th>CONCLUSÃO</th><th>VALIDADE</th><th>ANEXO</th><th>AÇÕES</th></tr></thead><tbody>{courses.map((item) => <tr key={item.id}><td><strong>{item.name}</strong><small>{item.certificate_number || "Sem certificado informado"}</small></td><td>{item.provider || "—"}</td><td>{formatDate(item.completed_at)}</td><td>{formatDate(item.expires_at)}</td><td>{item.certificate_file_path ? <button className="action-button" type="button" disabled={openingCertificatePath !== null} onClick={() => void openCertificate(item.certificate_file_path!)}><Download size={14} /> {openingCertificatePath === item.certificate_file_path ? "Abrindo..." : "Ver anexo"}</button> : <span className="muted-cell">Não anexado</span>}</td><td><button className="action-button" type="button" disabled={removingCourseId !== null} onClick={() => { if (confirmingCourseId === item.id) void removeCourse(item.id); else setConfirmingCourseId(item.id); }} aria-label={confirmingCourseId === item.id ? `Confirmar remoção de ${item.name}` : `Remover ${item.name}`}><Trash2 size={14} /> {removingCourseId === item.id ? "Removendo..." : confirmingCourseId === item.id ? "Confirmar remoção" : "Remover"}</button></td></tr>)}</tbody></table></div> : <div className="empty-state"><strong>Nenhum curso cadastrado</strong><span>Adicione os treinamentos obrigatórios ou complementares.</span></div>}</section></main>;
 }
+
+function isRealDate(value: string) { const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(value); if (!match) return false; const date = new Date(`${value}T00:00:00`); return !Number.isNaN(date.getTime()) && date.getFullYear() === Number(match[1]) && date.getMonth() + 1 === Number(match[2]) && date.getDate() === Number(match[3]); }

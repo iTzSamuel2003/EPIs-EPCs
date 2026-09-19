@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Check, ClipboardList, Download, LoaderCircle, Search, X } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 import { friendlyError } from "@/lib/ui-feedback";
@@ -31,16 +31,24 @@ export default function RequestsPage() {
   const [confirming, setConfirming] = useState<Confirmation | null>(null);
   const [noteDraft, setNoteDraft] = useState("");
   const [deliveredAtDraft, setDeliveredAtDraft] = useState("");
+  const loadVersion = useRef(0);
 
   useEffect(() => { void load(); }, []);
   useEffect(() => { if (!success) return; const timer = window.setTimeout(() => setSuccess(""), 4500); return () => window.clearTimeout(timer); }, [success]);
 
   async function load() {
+    const version = ++loadVersion.current;
     setLoading(true); setError("");
-    setRequests([]);
-    const { data, error: loadError } = await createClient().from("employee_portal_requests").select("id,request_type,description,status,review_notes,attachment_path,created_at,updated_at,employee:employees(full_name,registration),delivery_item:delivery_items(material:materials(name,unit),lot:material_lots(lot_number))").order("created_at", { ascending: false });
-    if (loadError) setError(friendlyError(loadError, "Não foi possível carregar as solicitações.")); else setRequests((data ?? []) as unknown as RequestRow[]);
-    setLoading(false);
+    try {
+      const { data, error: loadError } = await createClient().from("employee_portal_requests").select("id,request_type,description,status,review_notes,attachment_path,created_at,updated_at,delivered_at,employee:employees(full_name,registration),delivery_item:delivery_items(material:materials(name,unit),lot:material_lots(lot_number))").order("created_at", { ascending: false });
+      if (version !== loadVersion.current) return;
+      if (loadError) { setError(friendlyError(loadError, "Não foi possível carregar as solicitações.")); return; }
+      setRequests((data ?? []) as unknown as RequestRow[]);
+    } catch (caught) {
+      if (version === loadVersion.current) setError(friendlyError(caught, "Não foi possível carregar as solicitações."));
+    } finally {
+      if (version === loadVersion.current) setLoading(false);
+    }
   }
 
   const filtered = useMemo(() => requests.filter((item) => {
@@ -54,11 +62,11 @@ export default function RequestsPage() {
   async function updateRequest(item: RequestRow, status: string, note: string) {
     if (savingId) return;
     const deliveredAt = deliveredAtDraft || localDateValue();
-    if (status === "completed" && (!/^\d{4}-\d{2}-\d{2}$/.test(deliveredAt) || Number.isNaN(new Date(`${deliveredAt}T00:00:00`).getTime()))) {
+    if (status === "completed" && (!isRealDate(deliveredAt) || deliveredAt > localDateValue())) {
       setError("Informe uma data de entrega válida.");
       return;
     }
-    setSavingId(item.id); setError(""); setSuccess("");
+    setSavingId(item.id); setError(""); setSuccess(""); ++loadVersion.current;
     try {
       const { error: updateError } = await createClient().from("employee_portal_requests").update({ status, review_notes: note.trim() || null, delivered_at: status === "completed" ? deliveredAt : null }).eq("id", item.id);
       if (updateError) throw updateError;
@@ -77,13 +85,16 @@ export default function RequestsPage() {
     try {
       const { data, error: signedUrlError } = await createClient().storage.from("employee-request-attachments").createSignedUrl(item.attachment_path, 300);
       if (signedUrlError || !data?.signedUrl) throw signedUrlError ?? new Error("Não foi possível abrir o anexo.");
-      window.open(data.signedUrl, "_blank", "noopener,noreferrer");
+      const opened = window.open(data.signedUrl, "_blank", "noopener,noreferrer");
+      if (!opened) throw new Error("O navegador bloqueou a abertura do anexo. Permita pop-ups para este site.");
     } catch (caught) {
       setError(friendlyError(caught, "Não foi possível abrir o anexo."));
     } finally {
       setOpeningId("");
     }
   }
+
+function isRealDate(value: string) { const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(value); if (!match) return false; const parsed = new Date(`${value}T00:00:00`); return !Number.isNaN(parsed.getTime()) && parsed.getFullYear() === Number(match[1]) && parsed.getMonth() + 1 === Number(match[2]) && parsed.getDate() === Number(match[3]); }
 
   return <main className="module-shell">
     <header className="module-header"><div><p className="eyebrow">ATENDIMENTO OPERACIONAL</p><h1>Solicitações</h1><p className="module-subtitle">Acompanhe pedidos enviados pelos colaboradores no portal.</p></div></header>
