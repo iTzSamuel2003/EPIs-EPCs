@@ -82,9 +82,9 @@ Deno.serve(async (req) => {
   if (req.method !== "POST") return response({ error: "Método não permitido" }, 405, origin);
   if (!supabaseUrl || !serviceKey) return response({ error: "Configuração do servidor indisponível" }, 500, origin);
   const ip = req.headers.get("cf-connecting-ip") ?? req.headers.get("x-forwarded-for")?.split(",")[0]?.trim() ?? "unknown";
-  if (!allowAttempt(ip)) return response({ error: "Tente novamente mais tarde" }, 429);
+  if (!allowAttempt(ip)) return response({ error: "Tente novamente mais tarde" }, 429, origin);
   const contentLength = Number(req.headers.get("content-length") ?? 0);
-  if (contentLength > maxFileSize + 1024 * 1024) return response({ error: "Arquivo excede o limite de 10 MB" }, 413);
+  if (contentLength > maxFileSize + 1024 * 1024) return response({ error: "Arquivo excede o limite de 10 MB" }, 413, origin);
 
   let form: FormData;
   try { form = await req.formData(); } catch { return response({ error: "Formulário multipart inválido" }, 400); }
@@ -111,7 +111,7 @@ Deno.serve(async (req) => {
     console.error("request creation failed", requestError);
     return response({ error: "Não foi possível criar a solicitação" }, 409, origin);
   }
-  if (!attachment) return response({ id: requestId });
+  if (!attachment) return response({ id: requestId }, 200, origin);
 
   const { data: request, error: lookupError } = await admin.from("employee_portal_requests").select("organization_id").eq("id", requestId).single();
   if (lookupError || !request) {
