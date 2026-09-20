@@ -64,7 +64,7 @@ export default function FunctionTemplatesPage() {
     }
   }
 
-  useEffect(() => { void Promise.resolve().then(() => load()); }, [retryKey]);
+  useEffect(() => { void Promise.resolve().then(() => load()); return () => { loadVersion.current += 1; }; }, [retryKey]);
 
   function retryLoad() { setRetryKey((current) => current + 1); }
 

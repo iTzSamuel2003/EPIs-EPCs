@@ -3245,3 +3245,112 @@ main.module-shell:not(:has(.module-toolbar)):has(> .module-summary) > .module-ta
 @media (prefers-reduced-motion:reduce){
   .sidebar{transition:none;}
 }
+
+/* Revisão final administrativa e Portal: leitura, estados e contenção */
+:where(.module-table-card,.history-table-card,.portal-panel){min-width:0;}
+:where(.module-table-card,.history-table-card) .table-wrap{
+  max-width:100%;
+  overflow-x:auto;
+  overflow-y:hidden;
+  overscroll-behavior-inline:contain;
+  scrollbar-gutter:stable;
+}
+:where(.module-table-card,.history-table-card) table{max-width:100%;}
+:where(.module-table-card,.history-table-card) th{
+  white-space:normal;
+  line-height:1.25;
+  vertical-align:bottom;
+}
+:where(.module-table-card,.history-table-card) td{
+  vertical-align:top;
+  overflow-wrap:anywhere;
+  word-break:normal;
+  line-height:1.4;
+}
+:where(.module-table-card,.history-table-card) td > strong,
+:where(.module-table-card,.history-table-card) td > small,
+:where(.module-table-card,.history-table-card) .material-cell strong,
+:where(.module-table-card,.history-table-card) .material-cell small{
+  max-width:100%;
+  overflow-wrap:anywhere;
+}
+:where(.material-form,.portal-panel .public-form) > label,
+:where(.material-form,.portal-panel .public-form) .form-grid > label{
+  min-width:0;
+  line-height:1.35;
+}
+:where(.material-form,.portal-panel .public-form) input,
+:where(.material-form,.portal-panel .public-form) select,
+:where(.material-form,.portal-panel .public-form) textarea{
+  min-width:0;
+  max-width:100%;
+}
+:where(.module-loading,.empty-state){
+  border:1px dashed #dfe4ef;
+  border-radius:10px;
+  background:#fbfcff;
+  color:#596983;
+}
+:where(.module-loading,.empty-state) > svg{flex:0 0 auto;}
+:where(.module-loading,.empty-state) strong,
+:where(.module-loading,.empty-state) span{max-width:100%;overflow-wrap:anywhere;}
+:where(.feedback,.login-error,.public-feedback){
+  border:1px solid transparent;
+  overflow-wrap:anywhere;
+}
+:where(.error-feedback,.login-error){border-color:#f2c8c2;}
+:where(.success-feedback){border-color:#c5ead6;}
+:where(button,a,input,select,textarea,[tabindex]):focus-visible{
+  outline:3px solid #7762d6;
+  outline-offset:2px;
+}
+:where(.portal-material-list,.portal-course-list,.portal-request-list) > div{
+  min-width:0;
+}
+:where(.portal-material-list,.portal-course-list,.portal-request-list) strong,
+:where(.portal-material-list,.portal-course-list,.portal-request-list) span{
+  max-width:100%;
+  overflow-wrap:anywhere;
+}
+
+@media (max-width:1024px){
+  .module-header,.panel-header{min-width:0;}
+  .module-header > div,.panel-header > div{min-width:0;max-width:100%;}
+  .module-header h1,.panel-header h2,.module-subtitle,.panel-header p{overflow-wrap:anywhere;}
+  .module-toolbar{flex-wrap:wrap;}
+  .module-toolbar > *{min-width:0;}
+  .module-toolbar .module-search{flex:1 1 260px;}
+  .module-toolbar select{flex:0 1 230px;max-width:100%;}
+  .portal-heading > div{min-width:0;}
+}
+
+@media (max-width:768px){
+  :where(.module-table-card,.history-table-card) .table-wrap{margin-inline:0;}
+  :where(.module-table-card,.history-table-card) th,
+  :where(.module-table-card,.history-table-card) td{padding-block:10px;}
+  :where(.material-form,.portal-panel .public-form) input,
+  :where(.material-form,.portal-panel .public-form) select,
+  :where(.material-form,.portal-panel .public-form) textarea{font-size:16px;}
+  .module-toolbar .module-search,.module-toolbar select{flex-basis:100%;width:100%;}
+  .portal-panel .public-form .primary-button,
+  .portal-panel .public-form .secondary-button{width:100%;justify-content:center;}
+  :where(.module-loading,.empty-state){min-height:150px;padding:24px 14px;}
+}
+
+@media (max-width:480px){
+  .module-header h1{font-size:23px;line-height:1.2;}
+  .panel-header{gap:10px;}
+  .module-table-card,.history-table-card{padding-inline:12px;}
+  :where(.module-table-card,.history-table-card) .table-wrap{margin-inline:-2px;padding-inline:2px;}
+  :where(.feedback,.login-error,.public-feedback){align-items:flex-start;line-height:1.45;}
+  .portal-heading{align-items:flex-start;}
+  .portal-heading h1{font-size:21px;line-height:1.25;}
+}
+
+@media (max-width:380px){
+  .module-shell{padding-inline:12px;}
+  .module-table-card,.history-table-card{padding-inline:10px;}
+  .module-header h1{font-size:21px;}
+  :where(.module-table-card,.history-table-card) th,
+  :where(.module-table-card,.history-table-card) td{padding-inline:5px;}
+}

@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { ArrowDownAZ, ArrowUpAZ, Boxes, LoaderCircle, Search } from "lucide-react";
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/client";
@@ -20,9 +20,29 @@ function stockSituation(availableQuantity: number, minimumStock: number) {
 
 export default function StockPage() {
   const [materials, setMaterials] = useState<StockMaterial[]>([]); const [balances, setBalances] = useState<Record<string, StockBalance>>({}); const [variantBalances, setVariantBalances] = useState<Record<string, VariantBalance[]>>({}); const [query, setQuery] = useState(""); const [filter, setFilter] = useState("all"); const [sortBy, setSortBy] = useState<"name" | "balance">("name"); const [ascending, setAscending] = useState(true); const [page, setPage] = useState(1); const [loading, setLoading] = useState(true); const [error, setError] = useState("");
-  async function load() { const supabase = createClient(); const [{ data, error: materialError }, { data: lots, error: lotError }, { data: variants, error: variantError }] = await Promise.all([supabase.from("materials").select("id,internal_code,name,type,unit,minimum_stock,location,status").eq("status", "active").order("name"), supabase.from("material_lots").select("material_id,variant_id,received_quantity,available_quantity,unit_cost"), supabase.from("material_variants").select("id,material_id,name,size,active").eq("active", true).order("size")]); if (materialError || lotError || variantError) setError(friendlyError(materialError ?? lotError ?? variantError, "Não foi possível carregar o estoque.")); else { setMaterials((data ?? []) as StockMaterial[]); setBalances((lots ?? []).reduce<Record<string, StockBalance>>((sum, lot) => { const totalQuantity = Number(lot.received_quantity); const availableQuantity = Number(lot.available_quantity); const unitCost = Number(lot.unit_cost ?? 0); sum[lot.material_id] = { totalQuantity: (sum[lot.material_id]?.totalQuantity ?? 0) + totalQuantity, availableQuantity: (sum[lot.material_id]?.availableQuantity ?? 0) + availableQuantity, totalCost: (sum[lot.material_id]?.totalCost ?? 0) + totalQuantity * unitCost, availableCost: (sum[lot.material_id]?.availableCost ?? 0) + availableQuantity * unitCost }; return sum; }, {})); const variantMap = (variants ?? []).reduce<Record<string, VariantBalance>>((sum, variant) => { sum[variant.id] = { id: variant.id, label: variant.size || variant.name, totalQuantity: 0, availableQuantity: 0 }; return sum; }, {}); (lots ?? []).forEach((lot) => { if (lot.variant_id && variantMap[lot.variant_id]) { variantMap[lot.variant_id].totalQuantity += Number(lot.received_quantity); variantMap[lot.variant_id].availableQuantity += Number(lot.available_quantity); } }); setVariantBalances((variants ?? []).reduce<Record<string, VariantBalance[]>>((sum, variant) => { sum[variant.material_id] = [...(sum[variant.material_id] ?? []), variantMap[variant.id]]; return sum; }, {})); } setLoading(false); }
-  useEffect(() => { const refresh = () => void load().catch((caught) => { setError(friendlyError(caught, "Não foi possível atualizar o estoque.")); setLoading(false); }); const events = ["delivery-created", "return-created", "stock-entry-created", "stock-entry-updated", "stock-entry-deleted"]; events.forEach((eventName) => window.addEventListener(eventName, refresh)); void load().catch((caught) => { setError(friendlyError(caught, "Não foi possível carregar o estoque.")); setLoading(false); }); return () => events.forEach((eventName) => window.removeEventListener(eventName, refresh)); }, []);
-  function retryLoad() { setLoading(true); setError(""); void load().catch((caught) => { setError(friendlyError(caught, "Não foi possível carregar o estoque.")); setLoading(false); }); }
+  const mountedRef = useRef(true);
+  const loadVersion = useRef(0);
+  async function load() {
+    const version = ++loadVersion.current;
+    if (mountedRef.current) { setLoading(true); setError(""); }
+    try {
+      const supabase = createClient();
+      const [{ data, error: materialError }, { data: lots, error: lotError }, { data: variants, error: variantError }] = await Promise.all([supabase.from("materials").select("id,internal_code,name,type,unit,minimum_stock,location,status").eq("status", "active").order("name"), supabase.from("material_lots").select("material_id,variant_id,received_quantity,available_quantity,unit_cost"), supabase.from("material_variants").select("id,material_id,name,size,active").eq("active", true).order("size")]);
+      if (!mountedRef.current || version !== loadVersion.current) return;
+      if (materialError || lotError || variantError) { setError(friendlyError(materialError ?? lotError ?? variantError, "Não foi possível carregar o estoque.")); return; }
+      setMaterials((data ?? []) as StockMaterial[]);
+      setBalances((lots ?? []).reduce<Record<string, StockBalance>>((sum, lot) => { const totalQuantity = Number(lot.received_quantity); const availableQuantity = Number(lot.available_quantity); const unitCost = Number(lot.unit_cost ?? 0); sum[lot.material_id] = { totalQuantity: (sum[lot.material_id]?.totalQuantity ?? 0) + totalQuantity, availableQuantity: (sum[lot.material_id]?.availableQuantity ?? 0) + availableQuantity, totalCost: (sum[lot.material_id]?.totalCost ?? 0) + totalQuantity * unitCost, availableCost: (sum[lot.material_id]?.availableCost ?? 0) + availableQuantity * unitCost }; return sum; }, {}));
+      const variantMap = (variants ?? []).reduce<Record<string, VariantBalance>>((sum, variant) => { sum[variant.id] = { id: variant.id, label: variant.size || variant.name, totalQuantity: 0, availableQuantity: 0 }; return sum; }, {});
+      (lots ?? []).forEach((lot) => { if (lot.variant_id && variantMap[lot.variant_id]) { variantMap[lot.variant_id].totalQuantity += Number(lot.received_quantity); variantMap[lot.variant_id].availableQuantity += Number(lot.available_quantity); } });
+      setVariantBalances((variants ?? []).reduce<Record<string, VariantBalance[]>>((sum, variant) => { sum[variant.material_id] = [...(sum[variant.material_id] ?? []), variantMap[variant.id]]; return sum; }, {}));
+    } catch (caught) {
+      if (mountedRef.current && version === loadVersion.current) setError(friendlyError(caught, "Não foi possível carregar o estoque."));
+    } finally {
+      if (mountedRef.current && version === loadVersion.current) setLoading(false);
+    }
+  }
+  useEffect(() => { mountedRef.current = true; const refresh = () => void load(); const events = ["delivery-created", "return-created", "stock-entry-created", "stock-entry-updated", "stock-entry-deleted"]; events.forEach((eventName) => window.addEventListener(eventName, refresh)); void load(); return () => { mountedRef.current = false; loadVersion.current += 1; events.forEach((eventName) => window.removeEventListener(eventName, refresh)); }; }, []);
+  function retryLoad() { void load(); }
   useEffect(() => { const requestedFilter = new URLSearchParams(window.location.search).get("filter"); if (requestedFilter === "normal" || requestedFilter === "low" || requestedFilter === "empty") setFilter(requestedFilter); }, []);
   const rows = useMemo(() => materials.filter((item) => { const current = balances[item.id]?.availableQuantity ?? 0; const situation = stockSituation(current, Number(item.minimum_stock)); return normalize(`${item.name} ${item.internal_code}`).includes(normalize(query)) && (filter === "all" || situation === filter); }).sort((a, b) => { const value = sortBy === "name" ? a.name.localeCompare(b.name, "pt-BR") : (balances[a.id]?.availableQuantity ?? 0) - (balances[b.id]?.availableQuantity ?? 0); return ascending ? value : -value; }), [materials, balances, query, filter, sortBy, ascending]);
   const pageSize = 40;

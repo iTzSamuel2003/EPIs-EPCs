@@ -15,11 +15,10 @@ function matchesGroup(employee: Employee, group: string) { if (group === "Todos 
 function validCourse(courses: Course[], employeeId: string, requirement: Requirement) { return courses.some((course) => course.employee_id === employeeId && normalize(course.name).includes(normalize(requirement.course_name.split(" - ")[0])) && (!course.expires_at || course.expires_at >= todayLocal())); }
 
 export default function TrainingCompliancePage() {
-  const [requirements, setRequirements] = useState<Requirement[]>([]); const [employees, setEmployees] = useState<Employee[]>([]); const [courses, setCourses] = useState<Course[]>([]); const [functionFilter, setFunctionFilter] = useState("all"); const [courseFilter, setCourseFilter] = useState("all"); const [statusFilter, setStatusFilter] = useState("all"); const [loading, setLoading] = useState(true); const [error, setError] = useState(""); const [retryKey, setRetryKey] = useState(0); const loadVersion = useRef(0);
+  const [requirements, setRequirements] = useState<Requirement[]>([]); const [employees, setEmployees] = useState<Employee[]>([]); const [courses, setCourses] = useState<Course[]>([]); const [functionFilter, setFunctionFilter] = useState("all"); const [courseFilter, setCourseFilter] = useState("all"); const [statusFilter, setStatusFilter] = useState("all"); const [loading, setLoading] = useState(true); const [error, setError] = useState(""); const [retryKey, setRetryKey] = useState(0); const loadVersion = useRef(0); const mountedRef = useRef(true);
   async function load() {
     const version = ++loadVersion.current;
-    setLoading(true);
-    setError("");
+    if (mountedRef.current) { setLoading(true); setError(""); }
     try {
       const supabase = createClient();
       const [{ data: requirementData, error: requirementError }, { data: employeeData, error: employeeError }, { data: courseData, error: courseError }] = await Promise.all([
@@ -27,19 +26,19 @@ export default function TrainingCompliancePage() {
         supabase.from("employees").select("id, full_name, job_title, function_name").eq("status", "active").order("full_name"),
         supabase.from("employee_courses").select("employee_id, name, expires_at"),
       ]);
-      if (version !== loadVersion.current) return;
+      if (!mountedRef.current || version !== loadVersion.current) return;
       const loadError = requirementError ?? employeeError ?? courseError;
       if (loadError) { setError(friendlyError(loadError, "Não foi possível carregar a matriz de treinamentos.")); return; }
       setRequirements((requirementData ?? []) as Requirement[]);
       setEmployees((employeeData ?? []) as Employee[]);
       setCourses((courseData ?? []) as Course[]);
     } catch (caught) {
-      if (version === loadVersion.current) setError(friendlyError(caught, "Não foi possível carregar a matriz de treinamentos."));
+      if (mountedRef.current && version === loadVersion.current) setError(friendlyError(caught, "Não foi possível carregar a matriz de treinamentos."));
     } finally {
-      if (version === loadVersion.current) setLoading(false);
+      if (mountedRef.current && version === loadVersion.current) setLoading(false);
     }
   }
-  useEffect(() => { void load(); }, [retryKey]);
+  useEffect(() => { mountedRef.current = true; void load(); return () => { mountedRef.current = false; loadVersion.current += 1; }; }, [retryKey]);
   const functionOptions = useMemo(() => [...new Set(requirements.map((item) => item.function_group))].sort(), [requirements]);
   const courseOptions = useMemo(() => [...new Set(requirements.map((item) => item.course_name))].sort(), [requirements]);
   const rows = useMemo(() => requirements.map((requirement) => { const applicable = employees.filter((employee) => matchesGroup(employee, requirement.function_group)); const completed = applicable.filter((employee) => validCourse(courses, employee.id, requirement)).length; return { requirement, applicable: applicable.length, completed, pending: Math.max(applicable.length - completed, 0) }; }).filter((row) => (functionFilter === "all" || row.requirement.function_group === functionFilter) && (courseFilter === "all" || row.requirement.course_name === courseFilter) && (statusFilter === "all" || (statusFilter === "pending" ? row.pending > 0 : row.applicable > 0 && row.pending === 0))), [requirements, employees, courses, functionFilter, courseFilter, statusFilter]);
