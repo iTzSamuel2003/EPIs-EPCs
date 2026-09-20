@@ -1467,3 +1467,161 @@ body{max-width:100%;overflow-x:hidden;}
   .requests-table .action-button{width:max-content;max-width:100%;white-space:normal;}
   .requests-table td strong,.requests-table td small{overflow-wrap:anywhere;}
 }
+
+/* Tabelas contratuais: leitura em cards no celular e colunas flexíveis em tablet. */
+@media (max-width:1024px) and (min-width:601px){
+  .contract-requirements-page .module-table-card table,
+  .tests-page .module-table-card table,
+  main.module-shell:has(.training-filters) .module-table-card table,
+  main.module-shell:not(:has(.module-toolbar)):has(.module-summary) .module-table-card table,
+  .history-page .history-table-card table,
+  main.module-shell:has(.employee-required-courses) .edit-employee-card:last-of-type table{
+    table-layout:fixed;
+    white-space:normal;
+  }
+  .contract-requirements-page .module-table-card th,
+  .contract-requirements-page .module-table-card td,
+  .tests-page .module-table-card th,
+  .tests-page .module-table-card td,
+  main.module-shell:has(.training-filters) .module-table-card th,
+  main.module-shell:has(.training-filters) .module-table-card td,
+  main.module-shell:not(:has(.module-toolbar)):has(.module-summary) .module-table-card th,
+  main.module-shell:not(:has(.module-toolbar)):has(.module-summary) .module-table-card td,
+  .history-page .history-table-card th,
+  .history-page .history-table-card td,
+  main.module-shell:has(.employee-required-courses) .edit-employee-card:last-of-type th,
+  main.module-shell:has(.employee-required-courses) .edit-employee-card:last-of-type td{
+    min-width:0;
+    overflow-wrap:anywhere;
+    white-space:normal;
+    vertical-align:top;
+  }
+}
+
+@media (max-width:600px){
+  .contract-requirements-page .module-table-card .table-wrap,
+  .tests-page .module-table-card .table-wrap,
+  main.module-shell:has(.training-filters) .module-table-card .table-wrap,
+  main.module-shell:not(:has(.module-toolbar)):has(.module-summary) .module-table-card .table-wrap,
+  .history-page .history-table-card .table-wrap,
+  main.module-shell:has(.employee-required-courses) .edit-employee-card:last-of-type .table-wrap{
+    overflow:visible;
+    margin-right:0;
+    padding-bottom:0;
+  }
+  .contract-requirements-page .module-table-card table,
+  .tests-page .module-table-card table,
+  main.module-shell:has(.training-filters) .module-table-card table,
+  main.module-shell:not(:has(.module-toolbar)):has(.module-summary) .module-table-card table,
+  .history-page .history-table-card table,
+  main.module-shell:has(.employee-required-courses) .edit-employee-card:last-of-type table{
+    display:block;
+    width:100%;
+    min-width:0;
+    white-space:normal;
+  }
+  .contract-requirements-page .module-table-card thead,
+  .tests-page .module-table-card thead,
+  main.module-shell:has(.training-filters) .module-table-card thead,
+  main.module-shell:not(:has(.module-toolbar)):has(.module-summary) .module-table-card thead,
+  .history-page .history-table-card thead,
+  main.module-shell:has(.employee-required-courses) .edit-employee-card:last-of-type thead{display:none;}
+  .contract-requirements-page .module-table-card tbody,
+  .tests-page .module-table-card tbody,
+  main.module-shell:has(.training-filters) .module-table-card tbody,
+  main.module-shell:not(:has(.module-toolbar)):has(.module-summary) .module-table-card tbody,
+  .history-page .history-table-card tbody,
+  main.module-shell:has(.employee-required-courses) .edit-employee-card:last-of-type tbody{display:grid;gap:10px;}
+  .contract-requirements-page .module-table-card tr,
+  .tests-page .module-table-card tr,
+  main.module-shell:has(.training-filters) .module-table-card tr,
+  main.module-shell:not(:has(.module-toolbar)):has(.module-summary) .module-table-card tr,
+  .history-page .history-table-card tr,
+  main.module-shell:has(.employee-required-courses) .edit-employee-card:last-of-type tr{
+    display:grid;
+    grid-template-columns:minmax(0,1fr) minmax(0,1fr);
+    gap:9px 12px;
+    padding:13px;
+    border:1px solid #edf0f5;
+    border-radius:10px;
+    background:#fafbfe;
+  }
+  .contract-requirements-page .module-table-card td,
+  .tests-page .module-table-card td,
+  main.module-shell:has(.training-filters) .module-table-card td,
+  main.module-shell:not(:has(.module-toolbar)):has(.module-summary) .module-table-card td,
+  .history-page .history-table-card td,
+  main.module-shell:has(.employee-required-courses) .edit-employee-card:last-of-type td{
+    display:grid;
+    gap:4px;
+    min-width:0;
+    padding:0;
+    border:0;
+    white-space:normal;
+    overflow-wrap:anywhere;
+  }
+  .contract-requirements-page .module-table-card td::before,
+  .tests-page .module-table-card td::before,
+  main.module-shell:has(.training-filters) .module-table-card td::before,
+  main.module-shell:not(:has(.module-toolbar)):has(.module-summary) .module-table-card td::before,
+  .history-page .history-table-card td::before,
+  main.module-shell:has(.employee-required-courses) .edit-employee-card:last-of-type td::before{
+    color:#a1aaba;
+    font-size:9px;
+    font-weight:700;
+    letter-spacing:.5px;
+  }
+
+  .contract-requirements-page .module-table-card td:nth-child(1),
+  .contract-requirements-page .module-table-card td:nth-child(6),
+  .tests-page .module-table-card td:nth-child(1),
+  .tests-page .module-table-card td:nth-child(7),
+  main.module-shell:has(.training-filters) .module-table-card td:nth-child(1),
+  main.module-shell:has(.training-filters) .module-table-card td:nth-child(7),
+  main.module-shell:not(:has(.module-toolbar)):has(.module-summary) .module-table-card td:nth-child(1),
+  main.module-shell:not(:has(.module-toolbar)):has(.module-summary) .module-table-card td:nth-child(6),
+  .history-page .history-table-card td:nth-child(1),
+  .history-page .history-table-card td:nth-child(6),
+  main.module-shell:has(.employee-required-courses) .edit-employee-card:last-of-type td:nth-child(1),
+  main.module-shell:has(.employee-required-courses) .edit-employee-card:last-of-type td:nth-child(6){grid-column:1 / -1;}
+
+  .contract-requirements-page .module-table-card td:nth-child(1)::before{content:"Item contratual";}
+  .contract-requirements-page .module-table-card td:nth-child(2)::before{content:"Categoria";}
+  .contract-requirements-page .module-table-card td:nth-child(3)::before{content:"Uso";}
+  .contract-requirements-page .module-table-card td:nth-child(4)::before{content:"Requerido";}
+  .contract-requirements-page .module-table-card td:nth-child(5)::before{content:"Disponível";}
+  .contract-requirements-page .module-table-card td:nth-child(6)::before{content:"Conformidade";}
+  .tests-page .module-table-card td:nth-child(1)::before{content:"Material";}
+  .tests-page .module-table-card td:nth-child(2)::before{content:"Estoque";}
+  .tests-page .module-table-card td:nth-child(3)::before{content:"Status";}
+  .tests-page .module-table-card td:nth-child(4)::before{content:"Último ensaio";}
+  .tests-page .module-table-card td:nth-child(5)::before{content:"Próximo ensaio";}
+  .tests-page .module-table-card td:nth-child(6)::before{content:"Resultado";}
+  .tests-page .module-table-card td:nth-child(7)::before{content:"Laudo / ART";}
+  main.module-shell:has(.training-filters) .module-table-card td:nth-child(1)::before{content:"Grupo / função";}
+  main.module-shell:has(.training-filters) .module-table-card td:nth-child(2)::before{content:"Curso";}
+  main.module-shell:has(.training-filters) .module-table-card td:nth-child(3)::before{content:"Validade";}
+  main.module-shell:has(.training-filters) .module-table-card td:nth-child(4)::before{content:"Aplicável";}
+  main.module-shell:has(.training-filters) .module-table-card td:nth-child(5)::before{content:"Cobertos";}
+  main.module-shell:has(.training-filters) .module-table-card td:nth-child(6)::before{content:"Pendências";}
+  main.module-shell:has(.training-filters) .module-table-card td:nth-child(7)::before{content:"Ação";}
+  main.module-shell:not(:has(.module-toolbar)):has(.module-summary) .module-table-card td:nth-child(1)::before{content:"Material";}
+  main.module-shell:not(:has(.module-toolbar)):has(.module-summary) .module-table-card td:nth-child(2)::before{content:"Adquirido";}
+  main.module-shell:not(:has(.module-toolbar)):has(.module-summary) .module-table-card td:nth-child(3)::before{content:"Em estoque";}
+  main.module-shell:not(:has(.module-toolbar)):has(.module-summary) .module-table-card td:nth-child(4)::before{content:"Custo unitário médio";}
+  main.module-shell:not(:has(.module-toolbar)):has(.module-summary) .module-table-card td:nth-child(5)::before{content:"Valor total";}
+  main.module-shell:not(:has(.module-toolbar)):has(.module-summary) .module-table-card td:nth-child(6)::before{content:"Reposição prevista";}
+  .history-page .history-table-card td:nth-child(1)::before{content:"Data";}
+  .history-page .history-table-card td:nth-child(2)::before{content:"Material";}
+  .history-page .history-table-card td:nth-child(3)::before{content:"Movimentação";}
+  .history-page .history-table-card td:nth-child(4)::before{content:"Quantidade";}
+  .history-page .history-table-card td:nth-child(5)::before{content:"Lote";}
+  .history-page .history-table-card td:nth-child(6)::before{content:"Motivo / detalhes";}
+  .history-page .history-table-card td:nth-child(7)::before{content:"Responsável";}
+  main.module-shell:has(.employee-required-courses) .edit-employee-card:last-of-type td:nth-child(1)::before{content:"Curso";}
+  main.module-shell:has(.employee-required-courses) .edit-employee-card:last-of-type td:nth-child(2)::before{content:"Instituição";}
+  main.module-shell:has(.employee-required-courses) .edit-employee-card:last-of-type td:nth-child(3)::before{content:"Conclusão";}
+  main.module-shell:has(.employee-required-courses) .edit-employee-card:last-of-type td:nth-child(4)::before{content:"Validade";}
+  main.module-shell:has(.employee-required-courses) .edit-employee-card:last-of-type td:nth-child(5)::before{content:"Anexo";}
+  main.module-shell:has(.employee-required-courses) .edit-employee-card:last-of-type td:nth-child(6)::before{content:"Ações";}
+}

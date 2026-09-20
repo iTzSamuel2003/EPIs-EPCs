@@ -184,7 +184,7 @@ export default function FunctionTemplatesPage() {
     */
   }
 
-  return <main className="module-shell">
+  return <main className="module-shell function-templates-page">
     <header className="module-header"><div><p className="eyebrow">PADRÕES DE DISTRIBUIÇÃO</p><h1>Listas por função</h1><p className="module-subtitle">Defina e mantenha os materiais sugeridos para cada função.</p></div><button className="primary-button" onClick={openNew}><Plus size={17} /> Nova função</button></header>
     {success && <div className="feedback success-feedback" role="status"><Check size={17} /> {success}</div>}
     {error && !showForm && <FeedbackMessage onRetry={retryLoad}>{error}</FeedbackMessage>}

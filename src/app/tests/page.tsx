@@ -163,7 +163,7 @@ export default function TestsPage() {
     }
   }
 
-  return <main className="module-shell">
+  return <main className="module-shell tests-page">
     <header className="module-header"><div><p className="eyebrow">CONTROLE TÉCNICO</p><h1>Ensaios</h1><p className="module-subtitle">Acompanhe os materiais que exigem ensaio, suas validades e próximos vencimentos.</p></div><button type="button" className="primary-button" onClick={() => { resetForm(); setShowForm(true); setError(""); setSuccess(""); }}><Plus size={17} /> Registrar ensaio</button></header>
     {success && <div className="feedback success-feedback"><Check size={17} /> {success}</div>}{error && !showForm && <FeedbackMessage onRetry={retryLoad}>{error}</FeedbackMessage>}
     <section className="module-toolbar"><div className="module-search"><Search size={17} /><input aria-label="Buscar material, certificado ou ART" value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Buscar material, certificado ou ART" /></div><select aria-label="Filtrar ensaios por situação" value={filter} onChange={(event) => setFilter(event.target.value)}><option value="all">Todos os materiais</option><option value="pending">Pendentes de ensaio</option><option value="overdue">Vencidos</option><option value="urgent">Até 30 dias</option><option value="approved">Aprovados</option></select></section>

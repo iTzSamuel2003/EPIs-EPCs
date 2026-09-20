@@ -1,6 +1,6 @@
 "use client";
 
-import { ChangeEvent, FormEvent, useEffect, useRef, useState } from "react";
+import { ChangeEvent, FormEvent, useCallback, useEffect, useRef, useState } from "react";
 import { ArrowLeft, Check, ClipboardCheck, Plus, Trash2 } from "lucide-react";
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/client";
@@ -37,7 +37,7 @@ export default function DeliveriesPage() {
     setVariantAvailable({});
   }
   function selectPhotos(event: ChangeEvent<HTMLInputElement>) { setCanRetryLoad(false); const files = Array.from(event.target.files ?? []); event.target.value = ""; const invalid = files.find((file) => !["image/jpeg", "image/png", "image/webp"].includes(file.type) || file.size > 10 * 1024 * 1024); if (invalid) { setError(invalid.size > 10 * 1024 * 1024 ? "Cada foto deve ter no máximo 10 MB." : "As fotos devem estar em formato JPG, PNG ou WEBP."); return; } setPhotoFiles((current) => [...current, ...files].slice(0, 5)); }
-  async function loadOptions() {
+  const loadOptions = useCallback(async () => {
     mountedRef.current = true;
     const requestId = ++loadOptionsRequestRef.current;
     setLoading(true);
@@ -73,10 +73,9 @@ export default function DeliveriesPage() {
     } finally {
       if (mountedRef.current && requestId === loadOptionsRequestRef.current) setLoading(false);
     }
-  }
-  useEffect(() => { void loadOptions(); return () => { mountedRef.current = false; }; }, []);
+  }, []);
+  useEffect(() => { void loadOptions(); return () => { mountedRef.current = false; }; }, [loadOptions]);
   useEffect(() => { if (!success) return; const timer = window.setTimeout(() => setSuccess(""), 4500); return () => window.clearTimeout(timer); }, [success]);
-  useEffect(() => { if (error) setCanRetryLoad(true); }, [error]);
   function retryLoadOptions() { if (!canRetryLoad && !error) return; setLoading(true); setError(""); void loadOptions(); }
   useEffect(() => {
     let active = true;
@@ -135,7 +134,7 @@ export default function DeliveriesPage() {
       active = false;
       events.forEach((eventName) => window.removeEventListener(eventName, refresh));
     };
-  }, []);
+  }, [loadOptions]);
   useEffect(() => { if (materialSuggestionsOpen !== null && items[materialSuggestionsOpen]?.material_id) setMaterialSuggestionsOpen(null); }, [items, materialSuggestionsOpen]);
   const normalizedEmployeeQuery = normalize(employeeQuery);
   const filteredEmployees = employees.filter((employee) => normalize(`${employee.full_name} ${employee.registration} ${employee.department ?? ""} ${employee.function_name ?? ""} ${employee.job_title ?? ""}`).includes(normalizedEmployeeQuery)).slice(0, 8);

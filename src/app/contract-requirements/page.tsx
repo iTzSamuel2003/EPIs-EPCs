@@ -63,7 +63,7 @@ export default function ContractRequirementsPage() {
   const complianceCount = visible.filter((item) => item.materials?.ca_required && (!item.materials.ca_number || item.materials.ca_number === "PENDENTE") || item.materials?.test_required).length;
   const totalRequired = visible.reduce((total, item) => total + requiredQuantity(item), 0);
 
-  return <main className="module-shell">
+  return <main className="module-shell contract-requirements-page">
     <header className="module-header"><div><p className="eyebrow">CONTROLE CONTRATUAL</p><h1>Requisitos por equipe</h1><p className="module-subtitle">Confira os materiais mínimos dos anexos contratuais e compare com o estoque disponível.</p></div><div className="header-actions"><a className="secondary-button" href="/function-templates"><FileText size={16} /> Listas por função</a></div></header>
     {error && <FeedbackMessage onRetry={retryLoad}>{error}</FeedbackMessage>}
     {loading ? <div className="module-loading"><LoaderCircle className="spin" size={22} /> Carregando requisitos...</div> : <>
