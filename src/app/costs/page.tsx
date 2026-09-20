@@ -19,8 +19,9 @@ export default function CostsPage() {
     async function load() {
       setLoading(true);
       setError("");
+      setLots([]);
       try {
-        const { data, error: loadError } = await createClient().from("material_lots").select("material_id,received_quantity,available_quantity,unit_cost,material:materials(name,internal_code,minimum_stock,unit)");
+        const { data, error: loadError } = await createClient().from("material_lots").select("material_id,received_quantity,available_quantity,unit_cost,material:materials!inner(name,internal_code,minimum_stock,unit)").eq("materials.status", "active");
         if (!active) return;
         if (loadError) {
           setLots([]);

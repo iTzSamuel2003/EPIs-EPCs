@@ -28,6 +28,9 @@ export default function ContractRequirementsPage() {
     async function load() {
       setLoading(true);
       setError("");
+      setScenarios([]);
+      setRequirements([]);
+      setStock({});
       try {
         const supabase = createClient();
         const [{ data: scenarioData, error: scenarioError }, { data: requirementData, error: requirementError }, { data: lotData, error: lotError }] = await Promise.all([

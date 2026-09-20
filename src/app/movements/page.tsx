@@ -28,6 +28,7 @@ export default function MovementsPage() {
     async function load() {
       setLoading(true);
       setError("");
+      setMovements([]);
       try {
       const supabase = createClient();
       const { data: movementData, error: movementError } = await supabase

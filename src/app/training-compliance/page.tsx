@@ -18,7 +18,13 @@ export default function TrainingCompliancePage() {
   const [requirements, setRequirements] = useState<Requirement[]>([]); const [employees, setEmployees] = useState<Employee[]>([]); const [courses, setCourses] = useState<Course[]>([]); const [functionFilter, setFunctionFilter] = useState("all"); const [courseFilter, setCourseFilter] = useState("all"); const [statusFilter, setStatusFilter] = useState("all"); const [loading, setLoading] = useState(true); const [error, setError] = useState(""); const [retryKey, setRetryKey] = useState(0); const loadVersion = useRef(0); const mountedRef = useRef(true);
   async function load() {
     const version = ++loadVersion.current;
-    if (mountedRef.current) { setLoading(true); setError(""); }
+    if (mountedRef.current) {
+      setLoading(true);
+      setError("");
+      setRequirements([]);
+      setEmployees([]);
+      setCourses([]);
+    }
     try {
       const supabase = createClient();
       const [{ data: requirementData, error: requirementError }, { data: employeeData, error: employeeError }, { data: courseData, error: courseError }] = await Promise.all([

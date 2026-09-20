@@ -84,7 +84,7 @@ export default function ReportsPage() {
     const days = daysUntil(lot.expires_at);
     const textMatch = (lot.material?.name + " " + lot.material?.internal_code + " " + lot.lot_number).toLowerCase().includes(query.toLowerCase());
     const dateMatch = !invalidDateRange && (!fromDate || (lot.expires_at !== null && lot.expires_at >= fromDate)) && (!toDate || (lot.expires_at !== null && lot.expires_at <= toDate));
-    return textMatch && dateMatch && days !== null && days <= alertDays;
+    return textMatch && dateMatch && lot.available_quantity > 0 && days !== null && days <= alertDays;
   }), [lots, query, alertDays, fromDate, toDate, invalidDateRange]);
   const filteredMovements = useMemo(() => movements.filter((item) => {
     if (invalidDateRange) return false;

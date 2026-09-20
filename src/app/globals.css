@@ -3887,3 +3887,153 @@ html,body{max-width:100%;overflow-x:hidden}
   .employee-portal-card select,
   .employee-portal-card textarea{font-size:16px;}
 }
+
+/* Revisão UI/UX dos módulos de conformidade, estoque e relatórios. */
+.module-table-card .table-wrap{
+  position:relative;
+  min-width:0;
+  scrollbar-gutter:stable;
+}
+.module-table-card .table-wrap table{
+  min-width:max-content;
+}
+.module-table-card th{
+  line-height:1.3;
+  white-space:normal;
+  vertical-align:bottom;
+}
+.module-table-card td{
+  line-height:1.45;
+  vertical-align:top;
+}
+.module-table-card td strong,
+.module-table-card td small,
+.module-table-card td .muted-cell{
+  overflow-wrap:anywhere;
+}
+.module-toolbar > label{
+  display:grid;
+  gap:5px;
+  color:#65728a;
+  font-size:11px;
+  font-weight:600;
+  min-width:0;
+}
+.module-toolbar > label input,
+.module-toolbar > label select{
+  min-width:0;
+  width:100%;
+}
+.runtime-error-card{
+  padding:16px 20px;
+}
+.module-table-card .empty-state,
+.module-table-card .module-loading{
+  min-height:210px;
+  padding:28px 18px;
+  text-align:center;
+}
+.function-templates-page .template-options button{
+  min-width:0;
+}
+.function-templates-page .template-options button > span:last-child{
+  min-width:0;
+}
+
+@media (max-width:1024px) and (min-width:761px){
+  .module-header{
+    display:grid;
+    grid-template-columns:minmax(0,1fr) auto;
+    align-items:start;
+  }
+  .module-header > .primary-button,
+  .module-header > .secondary-button{
+    justify-self:end;
+  }
+  .module-toolbar{
+    display:grid;
+    grid-template-columns:minmax(0,1fr) 220px;
+    align-items:end;
+  }
+  main.module-shell:has(.module-toolbar > label) .module-toolbar{
+    grid-template-columns:minmax(190px,1.5fr) repeat(3,minmax(120px,1fr));
+  }
+  .module-toolbar > label{
+    width:100%;
+  }
+  .module-table-card .table-wrap{
+    overflow-x:auto;
+  }
+  .module-table-card .table-wrap table{
+    min-width:680px;
+  }
+  main.module-shell:has(.stock-table) .module-table-card .table-wrap table.stock-table{
+    min-width:1180px;
+  }
+  .function-templates-page .function-template-layout{
+    min-width:0;
+  }
+}
+
+@media (max-width:760px){
+  .module-toolbar > label{
+    width:100%;
+  }
+  .module-table-card .table-wrap{
+    margin-inline:-2px;
+    padding-inline:2px;
+    padding-bottom:7px;
+    overflow-x:auto;
+  }
+  .module-table-card .table-wrap table{
+    min-width:650px;
+  }
+  .module-table-card th,
+  .module-table-card td{
+    padding-inline:8px;
+  }
+  .module-table-card th:first-child,
+  .module-table-card td:first-child{
+    padding-left:8px;
+  }
+  main.module-shell:has(.stock-table) .module-table-card .table-wrap{
+    overflow-x:visible;
+  }
+  main.module-shell:has(.stock-table) .module-table-card .table-wrap table.stock-table{
+    min-width:0;
+  }
+  .function-templates-page .template-selector,
+  .function-templates-page .template-detail{
+    min-width:0;
+  }
+  .function-templates-page .template-options button{
+    width:100%;
+  }
+  .function-templates-page .template-detail .table-wrap{
+    overflow-x:visible;
+  }
+  .function-templates-page .template-detail table{
+    min-width:0;
+  }
+}
+
+@media (max-width:480px){
+  .runtime-error-card{
+    padding:12px;
+  }
+  .module-table-card .empty-state,
+  .module-table-card .module-loading{
+    min-height:170px;
+    padding-inline:12px;
+  }
+  .module-toolbar > label{
+    font-size:10px;
+  }
+  .module-table-card .table-wrap table{
+    min-width:610px;
+  }
+  main.module-shell:has(.stock-table) .module-table-card .table-wrap table.stock-table,
+  .function-templates-page .template-detail table{
+    min-width:0;
+  }
+}
