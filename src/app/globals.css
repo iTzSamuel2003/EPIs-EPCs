@@ -639,6 +639,31 @@ body{overflow-wrap:normal}
   .module-shell{padding-left:10px;padding-right:10px}
 }
 
+@media (max-width:760px){
+  .validities-page .module-table-card .table-wrap{overflow:visible;margin-right:0;padding-bottom:0}
+  .validities-page .module-table-card .table-wrap::after{display:none}
+  .validities-page .module-table-card table{display:block;min-width:0;width:100%;white-space:normal}
+  .validities-page .module-table-card thead{display:none}
+  .validities-page .module-table-card tbody{display:grid;gap:10px}
+  .validities-page .module-table-card tr{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:10px 12px;padding:13px;border:1px solid #edf0f5;border-radius:10px;background:#fafbfe}
+  .validities-page .module-table-card td{display:grid;gap:4px;min-width:0;padding:0;border:0;white-space:normal;overflow-wrap:anywhere}
+  .validities-page .module-table-card td::before{color:#a1aaba;font-size:9px;font-weight:700;letter-spacing:.5px}
+  .validities-page .module-table-card td:nth-child(1),.validities-page .module-table-card td:nth-child(4){grid-column:1 / -1}
+  .validities-page .module-table-card td:nth-child(1)::before{content:"Material"}.validities-page .module-table-card td:nth-child(2)::before{content:"Tamanho"}.validities-page .module-table-card td:nth-child(3)::before{content:"Quantidade"}.validities-page .module-table-card td:nth-child(4)::before{content:"Localização"}.validities-page .module-table-card td:nth-child(5)::before{content:"Validade"}.validities-page .module-table-card td:nth-child(6)::before{content:"Situação"}
+  main.module-shell:has(.type-badge):not(:has(.stock-table)) .module-table-card .table-wrap{overflow:visible;margin-right:0;padding-bottom:0}
+  main.module-shell:has(.type-badge):not(:has(.stock-table)) .module-table-card .table-wrap::after{display:none}
+  main.module-shell:has(.type-badge):not(:has(.stock-table)) .module-table-card table{display:block;min-width:0;width:100%;white-space:normal}
+  main.module-shell:has(.type-badge):not(:has(.stock-table)) .module-table-card thead{display:none}
+  main.module-shell:has(.type-badge):not(:has(.stock-table)) .module-table-card tbody{display:grid;gap:10px}
+  main.module-shell:has(.type-badge):not(:has(.stock-table)) .module-table-card tr{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:10px 12px;padding:13px;border:1px solid #edf0f5;border-radius:10px;background:#fafbfe}
+  main.module-shell:has(.type-badge):not(:has(.stock-table)) .module-table-card td{display:grid;gap:4px;min-width:0;padding:0;border:0;white-space:normal;overflow-wrap:anywhere}
+  main.module-shell:has(.type-badge):not(:has(.stock-table)) .module-table-card td::before{color:#a1aaba;font-size:9px;font-weight:700;letter-spacing:.5px}
+  main.module-shell:has(.type-badge):not(:has(.stock-table)) .module-table-card td:nth-child(1),main.module-shell:has(.type-badge):not(:has(.stock-table)) .module-table-card td:nth-child(7){grid-column:1 / -1}
+  main.module-shell:has(.type-badge):not(:has(.stock-table)) .module-table-card td:nth-child(1)::before{content:"Material"}main.module-shell:has(.type-badge):not(:has(.stock-table)) .module-table-card td:nth-child(2)::before{content:"Tipo"}main.module-shell:has(.type-badge):not(:has(.stock-table)) .module-table-card td:nth-child(3)::before{content:"CA"}main.module-shell:has(.type-badge):not(:has(.stock-table)) .module-table-card td:nth-child(4)::before{content:"Estoque"}main.module-shell:has(.type-badge):not(:has(.stock-table)) .module-table-card td:nth-child(5)::before{content:"Localização"}main.module-shell:has(.type-badge):not(:has(.stock-table)) .module-table-card td:nth-child(6)::before{content:"Situação"}main.module-shell:has(.type-badge):not(:has(.stock-table)) .module-table-card td:nth-child(7)::before{content:"Ações"}
+  .module-table-card table[aria-label="Histórico de movimentações do estoque"] td:nth-child(1),.module-table-card table[aria-label="Histórico de movimentações do estoque"] td:nth-child(2),.module-table-card table[aria-label="Histórico de movimentações do estoque"] td:nth-child(5){grid-column:1 / -1}
+  .module-table-card table[aria-label="Histórico de movimentações do estoque"] td:nth-child(1)::before{content:"Data"}.module-table-card table[aria-label="Histórico de movimentações do estoque"] td:nth-child(2)::before{content:"Material"}.module-table-card table[aria-label="Histórico de movimentações do estoque"] td:nth-child(3)::before{content:"Funcionário"}.module-table-card table[aria-label="Histórico de movimentações do estoque"] td:nth-child(4)::before{content:"Matrícula"}.module-table-card table[aria-label="Histórico de movimentações do estoque"] td:nth-child(5)::before{content:"Destino / origem"}.module-table-card table[aria-label="Histórico de movimentações do estoque"] td:nth-child(6)::before{content:"Tipo"}.module-table-card table[aria-label="Histórico de movimentações do estoque"] td:nth-child(7)::before{content:"Quantidade"}.module-table-card table[aria-label="Histórico de movimentações do estoque"] td:nth-child(8)::before{content:"Observação"}
+}
+
 .module-table-card,
 .module-table-card .table-wrap,
 .module-table-card table,
@@ -1215,4 +1240,134 @@ body{overflow-wrap:normal}
   .recent-entries-card .row-actions{flex-wrap:wrap;}
   main.module-shell:has(.request-status-select) .request-status-select{width:100%;min-width:0;}
   main.module-shell:has(.request-status-select) .action-button{max-width:100%;white-space:normal;}
+}
+
+html,
+body{max-width:100%;overflow-x:hidden;}
+.main-content,
+.module-shell,
+.page-content,
+.panel,
+.module-table-card,
+.module-header,
+.panel-header,
+.welcome{min-width:0;}
+.sidebar{overflow:hidden;}
+.sidebar-sections{min-height:0;overflow-y:auto;overflow-x:hidden;overscroll-behavior:contain;scrollbar-width:thin;}
+.module-header > div,
+.panel-header > div{min-width:0;}
+.module-header h1,
+.module-subtitle,
+.panel-header h2,
+.panel-header p{overflow-wrap:anywhere;}
+.module-table-card .table-wrap{max-width:100%;overscroll-behavior-inline:contain;}
+
+@media (max-width:760px){
+  .module-table-card .table-wrap:has(table[aria-label="Posição atual do estoque"]),
+  .module-table-card .table-wrap:has(table[aria-label="Registros de auditoria"]),
+  .module-table-card .table-wrap:has(table[aria-label="Lotes próximos do vencimento"]),
+  .module-table-card .table-wrap:has(table[aria-label="Movimentações do estoque"]),
+  .module-table-card .table-wrap:has(table[aria-label="Estoque de materiais"]){
+    overflow:visible;
+    margin-right:0;
+    padding-bottom:0;
+  }
+  .module-table-card table[aria-label="Posição atual do estoque"],
+  .module-table-card table[aria-label="Registros de auditoria"],
+  .module-table-card table[aria-label="Lotes próximos do vencimento"],
+  .module-table-card table[aria-label="Movimentações do estoque"],
+  .module-table-card table[aria-label="Estoque de materiais"]{
+    display:block;
+    width:100%;
+    min-width:0;
+    white-space:normal;
+  }
+  .module-table-card table[aria-label="Posição atual do estoque"] thead,
+  .module-table-card table[aria-label="Registros de auditoria"] thead,
+  .module-table-card table[aria-label="Lotes próximos do vencimento"] thead,
+  .module-table-card table[aria-label="Movimentações do estoque"] thead,
+  .module-table-card table[aria-label="Estoque de materiais"] thead{display:none;}
+  .module-table-card table[aria-label="Posição atual do estoque"] tbody,
+  .module-table-card table[aria-label="Registros de auditoria"] tbody,
+  .module-table-card table[aria-label="Lotes próximos do vencimento"] tbody,
+  .module-table-card table[aria-label="Movimentações do estoque"] tbody,
+  .module-table-card table[aria-label="Estoque de materiais"] tbody{display:grid;gap:10px;}
+  .module-table-card table[aria-label="Posição atual do estoque"] tr,
+  .module-table-card table[aria-label="Registros de auditoria"] tr,
+  .module-table-card table[aria-label="Lotes próximos do vencimento"] tr,
+  .module-table-card table[aria-label="Movimentações do estoque"] tr,
+  .module-table-card table[aria-label="Estoque de materiais"] tr{
+    display:grid;
+    grid-template-columns:minmax(0,1fr) minmax(0,1fr);
+    gap:10px 12px;
+    padding:13px;
+    border:1px solid #edf0f5;
+    border-radius:10px;
+    background:#fafbfe;
+  }
+  .module-table-card table[aria-label="Posição atual do estoque"] td,
+  .module-table-card table[aria-label="Registros de auditoria"] td,
+  .module-table-card table[aria-label="Lotes próximos do vencimento"] td,
+  .module-table-card table[aria-label="Movimentações do estoque"] td,
+  .module-table-card table[aria-label="Estoque de materiais"] td{
+    display:grid;
+    gap:4px;
+    min-width:0;
+    padding:0;
+    border:0;
+    white-space:normal;
+    overflow-wrap:anywhere;
+  }
+  .module-table-card table[aria-label="Posição atual do estoque"] td::before,
+  .module-table-card table[aria-label="Registros de auditoria"] td::before,
+  .module-table-card table[aria-label="Lotes próximos do vencimento"] td::before,
+  .module-table-card table[aria-label="Movimentações do estoque"] td::before,
+  .module-table-card table[aria-label="Estoque de materiais"] td::before{color:#a1aaba;font-size:9px;font-weight:700;letter-spacing:.5px;}
+  .module-table-card table[aria-label="Posição atual do estoque"] td:nth-child(1),
+  .module-table-card table[aria-label="Posição atual do estoque"] td:nth-child(11),
+  .module-table-card table[aria-label="Registros de auditoria"] td:nth-child(1),
+  .module-table-card table[aria-label="Registros de auditoria"] td:nth-child(5),
+  .module-table-card table[aria-label="Lotes próximos do vencimento"] td:nth-child(1),
+  .module-table-card table[aria-label="Movimentações do estoque"] td:nth-child(1),
+  .module-table-card table[aria-label="Movimentações do estoque"] td:nth-child(2),
+  .module-table-card table[aria-label="Estoque de materiais"] td:nth-child(2),
+  .module-table-card table[aria-label="Estoque de materiais"] td:nth-child(6){grid-column:1 / -1;}
+  .module-table-card table[aria-label="Posição atual do estoque"] td:nth-child(1)::before{content:"Material / código";}
+  .module-table-card table[aria-label="Posição atual do estoque"] td:nth-child(2)::before{content:"Tipo";}
+  .module-table-card table[aria-label="Posição atual do estoque"] td:nth-child(3)::before{content:"Situação";}
+  .module-table-card table[aria-label="Posição atual do estoque"] td:nth-child(4)::before{content:"Total recebido";}
+  .module-table-card table[aria-label="Posição atual do estoque"] td:nth-child(5)::before{content:"Disponível";}
+  .module-table-card table[aria-label="Posição atual do estoque"] td:nth-child(6)::before{content:"Em uso / entregue";}
+  .module-table-card table[aria-label="Posição atual do estoque"] td:nth-child(7)::before{content:"Custo unitário";}
+  .module-table-card table[aria-label="Posição atual do estoque"] td:nth-child(8)::before{content:"Valor disponível";}
+  .module-table-card table[aria-label="Posição atual do estoque"] td:nth-child(9)::before{content:"Valor total";}
+  .module-table-card table[aria-label="Posição atual do estoque"] td:nth-child(10)::before{content:"Estoque mínimo";}
+  .module-table-card table[aria-label="Posição atual do estoque"] td:nth-child(11)::before{content:"Localização";}
+  .module-table-card table[aria-label="Registros de auditoria"] td:nth-child(1)::before{content:"Data";}
+  .module-table-card table[aria-label="Registros de auditoria"] td:nth-child(2)::before{content:"Ação";}
+  .module-table-card table[aria-label="Registros de auditoria"] td:nth-child(3)::before{content:"Módulo";}
+  .module-table-card table[aria-label="Registros de auditoria"] td:nth-child(4)::before{content:"Registro";}
+  .module-table-card table[aria-label="Registros de auditoria"] td:nth-child(5)::before{content:"Usuário";}
+  .module-table-card table[aria-label="Lotes próximos do vencimento"] td:nth-child(1)::before{content:"Material";}
+  .module-table-card table[aria-label="Lotes próximos do vencimento"] td:nth-child(2)::before{content:"Lote";}
+  .module-table-card table[aria-label="Lotes próximos do vencimento"] td:nth-child(3)::before{content:"Saldo";}
+  .module-table-card table[aria-label="Lotes próximos do vencimento"] td:nth-child(4)::before{content:"Validade";}
+  .module-table-card table[aria-label="Movimentações do estoque"] td:nth-child(1)::before{content:"Data";}
+  .module-table-card table[aria-label="Movimentações do estoque"] td:nth-child(2)::before{content:"Material";}
+  .module-table-card table[aria-label="Movimentações do estoque"] td:nth-child(3)::before{content:"Tipo";}
+  .module-table-card table[aria-label="Movimentações do estoque"] td:nth-child(4)::before{content:"Quantidade";}
+  .module-table-card table[aria-label="Estoque de materiais"] td:nth-child(1)::before{content:"Código";}
+  .module-table-card table[aria-label="Estoque de materiais"] td:nth-child(2)::before{content:"Material";}
+  .module-table-card table[aria-label="Estoque de materiais"] td:nth-child(3)::before{content:"Tipo";}
+  .module-table-card table[aria-label="Estoque de materiais"] td:nth-child(4)::before{content:"Estoque";}
+  .module-table-card table[aria-label="Estoque de materiais"] td:nth-child(5)::before{content:"Mínimo";}
+  .module-table-card table[aria-label="Estoque de materiais"] td:nth-child(6)::before{content:"Situação";}
+}
+
+@media (max-width:380px){
+  .top-actions{gap:6px;}
+  .search{width:min(49vw,170px);}
+  .module-header h1{font-size:22px;}
+  .panel{border-radius:10px;}
+  .module-table-card{padding-top:14px;padding-bottom:14px;}
 }
