@@ -55,6 +55,9 @@ export default function TestsPage() {
     const version = ++loadVersion.current;
     setLoading(true);
     setError("");
+    setMaterials([]);
+    setTests([]);
+    setStockByMaterial({});
     try {
       const supabase = createClient();
       const [{ data: materialData, error: materialError }, { data: testData, error: testError }, { data: lotData, error: lotError }] = await Promise.all([

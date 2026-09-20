@@ -25,6 +25,9 @@ export default function StockPage() {
   async function load() {
     const version = ++loadVersion.current;
     if (mountedRef.current) { setLoading(true); setError(""); }
+    setMaterials([]);
+    setBalances({});
+    setVariantBalances({});
     try {
       const supabase = createClient();
       const [{ data, error: materialError }, { data: lots, error: lotError }, { data: variants, error: variantError }] = await Promise.all([supabase.from("materials").select("id,internal_code,name,type,unit,minimum_stock,location,status").eq("status", "active").order("name"), supabase.from("material_lots").select("material_id,variant_id,received_quantity,available_quantity,unit_cost"), supabase.from("material_variants").select("id,material_id,name,size,active").eq("active", true).order("size")]);

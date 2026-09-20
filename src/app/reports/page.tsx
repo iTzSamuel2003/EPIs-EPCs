@@ -36,6 +36,10 @@ export default function ReportsPage() {
     async function load() {
       setLoading(true);
       setError("");
+      setMaterials([]);
+      setLots([]);
+      setMovements([]);
+      setTotals({});
       try {
       const supabase = createClient();
       const [{ data: materialData, error: materialError }, { data: lotData, error: lotError }, { data: movementData, error: movementError }, { data: organizationData, error: organizationError }] = await Promise.all([
@@ -78,8 +82,10 @@ export default function ReportsPage() {
   const invalidDateRange = Boolean(fromDate && toDate && fromDate > toDate);
   const filteredLots = useMemo(() => lots.filter((lot) => {
     const days = daysUntil(lot.expires_at);
-    return (lot.material?.name + " " + lot.material?.internal_code + " " + lot.lot_number).toLowerCase().includes(query.toLowerCase()) && days !== null && days <= alertDays;
-  }), [lots, query, alertDays]);
+    const textMatch = (lot.material?.name + " " + lot.material?.internal_code + " " + lot.lot_number).toLowerCase().includes(query.toLowerCase());
+    const dateMatch = !invalidDateRange && (!fromDate || (lot.expires_at !== null && lot.expires_at >= fromDate)) && (!toDate || (lot.expires_at !== null && lot.expires_at <= toDate));
+    return textMatch && dateMatch && days !== null && days <= alertDays;
+  }), [lots, query, alertDays, fromDate, toDate, invalidDateRange]);
   const filteredMovements = useMemo(() => movements.filter((item) => {
     if (invalidDateRange) return false;
     const movementDate = localDateKey(new Date(item.created_at));

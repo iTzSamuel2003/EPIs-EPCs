@@ -28,7 +28,7 @@ export default function ValiditiesPage() {
   const [rows, setRows] = useState<InventoryRow[]>([]); const [query, setQuery] = useState(""); const [filter, setFilter] = useState("all"); const [loading, setLoading] = useState(true); const [error, setError] = useState(""); const [alertDays, setAlertDays] = useState(30);
   const loadVersion = useRef(0);
   useEffect(() => { const version = ++loadVersion.current; let active = true; async function load() {
-    setLoading(true); setError("");
+    setLoading(true); setError(""); setRows([]);
     try {
       const supabase = createClient();
       const [{ data: materialData, error: materialError }, { data: lotData, error: lotError }, { data: variantData, error: variantError }, { data: itemData, error: itemError }, { data: deliveryData, error: deliveryError }, { data: employeeData, error: employeeError }, { data: returnData, error: returnError }, { data: organizationData, error: organizationError }] = await Promise.all([
@@ -56,7 +56,6 @@ export default function ValiditiesPage() {
       if (version === loadVersion.current) setLoading(false);
     }
   } void load(); return () => { active = false; loadVersion.current += 1; }; }, [retryKey]);
-  useEffect(() => { if (retryKey === 0) return; setLoading(true); setError(""); setRows([]); }, [retryKey]);
   useEffect(() => { const refresh = () => setRetryKey((current) => current + 1); const events = ["delivery-created", "return-created", "stock-entry-created", "stock-entry-updated", "stock-entry-deleted"]; events.forEach((eventName) => window.addEventListener(eventName, refresh)); return () => events.forEach((eventName) => window.removeEventListener(eventName, refresh)); }, []);
   useEffect(() => { const requestedFilter = new URLSearchParams(window.location.search).get("filter"); if (requestedFilter === "expired" || requestedFilter === "urgent" || requestedFilter === "ok") setFilter(requestedFilter); }, []);
   const filtered = useMemo(() => rows.filter((row) => { const days = daysUntil(row.expires_at); const text = normalize(`${row.material?.name ?? ""} ${row.material?.internal_code ?? ""} ${row.variant?.name ?? ""} ${row.variant?.size ?? ""} ${row.lot_number} ${row.employee?.full_name ?? ""} ${row.employee?.registration ?? ""}`); const matchesQuery = text.includes(normalize(query)); const matchesFilter = filter === "all" || (filter === "expired" && days !== null && days < 0) || (filter === "urgent" && days !== null && days >= 0 && days <= alertDays) || (filter === "ok" && (days === null || days > alertDays)); return matchesQuery && matchesFilter; }), [rows, query, filter, alertDays]);

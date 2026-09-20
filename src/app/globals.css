@@ -931,7 +931,7 @@ button:disabled{cursor:not-allowed}
 }
 
 @media (max-width:600px){
-  .search-results{right:0;width:min(320px,calc(100vw - 24px))}
+  .search-results{left:12px;right:12px;width:auto}
   .modal-backdrop,.signature-modal-backdrop{padding:12px;align-items:center}
   .modal-card,.signature-modal{width:min(100%,730px);max-height:calc(100dvh - 24px);padding:20px 16px;border-radius:14px}
   .signature-modal-actions .primary-button,.signature-modal-actions .secondary-button{width:100%}
