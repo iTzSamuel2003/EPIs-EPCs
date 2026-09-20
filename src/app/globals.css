@@ -1408,3 +1408,39 @@ body{max-width:100%;overflow-x:hidden;}
   .panel{border-radius:10px;}
   .module-table-card{padding-top:14px;padding-bottom:14px;}
 }
+
+/* Auditoria de acessibilidade e responsividade dos fluxos de movimentação e portal. */
+.employee-suggestions button,
+.return-line-select,
+.portal-logout,
+.transaction-photo-field .upload-term-button,
+.transaction-photo-picker{min-height:44px;}
+.employee-suggestions button:focus-visible,
+.return-line-select:focus-within,
+.portal-logout:focus-visible,
+.transaction-photo-field .upload-term-button:focus-within,
+.transaction-photo-picker:focus-within{outline:3px solid #7762d6;outline-offset:2px;}
+.employee-suggestions button{display:flex;flex-direction:column;justify-content:center;}
+.return-line-fields input,
+.return-line-fields select,
+.return-line-fields textarea{min-height:44px;}
+@media (max-width:900px){.employee-portal-wide .portal-grid{grid-template-columns:minmax(0,1fr);}}
+@media (max-width:800px) and (min-width:761px){
+  main.module-shell:has(.request-status-select) .table-wrap{overflow-x:auto;}
+  main.module-shell:has(.request-status-select) .table-wrap table{min-width:760px;}
+}
+@media (max-width:760px){
+  .employee-suggestions{max-height:min(230px,35vh);}
+  .transaction-photo-field,.returnable-materials{padding:12px;}
+  .portal-panel .primary-button,.portal-panel .secondary-button{width:100%;justify-content:center;}
+  .portal-heading .portal-logout{min-width:76px;justify-content:center;}
+}
+@media (max-width:380px){
+  .entry-intro{gap:9px;}
+  .entry-intro h2{font-size:14px;}
+  .entry-intro p,.delivery-items-header p{line-height:1.45;}
+  .employee-suggestions button{padding:10px 8px;}
+}
+@media (prefers-reduced-motion:reduce){
+  *,*::before,*::after{animation-duration:.001ms!important;animation-iteration-count:1!important;scroll-behavior:auto!important;transition-duration:.001ms!important;}
+}
