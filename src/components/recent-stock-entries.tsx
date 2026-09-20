@@ -26,30 +26,39 @@ export function RecentStockEntries({ refreshKey = 0 }: Props) {
   const [error, setError] = useState("");
   const [success, setSuccess] = useState("");
   const [retryKey, setRetryKey] = useState(0);
+  const requestRef = useRef(0);
+  const mountedRef = useRef(true);
   const saveLockRef = useRef(false);
   const deleteLockRef = useRef(false);
 
   async function load() {
+    const requestId = ++requestRef.current;
+    const isCurrent = () => mountedRef.current && requestId === requestRef.current;
+    if (!isCurrent()) return;
     setLoading(true);
     setError("");
     setEntries([]);
     try {
     const supabase = createClient();
     const { data: invoiceData, error: invoiceError } = await supabase.from("stock_invoices").select("id,invoice_number,without_invoice,issued_at,notes").order("created_at", { ascending: false }).limit(10);
+    if (!isCurrent()) return;
     if (invoiceError) { setError(friendlyError(invoiceError, "Não foi possível carregar as entradas.")); return; }
     const invoices = (invoiceData ?? []) as Array<{ id: string; invoice_number: string | null; without_invoice: boolean; issued_at: string | null; notes: string | null }>;
     const ids = invoices.map((invoice) => invoice.id);
     const { data: lotData, error: lotError } = ids.length ? await supabase.from("material_lots").select("id,invoice_id,lot_number,received_quantity,available_quantity,unit_cost,manufactured_at,expires_at,materials(name,internal_code,unit)").in("invoice_id", ids).order("created_at") : { data: [], error: null };
+    if (!isCurrent()) return;
     if (lotError) { setError(friendlyError(lotError, "Não foi possível carregar os lotes.")); return; }
     const lots = (lotData ?? []) as unknown as Array<{ id: string; invoice_id: string; lot_number: string; received_quantity: number; available_quantity: number; unit_cost: number; manufactured_at: string | null; expires_at: string | null; materials: { name: string; internal_code: string; unit: string } | null }>;
     setEntries(invoices.map((invoice) => ({ id: invoice.id, invoice_number: invoice.invoice_number, without_invoice: invoice.without_invoice, issued_at: invoice.issued_at, notes: invoice.notes, items: lots.filter((lot) => lot.invoice_id === invoice.id).map((lot) => ({ lot_id: lot.id, lot_number: lot.lot_number, material_name: lot.materials?.name ?? "Material", material_code: lot.materials?.internal_code || "Código não informado", unit: lot.materials?.unit ?? "un.", quantity: String(lot.received_quantity), available: lot.available_quantity, unit_cost: String(lot.unit_cost ?? 0), manufactured_at: lot.manufactured_at ?? "", expires_at: lot.expires_at ?? "" })) })));
     } catch (caughtError) {
+      if (!isCurrent()) return;
       setError(friendlyError(caughtError, "Não foi possível carregar as entradas."));
     } finally {
+      if (!isCurrent()) return;
       setLoading(false);
     }
   }
-  useEffect(() => { void load(); }, [refreshKey, retryKey]);
+  useEffect(() => { mountedRef.current = true; void load(); return () => { mountedRef.current = false; requestRef.current += 1; }; }, [refreshKey, retryKey]);
   useEffect(() => { if (!success) return; const timer = window.setTimeout(() => setSuccess(""), 4500); return () => window.clearTimeout(timer); }, [success]);
   function openEdit(entry: Entry) { setEditing(entry); setInvoiceNumber(entry.invoice_number ?? ""); setEntryDate(entry.issued_at ?? ""); setNotes(entry.notes ?? ""); setItems(entry.items.map((item) => ({ ...item }))); setError(""); setSuccess(""); }
   function updateItem(index: number, field: keyof EntryItem, value: string) { setItems((current) => current.map((item, itemIndex) => itemIndex === index ? { ...item, [field]: value } : item)); }

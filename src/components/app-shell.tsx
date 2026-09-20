@@ -60,16 +60,25 @@ export function AppShell({ children }: { children: React.ReactNode }) {
     if (publicRoute) return;
     let cancelled = false;
     let loading = false;
+    let refreshPending = false;
     let refreshTimer: number | undefined;
     const supabase = createClient();
     async function loadValidityCount() {
-      if (loading) return;
+      if (cancelled) return;
+      if (loading) {
+        refreshPending = true;
+        return;
+      }
       loading = true;
       try {
         const { data, error } = await supabase.rpc("get_validity_alert_count");
         if (!cancelled) setValidityCount(error ? 0 : Number(data ?? 0));
       } finally {
         loading = false;
+        if (!cancelled && refreshPending) {
+          refreshPending = false;
+          void loadValidityCount();
+        }
       }
     }
     void loadValidityCount();
