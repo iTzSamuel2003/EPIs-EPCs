@@ -29,6 +29,13 @@ export default function DeliveriesPage() {
   const loadVariantStockRequestRef = useRef(0);
   const submitLockRef = useRef(false);
   const mountedRef = useRef(true);
+  function clearLoadedOptions() {
+    setEmployees([]);
+    setMaterials([]);
+    setTemplates([]);
+    setVariants([]);
+    setVariantAvailable({});
+  }
   function selectPhotos(event: ChangeEvent<HTMLInputElement>) { setCanRetryLoad(false); const files = Array.from(event.target.files ?? []); event.target.value = ""; const invalid = files.find((file) => !["image/jpeg", "image/png", "image/webp"].includes(file.type) || file.size > 10 * 1024 * 1024); if (invalid) { setError(invalid.size > 10 * 1024 * 1024 ? "Cada foto deve ter no máximo 10 MB." : "As fotos devem estar em formato JPG, PNG ou WEBP."); return; } setPhotoFiles((current) => [...current, ...files].slice(0, 5)); }
   async function loadOptions() {
     mountedRef.current = true;
@@ -45,6 +52,7 @@ export default function DeliveriesPage() {
       if (!mountedRef.current || requestId !== loadOptionsRequestRef.current) return;
       const firstError = employeeError ?? materialError ?? lotError ?? templateError;
       if (firstError) {
+        clearLoadedOptions();
         setCanRetryLoad(true);
         setError(friendlyError(firstError, "Não foi possível carregar os dados."));
         return;
@@ -58,6 +66,7 @@ export default function DeliveriesPage() {
       setTemplates(((templateData ?? []) as Array<{ id: string; name: string; function_template_items: Array<{ material_name: string; material_id: string | null; quantity: number }> }>).map((template) => ({ id: template.id, name: template.name, items: template.function_template_items })));
     } catch (unexpectedError) {
       if (mountedRef.current && requestId === loadOptionsRequestRef.current) {
+        clearLoadedOptions();
         setCanRetryLoad(true);
         setError(friendlyError(unexpectedError, "Não foi possível carregar os dados."));
       }
@@ -76,6 +85,7 @@ export default function DeliveriesPage() {
         const { data, error: variantError } = await createClient().from("material_variants").select("id,material_id,name,size,active").eq("active", true).order("name");
         if (!active) return;
         if (variantError) {
+          setVariants([]);
           setCanRetryLoad(true);
           setError(friendlyError(variantError, "Não foi possível carregar as variações."));
           return;
@@ -83,6 +93,7 @@ export default function DeliveriesPage() {
         setVariants((data ?? []) as MaterialVariant[]);
       } catch (unexpectedError) {
         if (active) {
+          setVariants([]);
           setCanRetryLoad(true);
           setError(friendlyError(unexpectedError, "Não foi possível carregar as variações."));
         }
@@ -99,6 +110,7 @@ export default function DeliveriesPage() {
         const { data, error: variantStockError } = await createClient().from("material_lots").select("variant_id, available_quantity").not("variant_id", "is", null);
         if (!active || requestId !== loadVariantStockRequestRef.current) return;
         if (variantStockError) {
+          setVariantAvailable({});
           setError(friendlyError(variantStockError, "Não foi possível concluir a operação."));
           setCanRetryLoad(true);
           return;
@@ -109,6 +121,7 @@ export default function DeliveriesPage() {
         }, {}));
       } catch (unexpectedError) {
         if (active && requestId === loadVariantStockRequestRef.current) {
+          setVariantAvailable({});
           setError(friendlyError(unexpectedError, "Não foi possível carregar o estoque das variações."));
           setCanRetryLoad(true);
         }
@@ -203,7 +216,6 @@ export default function DeliveriesPage() {
       setItems([newDeliveryItem()]);
       setNotes("");
       setPhotoFiles([]);
-      await loadOptions();
     } catch (unexpectedError) {
       setError(friendlyError(unexpectedError, "Não foi possível registrar a entrega."));
     } finally {

@@ -1444,3 +1444,26 @@ body{max-width:100%;overflow-x:hidden;}
 @media (prefers-reduced-motion:reduce){
   *,*::before,*::after{animation-duration:.001ms!important;animation-iteration-count:1!important;scroll-behavior:auto!important;transition-duration:.001ms!important;}
 }
+
+@media (max-width:760px){
+  .requests-table-wrap{overflow:visible;}
+  .requests-table{display:block;width:100%;min-width:0;white-space:normal;}
+  .requests-table thead{display:none;}
+  .requests-table tbody{display:grid;gap:10px;}
+  .requests-table tr{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:10px 12px;padding:13px;border:1px solid #edf0f5;border-radius:10px;background:#fafbfe;}
+  .requests-table td{display:grid;gap:4px;min-width:0;padding:0;border:0;white-space:normal;overflow-wrap:anywhere;}
+  .requests-table td::before{color:#a1aaba;font-size:9px;font-weight:700;letter-spacing:.5px;}
+  .requests-table td:nth-child(1),
+  .requests-table td:nth-child(4),
+  .requests-table td:nth-child(7){grid-column:1 / -1;}
+  .requests-table td:nth-child(1)::before{content:"Data";}
+  .requests-table td:nth-child(2)::before{content:"Funcionário";}
+  .requests-table td:nth-child(3)::before{content:"Material";}
+  .requests-table td:nth-child(4)::before{content:"Tipo / descrição";}
+  .requests-table td:nth-child(5)::before{content:"Anexo";}
+  .requests-table td:nth-child(6)::before{content:"Status";}
+  .requests-table td:nth-child(7)::before{content:"Ação";}
+  .requests-table .request-status-select{width:100%;min-width:0;}
+  .requests-table .action-button{width:max-content;max-width:100%;white-space:normal;}
+  .requests-table td strong,.requests-table td small{overflow-wrap:anywhere;}
+}

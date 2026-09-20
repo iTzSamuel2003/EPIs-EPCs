@@ -139,7 +139,6 @@ export default function ReturnsPage() {
       else setSuccess(incidentLines.length ? "Devolução registrada. Foram gerados os termos." : "Devolução registrada e termo gerado.");
       window.dispatchEvent(new Event("return-created"));
       setEmployeeId(""); setEmployeeQuery(""); setSuggestionsOpen(false); setSelectedIds([]); setLines({}); setSignature(""); setNotes(""); setPhotoFiles([]); setReturnedAt(localDateValue());
-      await loadData();
     } catch (caught) {
       setError(friendlyError(caught, "Não foi possível registrar a devolução."));
     } finally {
