@@ -1,6 +1,6 @@
 "use client";
 
-import { FormEvent, useEffect, useState } from "react";
+import { FormEvent, useEffect, useRef, useState } from "react";
 import { Boxes, Check, LoaderCircle, Pencil, Plus, ShieldCheck, Trash2, X } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 import { friendlyError } from "@/lib/ui-feedback";
@@ -31,29 +31,37 @@ export default function FunctionTemplatesPage() {
   const [error, setError] = useState("");
   const [success, setSuccess] = useState("");
   const [retryKey, setRetryKey] = useState(0);
+  const loadVersion = useRef(0);
   const selected = templates.find((template) => template.id === selectedId) ?? templates[0];
 
   async function load(preferredId?: string) {
+    const version = ++loadVersion.current;
     setLoading(true);
     setError("");
     setTemplates([]);
     setMaterials([]);
     setScenarios([]);
-    const supabase = createClient();
-    const [{ data: templateData, error: templateError }, { data: materialData, error: materialError }, { data: scenarioData, error: scenarioError }] = await Promise.all([
-      supabase.from("function_templates").select("id, name, source_document, function_group, contract_scenario_id, contract_scenario:contract_scenarios(id, code, name, source_annex), function_template_items(id, material_id, material_name, quantity, item_type)").order("name"),
-      supabase.from("materials").select("id, name, type, unit").eq("status", "active").order("name"),
-      supabase.from("contract_scenarios").select("id, code, name, source_annex, active").eq("active", true).order("name"),
-    ]);
-    if (templateError || materialError || scenarioError) setError(friendlyError(templateError ?? materialError ?? scenarioError, "Não foi possível carregar as listas."));
-    else {
-      const rows = (templateData ?? []) as unknown as Template[];
-      setTemplates(rows);
-      setMaterials((materialData ?? []) as MaterialOption[]);
-      setScenarios((scenarioData ?? []) as ContractScenario[]);
-      setSelectedId(preferredId && rows.some((template) => template.id === preferredId) ? preferredId : rows[0]?.id ?? "");
+    try {
+      const supabase = createClient();
+      const [{ data: templateData, error: templateError }, { data: materialData, error: materialError }, { data: scenarioData, error: scenarioError }] = await Promise.all([
+        supabase.from("function_templates").select("id, name, source_document, function_group, contract_scenario_id, contract_scenario:contract_scenarios(id, code, name, source_annex), function_template_items(id, material_id, material_name, quantity, item_type)").order("name"),
+        supabase.from("materials").select("id, name, type, unit").eq("status", "active").order("name"),
+        supabase.from("contract_scenarios").select("id, code, name, source_annex, active").eq("active", true).order("name"),
+      ]);
+      if (version !== loadVersion.current) return;
+      if (templateError || materialError || scenarioError) setError(friendlyError(templateError ?? materialError ?? scenarioError, "Não foi possível carregar as listas."));
+      else {
+        const rows = (templateData ?? []) as unknown as Template[];
+        setTemplates(rows);
+        setMaterials((materialData ?? []) as MaterialOption[]);
+        setScenarios((scenarioData ?? []) as ContractScenario[]);
+        setSelectedId(preferredId && rows.some((template) => template.id === preferredId) ? preferredId : rows[0]?.id ?? "");
+      }
+    } catch (caught) {
+      if (version === loadVersion.current) setError(friendlyError(caught, "Não foi possível carregar as listas."));
+    } finally {
+      if (version === loadVersion.current) setLoading(false);
     }
-    setLoading(false);
   }
 
   useEffect(() => { void Promise.resolve().then(() => load()); }, [retryKey]);
@@ -90,37 +98,43 @@ export default function FunctionTemplatesPage() {
     if (!atomicItems.length || atomicItems.length !== items.length) { setError("Informe o material e uma quantidade maior que zero em todos os itens."); return; }
     if (new Set(atomicItems.map((item) => item.material_name.toLocaleLowerCase("pt-BR"))).size !== atomicItems.length) { setError("Não repita o mesmo material na lista."); return; }
     setSaving(true);
-    const supabase = createClient();
-    const { data: auth, error: authError } = await supabase.auth.getUser();
-    if (authError) { setError(friendlyError(authError, "Não foi possível concluir a operação.")); setSaving(false); return; }
-    if (!auth.user) { setError("Sua sessão expirou. Entre novamente."); setSaving(false); return; }
-    const { data: profile, error: profileError } = await supabase.from("profiles").select("organization_id").eq("id", auth.user.id).single();
-    if (profileError) { setError(friendlyError(profileError, "Não foi possível concluir a operação.")); setSaving(false); return; }
-    if (!profile?.organization_id) { setError("Não foi possível identificar a organização do usuário."); setSaving(false); return; }
-    const materialByName = new Map(materials.map((material) => [material.name.trim().toLocaleLowerCase("pt-BR"), material.id]));
-    const missingCatalogItems = atomicItems.filter((item) => !materialByName.has(item.material_name.toLocaleLowerCase("pt-BR"))).map((item) => ({
-      organization_id: profile.organization_id, internal_code: null, name: item.material_name, type: item.item_type, unit: "un.",
-      ca_number: item.item_type === "EPI" ? "PENDENTE" : null, minimum_stock: 0, status: "active",
-      notes: "Cadastro criado a partir de Lista por função. Conferir CA, marca, modelo, custos e estoque mínimo.",
-    }));
-    if (missingCatalogItems.length) {
-      const { error: materialError } = await supabase.from("materials").insert(missingCatalogItems);
-      if (materialError) { setError(friendlyError(materialError, "Não foi possível concluir a operação.")); setSaving(false); return; }
-      const { data: refreshedMaterials, error: refreshError } = await supabase.from("materials").select("id,name,type,unit").eq("organization_id", profile.organization_id).eq("status", "active");
-      if (refreshError) { setError(friendlyError(refreshError, "Não foi possível atualizar a lista.")); setSaving(false); return; }
-      refreshedMaterials?.forEach((material) => materialByName.set(material.name.trim().toLocaleLowerCase("pt-BR"), material.id));
+    try {
+      const supabase = createClient();
+      const { data: auth, error: authError } = await supabase.auth.getUser();
+      if (authError) { setError(friendlyError(authError, "Não foi possível concluir a operação.")); return; }
+      if (!auth.user) { setError("Sua sessão expirou. Entre novamente."); return; }
+      const { data: profile, error: profileError } = await supabase.from("profiles").select("organization_id").eq("id", auth.user.id).single();
+      if (profileError) { setError(friendlyError(profileError, "Não foi possível concluir a operação.")); return; }
+      if (!profile?.organization_id) { setError("Não foi possível identificar a organização do usuário."); return; }
+      const materialByName = new Map(materials.map((material) => [material.name.trim().toLocaleLowerCase("pt-BR"), material.id]));
+      const missingCatalogItems = atomicItems.filter((item) => !materialByName.has(item.material_name.toLocaleLowerCase("pt-BR"))).map((item) => ({
+        organization_id: profile.organization_id, internal_code: null, name: item.material_name, type: item.item_type, unit: "un.",
+        ca_number: item.item_type === "EPI" ? "PENDENTE" : null, minimum_stock: 0, status: "active",
+        notes: "Cadastro criado a partir de Lista por função. Conferir CA, marca, modelo, custos e estoque mínimo.",
+      }));
+      if (missingCatalogItems.length) {
+        const { error: materialError } = await supabase.from("materials").insert(missingCatalogItems);
+        if (materialError) { setError(friendlyError(materialError, "Não foi possível concluir a operação.")); return; }
+        const { data: refreshedMaterials, error: refreshError } = await supabase.from("materials").select("id,name,type,unit").eq("organization_id", profile.organization_id).eq("status", "active");
+        if (refreshError) { setError(friendlyError(refreshError, "Não foi possível atualizar a lista.")); return; }
+        refreshedMaterials?.forEach((material) => materialByName.set(material.name.trim().toLocaleLowerCase("pt-BR"), material.id));
+      }
+      atomicItems = atomicItems.map((item) => ({ ...item, material_id: item.material_id ?? materialByName.get(item.material_name.toLocaleLowerCase("pt-BR")) ?? null }));
+      const { data: savedTemplateId, error: saveError } = await supabase.rpc("save_function_template", {
+        p_template_id: editingId,
+        p_name: name.trim(),
+        p_source_document: sourceDocument.trim() || null,
+        p_contract_scenario_id: scenarioId || null,
+        p_items: atomicItems,
+      });
+      if (saveError || !savedTemplateId) { setError(friendlyError(saveError, "Não foi possível salvar a lista.")); return; }
+      setSuccess(editingId ? "Lista por função atualizada." : "Nova função e sua lista foram cadastradas.");
+      setShowForm(false); await load(savedTemplateId);
+    } catch (caught) {
+      setError(friendlyError(caught, "Não foi possível salvar a lista."));
+    } finally {
+      setSaving(false);
     }
-    atomicItems = atomicItems.map((item) => ({ ...item, material_id: item.material_id ?? materialByName.get(item.material_name.toLocaleLowerCase("pt-BR")) ?? null }));
-    const { data: savedTemplateId, error: saveError } = await supabase.rpc("save_function_template", {
-      p_template_id: editingId,
-      p_name: name.trim(),
-      p_source_document: sourceDocument.trim() || null,
-      p_contract_scenario_id: scenarioId || null,
-      p_items: atomicItems,
-    });
-    if (saveError || !savedTemplateId) { setError(friendlyError(saveError, "Não foi possível salvar a lista.")); setSaving(false); return; }
-    setSuccess(editingId ? "Lista por função atualizada." : "Nova função e sua lista foram cadastradas.");
-    setShowForm(false); await load(savedTemplateId); setSaving(false);
     return;
     /*
     event.preventDefault();

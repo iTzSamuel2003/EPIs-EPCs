@@ -1,7 +1,7 @@
 "use client";
 
 import { ClipboardCheck, FileWarning, LoaderCircle, PackageCheck, ShieldAlert } from "lucide-react";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { createClient } from "@/lib/supabase/client";
 import { friendlyError } from "@/lib/ui-feedback";
 import { FeedbackMessage } from "@/components/feedback-message";
@@ -11,7 +11,8 @@ type Lot = { material_id: string; available_quantity: number };
 
 export default function CompliancePage() {
   const [rows, setRows] = useState<Row[]>([]); const [stock, setStock] = useState<Record<string, number>>({}); const [loading, setLoading] = useState(true); const [retryKey, setRetryKey] = useState(0); const [error, setError] = useState("");
-  useEffect(() => { async function load() { setLoading(true); setError(""); setRows([]); setStock({}); const supabase = createClient(); const [{ data: requirementData, error: requirementError }, { data: lotData, error: lotError }] = await Promise.all([supabase.from("contract_requirements").select("id,source_annex,quantity,scenario:contract_scenarios!inner(active),material:materials(id,name,contract_item_code,ca_required,ca_number,ca_expires_at,test_required)").eq("scenario.active", true), supabase.from("material_lots").select("material_id,available_quantity")]); const loadError = requirementError ?? lotError; if (loadError) { setError(friendlyError(loadError, "Não foi possível carregar a conformidade.")); setLoading(false); return; } setRows((requirementData ?? []) as unknown as Row[]); setStock((lotData ?? []).reduce<Record<string, number>>((sum, lot: Lot) => ({ ...sum, [lot.material_id]: (sum[lot.material_id] ?? 0) + Number(lot.available_quantity) }), {})); setLoading(false); } void load(); }, [retryKey]);
+  const loadVersion = useRef(0);
+  useEffect(() => { const version = ++loadVersion.current; async function load() { setLoading(true); setError(""); setRows([]); setStock({}); try { const supabase = createClient(); const [{ data: requirementData, error: requirementError }, { data: lotData, error: lotError }] = await Promise.all([supabase.from("contract_requirements").select("id,source_annex,quantity,scenario:contract_scenarios!inner(active),material:materials(id,name,contract_item_code,ca_required,ca_number,ca_expires_at,test_required)").eq("scenario.active", true), supabase.from("material_lots").select("material_id,available_quantity")]); if (version !== loadVersion.current) return; const loadError = requirementError ?? lotError; if (loadError) { setError(friendlyError(loadError, "Não foi possível carregar a conformidade.")); return; } setRows((requirementData ?? []) as unknown as Row[]); setStock((lotData ?? []).reduce<Record<string, number>>((sum, lot: Lot) => ({ ...sum, [lot.material_id]: (sum[lot.material_id] ?? 0) + Number(lot.available_quantity) }), {})); } catch (caught) { if (version === loadVersion.current) setError(friendlyError(caught, "Não foi possível carregar a conformidade.")); } finally { if (version === loadVersion.current) setLoading(false); } } void load(); }, [retryKey]);
   function retryLoad() { setRetryKey((current) => current + 1); }
   const uniqueMaterials = useMemo(() => Array.from(new Map(rows.filter((row) => row.material).map((row) => [row.material!.id, row.material!])).values()), [rows]);
   const stockIssues = rows.filter((row) => row.material && (stock[row.material.id] ?? 0) < Number(row.quantity)).length;

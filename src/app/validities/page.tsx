@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { CalendarClock, LoaderCircle, Search, ShieldCheck, UserRound } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 import { friendlyError } from "@/lib/ui-feedback";
@@ -21,27 +21,36 @@ function normalize(value: string) { return value.normalize("NFD").replace(/[\u03
 export default function ValiditiesPage() {
   const [retryKey, setRetryKey] = useState(0);
   const [rows, setRows] = useState<InventoryRow[]>([]); const [query, setQuery] = useState(""); const [filter, setFilter] = useState("all"); const [loading, setLoading] = useState(true); const [error, setError] = useState(""); const [alertDays, setAlertDays] = useState(30);
-  useEffect(() => { void Promise.resolve().then(async () => {
-    const supabase = createClient();
-    const [{ data: materialData, error: materialError }, { data: lotData, error: lotError }, { data: variantData, error: variantError }, { data: itemData, error: itemError }, { data: deliveryData, error: deliveryError }, { data: employeeData, error: employeeError }, { data: returnData, error: returnError }, { data: organizationData, error: organizationError }] = await Promise.all([
-      supabase.from("materials").select("id,name,internal_code,type,unit").eq("status", "active"),
-      supabase.from("material_lots").select("id,lot_number,available_quantity,expires_at,material_id,variant_id"),
-      supabase.from("material_variants").select("id,material_id,name,size").eq("active", true),
-      supabase.from("delivery_items").select("id,lot_id,material_id,variant_id,quantity,delivery_id"),
-      supabase.from("deliveries").select("id,employee_id"),
-      supabase.from("employees").select("id,full_name,registration"),
-      supabase.from("return_items").select("delivery_item_id,quantity"),
-      supabase.from("organizations").select("validity_alert_days").single()
-    ]);
-    const loadError = materialError ?? lotError ?? variantError ?? itemError ?? deliveryError ?? employeeError ?? returnError ?? organizationError;
-    if (loadError) { setError(friendlyError(loadError, "Não foi possível concluir a operação.")); setLoading(false); return; }
-    const materials = new Map((materialData ?? []).map((item) => [item.id, item as Material])); const lots = (lotData ?? []) as Lot[]; const lotById = new Map(lots.map((lot) => [lot.id, lot])); const variants = new Map((variantData ?? []).map((item) => [item.id, item as Variant])); const deliveries = new Map((deliveryData ?? []).map((item) => [item.id, item as Delivery])); const employees = new Map((employeeData ?? []).map((item) => [item.id, item as Employee])); const returned = new Map<string, number>();
-    for (const item of (returnData ?? []) as ReturnItem[]) returned.set(item.delivery_item_id, (returned.get(item.delivery_item_id) ?? 0) + Number(item.quantity));
-    const inventory: InventoryRow[] = [];
-    for (const lot of lots) if (Number(lot.available_quantity) > 0) inventory.push({ id: `stock-${lot.id}`, material: materials.get(lot.material_id) ?? null, variant: lot.variant_id ? variants.get(lot.variant_id) ?? null : null, lot_number: lot.lot_number, expires_at: lot.expires_at, quantity: Number(lot.available_quantity), location: "Estoque", employee: null });
-    for (const item of (itemData ?? []) as DeliveryItem[]) { const quantity = Number(item.quantity) - (returned.get(item.id) ?? 0); if (quantity <= 0) continue; const lot = item.lot_id ? lotById.get(item.lot_id) : undefined; const delivery = deliveries.get(item.delivery_id); inventory.push({ id: `assigned-${item.id}`, material: materials.get(item.material_id) ?? null, variant: item.variant_id ? variants.get(item.variant_id) ?? null : lot?.variant_id ? variants.get(lot.variant_id) ?? null : null, lot_number: lot?.lot_number ?? "—", expires_at: lot?.expires_at ?? null, quantity, location: "Com funcionário", employee: delivery ? employees.get(delivery.employee_id) ?? null : null }); }
-    setRows(inventory); setAlertDays(Math.max(0, Number(organizationData?.validity_alert_days ?? 30))); setLoading(false);
-  }); }, [retryKey]);
+  const loadVersion = useRef(0);
+  useEffect(() => { const version = ++loadVersion.current; async function load() {
+    setLoading(true); setError("");
+    try {
+      const supabase = createClient();
+      const [{ data: materialData, error: materialError }, { data: lotData, error: lotError }, { data: variantData, error: variantError }, { data: itemData, error: itemError }, { data: deliveryData, error: deliveryError }, { data: employeeData, error: employeeError }, { data: returnData, error: returnError }, { data: organizationData, error: organizationError }] = await Promise.all([
+        supabase.from("materials").select("id,name,internal_code,type,unit").eq("status", "active"),
+        supabase.from("material_lots").select("id,lot_number,available_quantity,expires_at,material_id,variant_id"),
+        supabase.from("material_variants").select("id,material_id,name,size").eq("active", true),
+        supabase.from("delivery_items").select("id,lot_id,material_id,variant_id,quantity,delivery_id"),
+        supabase.from("deliveries").select("id,employee_id"),
+        supabase.from("employees").select("id,full_name,registration"),
+        supabase.from("return_items").select("delivery_item_id,quantity"),
+        supabase.from("organizations").select("validity_alert_days").single()
+      ]);
+      if (version !== loadVersion.current) return;
+      const loadError = materialError ?? lotError ?? variantError ?? itemError ?? deliveryError ?? employeeError ?? returnError ?? organizationError;
+      if (loadError) { setError(friendlyError(loadError, "Não foi possível concluir a operação.")); return; }
+      const materials = new Map((materialData ?? []).map((item) => [item.id, item as Material])); const lots = (lotData ?? []) as Lot[]; const lotById = new Map(lots.map((lot) => [lot.id, lot])); const variants = new Map((variantData ?? []).map((item) => [item.id, item as Variant])); const deliveries = new Map((deliveryData ?? []).map((item) => [item.id, item as Delivery])); const employees = new Map((employeeData ?? []).map((item) => [item.id, item as Employee])); const returned = new Map<string, number>();
+      for (const item of (returnData ?? []) as ReturnItem[]) returned.set(item.delivery_item_id, (returned.get(item.delivery_item_id) ?? 0) + Number(item.quantity));
+      const inventory: InventoryRow[] = [];
+      for (const lot of lots) if (Number(lot.available_quantity) > 0) inventory.push({ id: `stock-${lot.id}`, material: materials.get(lot.material_id) ?? null, variant: lot.variant_id ? variants.get(lot.variant_id) ?? null : null, lot_number: lot.lot_number, expires_at: lot.expires_at, quantity: Number(lot.available_quantity), location: "Estoque", employee: null });
+      for (const item of (itemData ?? []) as DeliveryItem[]) { const quantity = Number(item.quantity) - (returned.get(item.id) ?? 0); if (quantity <= 0) continue; const lot = item.lot_id ? lotById.get(item.lot_id) : undefined; const delivery = deliveries.get(item.delivery_id); inventory.push({ id: `assigned-${item.id}`, material: materials.get(item.material_id) ?? null, variant: item.variant_id ? variants.get(item.variant_id) ?? null : lot?.variant_id ? variants.get(lot.variant_id) ?? null : null, lot_number: lot?.lot_number ?? "—", expires_at: lot?.expires_at ?? null, quantity, location: "Com funcionário", employee: delivery ? employees.get(delivery.employee_id) ?? null : null }); }
+      setRows(inventory); setAlertDays(Math.max(0, Number(organizationData?.validity_alert_days ?? 30)));
+    } catch (caught) {
+      if (version === loadVersion.current) setError(friendlyError(caught, "Não foi possível concluir a operação."));
+    } finally {
+      if (version === loadVersion.current) setLoading(false);
+    }
+  } void load(); }, [retryKey]);
   useEffect(() => { if (retryKey === 0) return; setLoading(true); setError(""); setRows([]); }, [retryKey]);
   useEffect(() => { const refresh = () => setRetryKey((current) => current + 1); const events = ["delivery-created", "return-created", "stock-entry-created", "stock-entry-updated", "stock-entry-deleted"]; events.forEach((eventName) => window.addEventListener(eventName, refresh)); return () => events.forEach((eventName) => window.removeEventListener(eventName, refresh)); }, []);
   useEffect(() => { const requestedFilter = new URLSearchParams(window.location.search).get("filter"); if (requestedFilter === "expired" || requestedFilter === "urgent" || requestedFilter === "ok") setFilter(requestedFilter); }, []);
