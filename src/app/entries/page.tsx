@@ -32,6 +32,7 @@ export default function EntriesPage() {
   const [entriesRefreshKey, setEntriesRefreshKey] = useState(0);
   const loadRequestRef = useRef(0);
   const submitLockRef = useRef(false);
+  const mountedRef = useRef(true);
 
   async function loadMaterials() {
     const requestId = ++loadRequestRef.current;
@@ -54,7 +55,7 @@ export default function EntriesPage() {
     }
   }
 
-  useEffect(() => { void Promise.resolve().then(() => loadMaterials()); }, []);
+  useEffect(() => { mountedRef.current = true; void loadMaterials(); return () => { mountedRef.current = false; loadRequestRef.current += 1; }; }, []);
   useEffect(() => { if (!success) return; const timer = window.setTimeout(() => setSuccess(""), 4500); return () => window.clearTimeout(timer); }, [success]);
 
   function updateItem(index: number, field: keyof EntryItem, value: string) {

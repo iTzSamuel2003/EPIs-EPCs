@@ -33,7 +33,7 @@ export default function RequestsPage() {
   const [deliveredAtDraft, setDeliveredAtDraft] = useState("");
   const loadVersion = useRef(0);
 
-  useEffect(() => { void load(); }, []);
+  useEffect(() => { void load(); return () => { loadVersion.current += 1; }; }, []);
   useEffect(() => { if (!success) return; const timer = window.setTimeout(() => setSuccess(""), 4500); return () => window.clearTimeout(timer); }, [success]);
 
   async function load() {

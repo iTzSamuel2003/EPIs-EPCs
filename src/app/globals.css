@@ -1445,6 +1445,127 @@ body{max-width:100%;overflow-x:hidden;}
   *,*::before,*::after{animation-duration:.001ms!important;animation-iteration-count:1!important;scroll-behavior:auto!important;transition-duration:.001ms!important;}
 }
 
+/* Auditoria final: manter as tabelas operacionais legíveis também em tablets estreitos. */
+@media (max-width:800px) and (min-width:761px){
+  .module-table-card .table-wrap:has(.stock-table),
+  .recent-deliveries .table-wrap,
+  .requests-table-wrap{overflow:visible;margin-right:0;padding-bottom:0;}
+
+  .module-table-card .stock-table,
+  .recent-deliveries table,
+  .requests-table{
+    display:block;
+    width:100%;
+    min-width:0!important;
+    white-space:normal;
+  }
+
+  .module-table-card .stock-table thead,
+  .recent-deliveries table thead,
+  .requests-table thead{display:none;}
+
+  .module-table-card .stock-table tbody,
+  .recent-deliveries table tbody,
+  .requests-table tbody{display:grid;gap:10px;}
+
+  .module-table-card .stock-table tr,
+  .recent-deliveries table tr,
+  .requests-table tr{
+    display:grid;
+    grid-template-columns:minmax(0,1fr) minmax(0,1fr);
+    gap:10px 12px;
+    padding:13px;
+    border:1px solid #edf0f5;
+    border-radius:10px;
+    background:#fafbfe;
+  }
+
+  .module-table-card .stock-table td,
+  .recent-deliveries table td,
+  .requests-table td{
+    display:grid;
+    gap:4px;
+    min-width:0;
+    max-width:none;
+    padding:0;
+    border:0;
+    white-space:normal;
+    overflow-wrap:anywhere;
+  }
+
+  .module-table-card .stock-table td::before,
+  .recent-deliveries table td::before,
+  .requests-table td::before{
+    color:#a1aaba;
+    font-size:9px;
+    font-weight:700;
+    letter-spacing:.5px;
+  }
+
+  .module-table-card .stock-table td:nth-child(1),
+  .module-table-card .stock-table td:nth-child(11),
+  .recent-deliveries table td:nth-child(1),
+  .recent-deliveries table td:nth-child(3),
+  .recent-deliveries table td:nth-child(6),
+  .requests-table td:nth-child(1),
+  .requests-table td:nth-child(4),
+  .requests-table td:nth-child(7){grid-column:1 / -1;}
+
+  .module-table-card .stock-table td:nth-child(1)::before{content:"Material / código";}
+  .module-table-card .stock-table td:nth-child(2)::before{content:"Tipo";}
+  .module-table-card .stock-table td:nth-child(3)::before{content:"Situação";}
+  .module-table-card .stock-table td:nth-child(4)::before{content:"Total recebido";}
+  .module-table-card .stock-table td:nth-child(5)::before{content:"Disponível";}
+  .module-table-card .stock-table td:nth-child(6)::before{content:"Em uso / entregue";}
+  .module-table-card .stock-table td:nth-child(7)::before{content:"Custo unitário";}
+  .module-table-card .stock-table td:nth-child(8)::before{content:"Valor disponível";}
+  .module-table-card .stock-table td:nth-child(9)::before{content:"Valor total";}
+  .module-table-card .stock-table td:nth-child(10)::before{content:"Estoque mínimo";}
+  .module-table-card .stock-table td:nth-child(11)::before{content:"Localização";}
+  .recent-deliveries table td:nth-child(1)::before{content:"Funcionário";}
+  .recent-deliveries table td:nth-child(2)::before{content:"Matrícula";}
+  .recent-deliveries table td:nth-child(3)::before{content:"Materiais";}
+  .recent-deliveries table td:nth-child(4)::before{content:"Data";}
+  .recent-deliveries table td:nth-child(5)::before{content:"Motivo";}
+  .recent-deliveries table td:nth-child(6)::before{content:"Status";}
+  .requests-table td:nth-child(1)::before{content:"Data";}
+  .requests-table td:nth-child(2)::before{content:"Funcionário";}
+  .requests-table td:nth-child(3)::before{content:"Material";}
+  .requests-table td:nth-child(4)::before{content:"Tipo / descrição";}
+  .requests-table td:nth-child(5)::before{content:"Anexo";}
+  .requests-table td:nth-child(6)::before{content:"Status";}
+  .requests-table td:nth-child(7)::before{content:"Ação";}
+  .requests-table .request-status-select{width:100%;min-width:0;}
+  .requests-table .action-button{max-width:100%;white-space:normal;}
+}
+
+@media (max-width:800px){
+  .employee-portal-wide{padding:24px 18px;}
+  .employee-portal-wide .portal-grid{grid-template-columns:minmax(0,1fr);}
+  .portal-panel .form-grid.two,
+  .portal-panel .form-grid.three{grid-template-columns:repeat(2,minmax(0,1fr));}
+  .portal-panel .form-grid.three label:first-child{grid-column:1 / -1;}
+}
+
+@media (max-width:480px){
+  .employee-portal-card{padding:22px 16px;border-radius:14px;}
+  .portal-heading{gap:12px;}
+  .portal-heading h1{font-size:21px;line-height:1.2;overflow-wrap:anywhere;}
+  .portal-heading .portal-logout{flex:0 0 auto;}
+  .portal-panel{padding:14px;}
+  .portal-panel .form-grid.two,
+  .portal-panel .form-grid.three{grid-template-columns:minmax(0,1fr);}
+  .portal-panel .form-grid.three label:first-child{grid-column:auto;}
+  .portal-material-list>div,
+  .portal-course-list>div,
+  .portal-request-list>div{display:grid;grid-template-columns:minmax(0,1fr);}
+  .portal-material-list .status-pill,
+  .portal-course-list .status-pill,
+  .portal-request-list .status-pill{margin-left:0;width:max-content;}
+  .modal-actions{flex-direction:column-reverse;align-items:stretch;}
+  .modal-actions>*{width:100%;justify-content:center;}
+}
+
 @media (max-width:760px){
   .requests-table-wrap{overflow:visible;}
   .requests-table{display:block;width:100%;min-width:0;white-space:normal;}
