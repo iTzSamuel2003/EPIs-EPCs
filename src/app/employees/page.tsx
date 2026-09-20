@@ -1,6 +1,6 @@
 "use client";
 
-import { FormEvent, useEffect, useState } from "react";
+import { FormEvent, useEffect, useRef, useState } from "react";
 import { FileText, GraduationCap, History, LoaderCircle, Pencil, Plus, Ruler, Search, UserRound, X } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { FeedbackMessage } from "@/components/feedback-message";
@@ -30,21 +30,30 @@ export default function EmployeesPage() {
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
   const [success, setSuccess] = useState("");
+  const loadRequestRef = useRef(0);
+  const mountedRef = useRef(true);
 
   async function loadEmployees() {
+    const requestId = ++loadRequestRef.current;
     setLoading(true);
     setError("");
-    const supabase = createClient();
-    const [{ data, error: loadError }, { data: templateData, error: templateError }] = await Promise.all([
-      supabase.from("employees").select("id,registration,full_name,cpf,job_title,function_name,function_classification,department,unit,admission_date,phone,email,status,notes").order("full_name"),
-      supabase.from("function_templates").select("id,name").order("name"),
-    ]);
-    if (loadError || templateError) setError(friendlyError(loadError ?? templateError, "Não foi possível carregar os dados."));
-    else { setEmployees((data ?? []) as Employee[]); setFunctionTemplates((templateData ?? []) as FunctionTemplate[]); }
-    setLoading(false);
+    try {
+      const supabase = createClient();
+      const [{ data, error: loadError }, { data: templateData, error: templateError }] = await Promise.all([
+        supabase.from("employees").select("id,registration,full_name,cpf,job_title,function_name,function_classification,department,unit,admission_date,phone,email,status,notes").order("full_name"),
+        supabase.from("function_templates").select("id,name").order("name"),
+      ]);
+      if (!mountedRef.current || requestId !== loadRequestRef.current) return;
+      if (loadError || templateError) setError(friendlyError(loadError ?? templateError, "Não foi possível carregar os dados."));
+      else { setEmployees((data ?? []) as Employee[]); setFunctionTemplates((templateData ?? []) as FunctionTemplate[]); }
+    } catch (caught) {
+      if (mountedRef.current && requestId === loadRequestRef.current) setError(friendlyError(caught, "Não foi possível carregar os dados."));
+    } finally {
+      if (mountedRef.current && requestId === loadRequestRef.current) setLoading(false);
+    }
   }
 
-  useEffect(() => { void Promise.resolve().then(() => loadEmployees()); }, []);
+  useEffect(() => { void Promise.resolve().then(() => loadEmployees()); return () => { mountedRef.current = false; }; }, []);
 
   const normalizedQuery = normalizeSearch(query);
   const filtered = employees.filter((employee) => normalizeSearch(`${employee.full_name} ${employee.registration ?? ""} ${employee.cpf} ${employee.department ?? ""} ${employee.function_name ?? ""} ${employee.function_classification ?? ""}`).includes(normalizedQuery) && (statusFilter === "all" || employee.status === statusFilter));
@@ -65,22 +74,27 @@ export default function EmployeesPage() {
       return;
     }
     setSaving(true);
-    const typedClassification = form.cargo_funcao.match(/\s+(VI|V|IV|III|II|I)$/i)?.[1]?.toUpperCase() ?? "";
-    const supabase = createClient();
-    const { data: auth, error: authError } = await supabase.auth.getUser();
-    if (authError) { setError(friendlyError(authError, "Não foi possível concluir a operação.")); setSaving(false); return; }
-    if (!auth.user) { setError("Sua sessão expirou. Entre novamente."); setSaving(false); return; }
-    const { data: profile, error: profileError } = await supabase.from("profiles").select("organization_id").eq("id", auth.user.id).single();
-    if (profileError) { setError(friendlyError(profileError, "Não foi possível concluir a operação.")); setSaving(false); return; }
-    if (!profile?.organization_id) { setError("Não foi possível identificar a organização do usuário."); setSaving(false); return; }
-    const { error: insertError } = await supabase.from("employees").insert({
-      organization_id: profile.organization_id, registration: form.registration.trim() || null, full_name: form.full_name.trim(), cpf: form.cpf.trim(),
-      job_title: null, function_name: form.cargo_funcao.trim() || null, function_classification: form.function_classification || typedClassification || null, department: form.department.trim() || null, unit: form.unit || null,
-      admission_date: form.admission_date || null, phone: form.phone.trim() || null, email: form.email.trim() || null, status: form.status, notes: form.notes.trim() || null,
-    });
-    if (insertError) setError(insertError.code === "23505" ? "Já existe um funcionário com esta matrícula ou CPF." : friendlyError(insertError, "Não foi possível salvar as alterações."));
-    else { setSuccess("Funcionário cadastrado com sucesso."); setForm(emptyForm); setShowForm(false); await loadEmployees(); }
-    setSaving(false);
+    try {
+      const typedClassification = form.cargo_funcao.match(/\s+(VI|V|IV|III|II|I)$/i)?.[1]?.toUpperCase() ?? "";
+      const supabase = createClient();
+      const { data: auth, error: authError } = await supabase.auth.getUser();
+      if (authError) throw authError;
+      if (!auth.user) throw new Error("Sua sessão expirou. Entre novamente.");
+      const { data: profile, error: profileError } = await supabase.from("profiles").select("organization_id").eq("id", auth.user.id).single();
+      if (profileError) throw profileError;
+      if (!profile?.organization_id) throw new Error("Não foi possível identificar a organização do usuário.");
+      const { error: insertError } = await supabase.from("employees").insert({
+        organization_id: profile.organization_id, registration: form.registration.trim() || null, full_name: form.full_name.trim(), cpf: form.cpf.trim(),
+        job_title: null, function_name: form.cargo_funcao.trim() || null, function_classification: form.function_classification || typedClassification || null, department: form.department.trim() || null, unit: form.unit || null,
+        admission_date: form.admission_date || null, phone: form.phone.trim() || null, email: form.email.trim() || null, status: form.status, notes: form.notes.trim() || null,
+      });
+      if (insertError) throw insertError;
+      setSuccess("Funcionário cadastrado com sucesso."); setForm(emptyForm); setShowForm(false); await loadEmployees();
+    } catch (caught) {
+      setError(caught && typeof caught === "object" && "code" in caught && caught.code === "23505" ? "Já existe um funcionário com esta matrícula ou CPF." : friendlyError(caught, "Não foi possível salvar as alterações."));
+    } finally {
+      setSaving(false);
+    }
   }
 
   return <main className="module-shell">

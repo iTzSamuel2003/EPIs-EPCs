@@ -581,6 +581,12 @@ body{overflow-wrap:normal}
   .delivery-items-header .primary-button,.delivery-items-header .secondary-button{width:100%;justify-content:center}
 }
 
+@media (min-width:1400px){
+  .module-table-card .table-wrap table.stock-table{min-width:0;width:100%;table-layout:fixed;}
+  .module-table-card .table-wrap table.stock-table th,
+  .module-table-card .table-wrap table.stock-table td{overflow-wrap:anywhere;}
+}
+
 /* Public screens: keep content reachable with mobile browser chrome and long values. */
 .login-shell,.employee-portal,.public-measurements{min-height:100svh;min-height:100dvh;padding-bottom:max(24px,env(safe-area-inset-bottom));}
 .login-card,.employee-portal-card,.public-measurement-card{min-width:0;}
@@ -1078,6 +1084,12 @@ body{overflow-wrap:normal}
   .module-toolbar,.module-table-card,.entry-card,.delivery-card{padding-left:12px;padding-right:12px;}
   .modal-card,.signature-modal{padding-left:12px;padding-right:12px;}
   .modal-card .modal-header,.signature-modal .modal-header{gap:8px;}
+}
+
+@media (min-width:1400px){
+  .module-table-card .table-wrap table.stock-table{min-width:0;width:100%;table-layout:fixed;}
+  .module-table-card .table-wrap table.stock-table th,
+  .module-table-card .table-wrap table.stock-table td{overflow-wrap:anywhere;}
 }
 
 @media (max-width:600px){
