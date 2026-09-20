@@ -2456,3 +2456,108 @@ main.module-shell:not(:has(.module-toolbar)):has(> .module-summary) > .module-ta
   .employee-portal-card{padding-inline:13px;}
   .portal-panel{padding-inline:10px;}
 }
+
+/* Auditoria visual: configurações, unidades, validades, ajuda, auditoria, CA e menu. */
+.settings-page .edit-employee-card{width:min(100%,1080px);margin-inline:auto;padding:28px 30px;}
+.settings-page .form-section-title{display:grid;gap:6px;margin-top:4px;padding-bottom:14px;border-bottom:1px solid #eef0f5;}
+.settings-page .form-section-title + .form-grid{margin-top:2px;}
+.settings-page .form-section-title h2{display:flex;align-items:center;gap:8px;font-size:16px;line-height:1.35;}
+.settings-page .form-section-title p{margin:0;color:#8994a8;font-size:11px;line-height:1.5;}
+.settings-page .material-form > .form-section-title:not(:first-child){margin-top:12px;padding-top:18px;}
+.settings-page .modal-actions{padding-top:16px;border-top:1px solid #eef0f5;}
+.units-page .module-table-card,
+.validities-page .module-table-card,
+.audit-page .module-table-card{overflow:hidden;}
+.units-page .module-table-card .table-wrap,
+.validities-page .module-table-card .table-wrap,
+.audit-page .module-table-card .table-wrap{max-width:100%;overflow-x:auto;overscroll-behavior-inline:contain;}
+.units-page .module-table-card table{min-width:780px;}
+.units-page .module-table-card th,
+.validities-page .module-table-card th,
+.audit-page .module-table-card th{line-height:1.3;white-space:normal;}
+.units-page .module-table-card td,
+.validities-page .module-table-card td,
+.audit-page .module-table-card td{vertical-align:top;line-height:1.4;}
+.units-page .module-table-card td strong,
+.units-page .module-table-card td small{overflow-wrap:anywhere;}
+.units-page .modal-card{width:min(100%,760px);}
+.units-page .modal-card .material-form{gap:17px;}
+.help-page .module-summary{grid-template-columns:repeat(3,minmax(0,1fr));}
+.help-page .help-guides{width:min(100%,1400px);margin:0 auto 16px;display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:16px;}
+.help-page .help-guide{display:flex;align-items:flex-start;gap:14px;min-width:0;padding:22px;}
+.help-page .help-guide > svg{flex:0 0 auto;color:#7762d6;background:#efebfc;border-radius:10px;padding:8px;box-sizing:content-box;}
+.help-page .help-guide > div{min-width:0;}
+.help-page .help-guide h2{line-height:1.35;overflow-wrap:anywhere;}
+.help-page .help-guide p,.help-page .help-note p{color:#69768d;line-height:1.55;overflow-wrap:anywhere;}
+.help-page .help-note{width:min(100%,1400px);margin-inline:auto;}
+.help-page .text-link{width:max-content;max-width:100%;flex-wrap:wrap;}
+.audit-page .audit-filters{display:grid;grid-template-columns:minmax(220px,1.7fr) repeat(3,minmax(135px,1fr)) repeat(2,minmax(125px,.8fr));align-items:end;}
+.audit-page .audit-filters .module-search{min-width:0;height:42px;}
+.audit-page .audit-filters > label{display:grid;gap:6px;min-width:0;color:#536078;font-size:11px;font-weight:600;}
+.audit-page .audit-filters input,.audit-page .audit-filters select{width:100%;min-width:0;min-height:42px;}
+.audit-page .module-table-card table{min-width:720px;}
+.audit-page .module-table-card .feedback{margin-inline:0;}
+.ca-page .ca-empty-state{width:min(100%,900px);margin-inline:auto;min-height:260px!important;padding:42px 26px;gap:12px;text-align:center;}
+.ca-page .ca-empty-state span{max-width:520px;line-height:1.55;text-align:center;}
+.ca-page .ca-empty-state .text-link{justify-content:center;}
+.sidebar-section h2{line-height:1.35;overflow-wrap:anywhere;}
+.sidebar-section nav a{min-height:44px;line-height:1.3;}
+.sidebar-section nav a span{min-width:0;overflow-wrap:anywhere;}
+.sidebar-section nav a:focus-visible,.sidebar-bottom>a:focus-visible,.menu-toggle:focus-visible,.close-menu:focus-visible{outline:3px solid #7762d6aa;outline-offset:2px;}
+.sidebar-sections{scrollbar-width:thin;scrollbar-color:#c7c1ed transparent;}
+.settings-page input:focus-visible,.settings-page select:focus-visible,.units-page input:focus-visible,.units-page select:focus-visible,.validities-page input:focus-visible,.validities-page select:focus-visible,.audit-page input:focus-visible,.audit-page select:focus-visible{outline:3px solid #7762d655;outline-offset:1px;}
+
+@media (max-width:1024px) and (min-width:761px){
+  .settings-page .edit-employee-card{padding:24px;}
+  .audit-page .audit-filters{grid-template-columns:repeat(3,minmax(0,1fr));}
+  .audit-page .audit-filters .module-search{grid-column:1 / -1;}
+  .help-page .help-guides{gap:12px;}
+}
+
+@media (max-width:760px){
+  .settings-page .edit-employee-card{padding:20px 16px;}
+  .settings-page .form-section-title h2{font-size:15px;}
+  .settings-page .modal-actions{flex-direction:column-reverse;}
+  .settings-page .modal-actions .primary-button{width:100%;justify-content:center;}
+  .units-page .module-table-card .table-wrap,
+  .validities-page .module-table-card .table-wrap,
+  .audit-page .module-table-card .table-wrap{overflow:visible;padding-bottom:0;}
+  .units-page .module-table-card table,
+  .validities-page .module-table-card table,
+  .audit-page .module-table-card table{display:block;width:100%;min-width:0;white-space:normal;}
+  .units-page .module-table-card thead,
+  .validities-page .module-table-card thead,
+  .audit-page .module-table-card thead{display:none;}
+  .units-page .module-table-card tbody,
+  .validities-page .module-table-card tbody,
+  .audit-page .module-table-card tbody{display:grid;gap:10px;}
+  .units-page .module-table-card tr,
+  .validities-page .module-table-card tr,
+  .audit-page .module-table-card tr{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:9px 12px;padding:13px;border:1px solid #edf0f5;border-radius:10px;background:#fafbfe;}
+  .units-page .module-table-card td,
+  .validities-page .module-table-card td,
+  .audit-page .module-table-card td{display:grid;gap:4px;min-width:0;padding:0;border:0;white-space:normal;overflow-wrap:anywhere;}
+  .units-page .module-table-card td::before,
+  .validities-page .module-table-card td::before,
+  .audit-page .module-table-card td::before{color:#687893;font-size:9px;font-weight:700;letter-spacing:.5px;}
+  .units-page .module-table-card td:nth-child(1),.units-page .module-table-card td:nth-child(4),
+  .validities-page .module-table-card td:nth-child(1),.validities-page .module-table-card td:nth-child(4),
+  .audit-page .module-table-card td:nth-child(1),.audit-page .module-table-card td:nth-child(5){grid-column:1 / -1;}
+  .units-page .module-table-card td:nth-child(1)::before{content:"Material"}.units-page .module-table-card td:nth-child(2)::before{content:"Identificador"}.units-page .module-table-card td:nth-child(3)::before{content:"Lote / serie"}.units-page .module-table-card td:nth-child(4)::before{content:"Fabricante / modelo"}.units-page .module-table-card td:nth-child(5)::before{content:"Tamanho"}.units-page .module-table-card td:nth-child(6)::before{content:"Validade"}.units-page .module-table-card td:nth-child(7)::before{content:"Status"}
+  .validities-page .module-table-card td:nth-child(1)::before{content:"Material"}.validities-page .module-table-card td:nth-child(2)::before{content:"Tamanho"}.validities-page .module-table-card td:nth-child(3)::before{content:"Quantidade"}.validities-page .module-table-card td:nth-child(4)::before{content:"Localizacao"}.validities-page .module-table-card td:nth-child(5)::before{content:"Validade"}.validities-page .module-table-card td:nth-child(6)::before{content:"Situacao"}
+  .audit-page .module-table-card td:nth-child(1)::before{content:"Data"}.audit-page .module-table-card td:nth-child(2)::before{content:"Acao"}.audit-page .module-table-card td:nth-child(3)::before{content:"Modulo"}.audit-page .module-table-card td:nth-child(4)::before{content:"Registro"}.audit-page .module-table-card td:nth-child(5)::before{content:"Usuario"}
+  .audit-page .audit-filters{grid-template-columns:1fr;align-items:stretch;}
+  .audit-page .audit-filters .module-search{height:auto;}
+  .help-page .module-summary{grid-template-columns:1fr;}
+  .help-page .help-guides{grid-template-columns:1fr;}
+  .help-page .help-guide{padding:17px 15px;}
+  .ca-page .ca-empty-state{min-height:230px!important;padding:30px 17px;}
+  .sidebar{width:min(86vw,320px);}
+}
+
+@media (max-width:380px){
+  .settings-page .edit-employee-card{padding-inline:12px;}
+  .units-page .module-table-card,.validities-page .module-table-card,.audit-page .module-table-card{padding-inline:12px;}
+  .help-page .help-guide{gap:10px;}
+  .help-page .help-guide > svg{width:18px;height:18px;}
+}
