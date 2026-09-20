@@ -53,7 +53,11 @@ export default function EmployeesPage() {
     }
   }
 
-  useEffect(() => { void Promise.resolve().then(() => loadEmployees()); return () => { mountedRef.current = false; }; }, []);
+  useEffect(() => {
+    mountedRef.current = true;
+    void Promise.resolve().then(() => loadEmployees());
+    return () => { mountedRef.current = false; };
+  }, []);
 
   const normalizedQuery = normalizeSearch(query);
   const filtered = employees.filter((employee) => normalizeSearch(`${employee.full_name} ${employee.registration ?? ""} ${employee.cpf} ${employee.department ?? ""} ${employee.function_name ?? ""} ${employee.function_classification ?? ""}`).includes(normalizedQuery) && (statusFilter === "all" || employee.status === statusFilter));

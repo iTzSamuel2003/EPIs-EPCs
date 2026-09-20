@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Boxes, Download, LoaderCircle, Search, ShieldCheck, X } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 import { friendlyError } from "@/lib/ui-feedback";
@@ -29,8 +29,10 @@ export default function ReportsPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [reloadKey, setReloadKey] = useState(0);
+  const loadVersion = useRef(0);
 
   useEffect(() => {
+    const version = ++loadVersion.current;
     async function load() {
       setLoading(true);
       setError("");
@@ -43,6 +45,7 @@ export default function ReportsPage() {
         supabase.from("organizations").select("validity_alert_days").single(),
       ]);
       const loadError = materialError ?? lotError ?? movementError ?? organizationError;
+      if (version !== loadVersion.current) return;
       if (loadError) setError(friendlyError(loadError, "Não foi possível carregar os relatórios."));
       else {
         setMaterials((materialData ?? []) as Material[]);
@@ -52,13 +55,20 @@ export default function ReportsPage() {
         setAlertDays(Math.max(0, Number(organizationData?.validity_alert_days ?? 30)));
       }
       } catch (caught) {
-        setError(friendlyError(caught, "Não foi possível carregar os relatórios."));
+        if (version === loadVersion.current) setError(friendlyError(caught, "Não foi possível carregar os relatórios."));
       } finally {
-        setLoading(false);
+        if (version === loadVersion.current) setLoading(false);
       }
     }
     void load();
   }, [reloadKey]);
+
+  useEffect(() => {
+    const refresh = () => setReloadKey((current) => current + 1);
+    const events = ["delivery-created", "return-created", "stock-entry-created", "stock-entry-updated", "stock-entry-deleted"];
+    events.forEach((eventName) => window.addEventListener(eventName, refresh));
+    return () => events.forEach((eventName) => window.removeEventListener(eventName, refresh));
+  }, []);
 
   const filteredMaterials = useMemo(() => materials.filter((item) => {
     const matches = (item.name + " " + item.internal_code).toLowerCase().includes(query.toLowerCase());

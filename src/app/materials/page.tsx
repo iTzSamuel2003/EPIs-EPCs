@@ -1,6 +1,6 @@
 "use client";
 
-import { FormEvent, useEffect, useMemo, useState } from "react";
+import { FormEvent, useEffect, useMemo, useRef, useState } from "react";
 import { ArrowDownAZ, ArrowUpAZ, Boxes, Check, LoaderCircle, Pencil, Plus, Search, ShieldCheck, X } from "lucide-react";
 import { useSearchParams } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
@@ -60,6 +60,8 @@ export default function MaterialsPage() {
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
   const [success, setSuccess] = useState("");
+  const loadVersion = useRef(0);
+  const mountedRef = useRef(true);
 
   useEffect(() => {
     const initialSearch = searchParams.get("search");
@@ -67,6 +69,7 @@ export default function MaterialsPage() {
   }, [searchParams]);
 
   async function loadMaterials() {
+    const version = ++loadVersion.current;
     setLoading(true);
     setError("");
     setMaterials([]);
@@ -77,6 +80,7 @@ export default function MaterialsPage() {
       supabase.from("materials").select("id,internal_code,name,type,unit,size,description,brand,manufacturer,model,ca_number,ca_expires_at,useful_life_months,replacement_interval_days,minimum_stock,location,notes,status").order("name"),
       supabase.from("material_lots").select("material_id,available_quantity"),
     ]);
+    if (!mountedRef.current || version !== loadVersion.current) return;
     if (materialsError || lotsError) setError(friendlyError(materialsError ?? lotsError, "Não foi possível carregar materiais."));
     else {
       setMaterials((data ?? []) as MaterialRow[]);
@@ -86,13 +90,24 @@ export default function MaterialsPage() {
       }, {}));
     }
     } catch (caught) {
-      setError(friendlyError(caught, "Falha ao carregar materiais."));
+      if (mountedRef.current && version === loadVersion.current) setError(friendlyError(caught, "Falha ao carregar materiais."));
     } finally {
-      setLoading(false);
+      if (mountedRef.current && version === loadVersion.current) setLoading(false);
     }
   }
 
-  useEffect(() => { void loadMaterials(); }, []);
+  useEffect(() => {
+    mountedRef.current = true;
+    void loadMaterials();
+    return () => { mountedRef.current = false; loadVersion.current += 1; };
+  }, []);
+
+  useEffect(() => {
+    const refresh = () => { void loadMaterials(); };
+    const events = ["delivery-created", "return-created", "stock-entry-created", "stock-entry-updated", "stock-entry-deleted"];
+    events.forEach((eventName) => window.addEventListener(eventName, refresh));
+    return () => events.forEach((eventName) => window.removeEventListener(eventName, refresh));
+  }, []);
 
   const filtered = useMemo(() => materials
     .filter((material) => {

@@ -1539,6 +1539,52 @@ body{max-width:100%;overflow-x:hidden;}
   .requests-table .action-button{max-width:100%;white-space:normal;}
 }
 
+/* Revisão de acessibilidade: foco, toque e leitura em telas estreitas. */
+:where(button,a,input,select,textarea,[tabindex]):focus-visible{
+  outline:3px solid #5f49c9;
+  outline-offset:3px;
+}
+
+:where(.material-form input,.material-form select,.material-form textarea,.module-toolbar select,.module-search input,.search input){
+  min-height:44px;
+}
+
+:where(input[type="checkbox"],input[type="radio"]){
+  width:20px;
+  min-width:20px;
+  min-height:20px;
+  accent-color:#7762d6;
+}
+
+.employee-suggestions button,
+.signature-pad-label button,
+.sidebar-backdrop{
+  min-height:44px;
+}
+
+.signature-pad-label button{padding:8px 6px;}
+
+.modal-card,
+.signature-modal{
+  overscroll-behavior:contain;
+  scrollbar-width:thin;
+}
+
+.modal-card .modal-actions,
+.signature-modal-actions{flex-wrap:wrap;}
+
+.table-wrap:focus-visible{
+  outline:3px solid #5f49c9;
+  outline-offset:3px;
+}
+
+@media (forced-colors:active){
+  :where(button,a,input,select,textarea,[tabindex]):focus-visible{
+    outline:2px solid CanvasText;
+    outline-offset:3px;
+  }
+}
+
 @media (max-width:800px){
   .employee-portal-wide{padding:24px 18px;}
   .employee-portal-wide .portal-grid{grid-template-columns:minmax(0,1fr);}

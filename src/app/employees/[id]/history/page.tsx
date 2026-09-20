@@ -69,13 +69,13 @@ export default function EmployeeHistoryPage() {
       const returnRows = (returns ?? []) as ReturnRecord[];
       const deliveryIds = deliveryRows.map((item) => item.id);
       const returnIds = returnRows.map((item) => item.id);
-      const [{ data: deliveryItems, error: itemError }, { data: returnItems, error: returnItemError }, { data: accountabilityData }] = await Promise.all([
+      const [{ data: deliveryItems, error: itemError }, { data: returnItems, error: returnItemError }, { data: accountabilityData, error: accountabilityError }] = await Promise.all([
         deliveryIds.length ? supabase.from("delivery_items").select("id,delivery_id,quantity,material:materials(name,internal_code,unit),lot:material_lots(lot_number)").in("delivery_id", deliveryIds) : Promise.resolve({ data: [], error: null }),
         returnIds.length ? supabase.from("return_items").select("return_id,delivery_item_id,quantity,equipment_condition,destination").in("return_id", returnIds) : Promise.resolve({ data: [], error: null }),
         returnIds.length ? supabase.from("return_accountability").select("return_id,incident_type,incident_description,employee_signature_name,deduction_requested,deduction_amount").in("return_id", returnIds) : Promise.resolve({ data: [], error: null }),
       ]);
       if (cancelled) return;
-      if (itemError || returnItemError) { setError(friendlyError(itemError ?? returnItemError, "Não foi possível carregar os itens do histórico.")); setLoading(false); return; }
+      if (itemError || returnItemError || accountabilityError) { setError(friendlyError(itemError ?? returnItemError ?? accountabilityError, "Não foi possível carregar os itens do histórico.")); setLoading(false); return; }
       const itemRows = (deliveryItems ?? []) as unknown as DeliveryItem[];
       const returnItemRows = (returnItems ?? []) as ReturnItem[];
       const deliveryById = new Map(deliveryRows.map((item) => [item.id, item]));
