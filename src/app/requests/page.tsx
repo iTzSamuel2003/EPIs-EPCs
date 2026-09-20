@@ -68,8 +68,9 @@ export default function RequestsPage() {
     }
     setSavingId(item.id); setError(""); setSuccess("");
     try {
-      const { error: updateError } = await createClient().from("employee_portal_requests").update({ status, review_notes: note.trim() || null, delivered_at: status === "completed" ? deliveredAt : null }).eq("id", item.id);
+      const { data: updatedRequest, error: updateError } = await createClient().from("employee_portal_requests").update({ status, review_notes: note.trim() || null, delivered_at: status === "completed" ? deliveredAt : null }).eq("id", item.id).select("id").maybeSingle();
       if (updateError) throw updateError;
+      if (!updatedRequest) throw new Error("A solicitação não foi encontrada ou não pode ser atualizada.");
       setRequests((current) => current.map((currentItem) => currentItem.id === item.id ? { ...currentItem, status, review_notes: note.trim() || null, delivered_at: status === "completed" ? deliveredAt : null, updated_at: new Date().toISOString() } : currentItem));
       setSuccess("Solicitação atualizada."); setConfirming(null);
     } catch (caught) {

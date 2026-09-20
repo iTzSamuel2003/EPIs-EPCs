@@ -52,8 +52,9 @@ export function DeliverySignatureModal({ deliveryId, employeeName, employeeCpf, 
     if (!accepted) { setError("Confirme que o colaborador leu e concorda com o termo."); return; }
     setSaving(true); setError("");
     let uploadedPath = "";
+    let supabase: ReturnType<typeof createClient> | null = null;
     try {
-    const supabase = createClient();
+    supabase = createClient();
     const { data: auth, error: authError } = await supabase.auth.getUser();
     const { data: profile, error: profileError } = auth.user ? await supabase.from("profiles").select("organization_id").eq("id", auth.user.id).maybeSingle() : { data: null, error: authError };
     if (profileError || authError) { setError(friendlyError(profileError ?? authError, "Não foi possível identificar a organização.")); setSaving(false); return; }
@@ -68,15 +69,15 @@ export function DeliverySignatureModal({ deliveryId, employeeName, employeeCpf, 
     y += 12; const paragraph = "Declaro que recebi os materiais relacionados acima em condições adequadas de uso, comprometendo-me a utilizá-los corretamente, conservá-los e devolvê-los ao término do serviço, desligamento, troca de função ou quando solicitado. Em caso de perda, extravio, dano ou mau uso, o ocorrido será apurado conforme as políticas da empresa e a legislação aplicável, podendo gerar responsabilização após a devida análise."; doc.setFont("helvetica", "normal"); doc.setFontSize(8.5); doc.setTextColor(79, 93, 115); const paragraphLines = doc.splitTextToSize(paragraph, lineWidth); doc.text(paragraphLines, margin, y, { lineHeightFactor: 1.5 }); y += paragraphLines.length * 4.2 + 8;
     const signatureY = Math.max(y + 28, 247); const signatureWidth = 72; doc.setDrawColor(70, 82, 103); doc.line(margin, signatureY, margin + signatureWidth, signatureY); doc.line(width - margin - signatureWidth, signatureY, width - margin, signatureY); const signature = cropSignature(canvas); const signatureBoxWidth = signatureWidth - 8; const signatureBoxHeight = 16; const signatureScale = Math.min(signatureBoxWidth / signature.width, signatureBoxHeight / signature.height); const renderedWidth = signature.width * signatureScale; const renderedHeight = signature.height * signatureScale; doc.addImage(signature.dataUrl, "PNG", margin + (signatureWidth - renderedWidth) / 2, signatureY - renderedHeight - 2, renderedWidth, renderedHeight); doc.setFontSize(8); doc.setTextColor(90, 103, 123); doc.text("Assinatura eletrônica assistida", margin + signatureWidth / 2, signatureY + 5, { align: "center" }); doc.text("Responsável pela entrega", width - margin - signatureWidth / 2, signatureY + 5, { align: "center" }); doc.setFont("helvetica", "bold"); doc.text(employeeName, margin + signatureWidth / 2, signatureY + 10, { align: "center" }); doc.text("Controle de equipamentos", width - margin - signatureWidth / 2, signatureY + 10, { align: "center" });
     const blob = doc.output("blob"); uploadedPath = `${profile.organization_id}/${deliveryId}/signed-${crypto.randomUUID()}-${safeFileName(employeeName)}.pdf`; const path = uploadedPath; const { error: uploadError } = await supabase.storage.from("delivery-terms").upload(path, blob, { contentType: "application/pdf", upsert: false });
-    if (uploadError) { setError(friendlyError(uploadError, "Não foi possível salvar o termo.")); await supabase.storage.from("delivery-terms").remove([uploadedPath]); uploadedPath = ""; return; }
+    if (uploadError) { setError(friendlyError(uploadError, "Não foi possível salvar o termo.")); return; }
     if (!auth.user) { await supabase.storage.from("delivery-terms").remove([path]); setError("Sua sessão expirou. Entre novamente."); return; } const { error: updateError } = await supabase.from("deliveries").update({ term_file_path: path, term_uploaded_at: new Date().toISOString(), term_uploaded_by: auth.user.id, term_signature_method: "assisted", term_signed_at: new Date().toISOString(), term_signer_name: employeeName, term_signer_cpf: digits(cpf) }).eq("id", deliveryId);
-    if (updateError) { await supabase.storage.from("delivery-terms").remove([path]); setError(friendlyError(updateError, "Não foi possível salvar a assinatura.")); return; }
+    if (updateError) { setError(friendlyError(updateError, "Não foi possível salvar a assinatura.")); return; }
     const { error: previousAttachmentError } = currentPath ? await supabase.storage.from("delivery-terms").remove([currentPath]) : { error: null };
     const savedPath = path; uploadedPath = ""; onComplete(savedPath); setSaving(false); setOpen(false); setError(previousAttachmentError ? "Assinatura salva, mas o termo anterior não pôde ser removido." : ""); clearSignature(); setCpf(""); setAccepted(false);
     } catch (caught) {
-      if (uploadedPath) { try { await createClient().storage.from("delivery-terms").remove([uploadedPath]); } catch {} }
       setError(friendlyError(caught, "Não foi possível salvar a assinatura."));
     } finally {
+      if (uploadedPath && supabase) { try { await supabase.storage.from("delivery-terms").remove([uploadedPath]); } catch {} }
       setSaving(false);
     }
   }

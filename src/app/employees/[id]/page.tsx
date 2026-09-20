@@ -123,27 +123,29 @@ export default function EmployeeMaterialsPage() {
     if (!['application/pdf', 'image/jpeg', 'image/png', 'image/webp'].includes(file.type)) { setError("Anexe um PDF, JPG, PNG ou WEBP."); return; } if (file.size > 10 * 1024 * 1024) { setError("O arquivo do termo deve ter no máximo 10 MB."); return; }
     setUploadingId(sheet.id); setError("");
     let uploadedPath = "";
+    let supabase: ReturnType<typeof createClient> | null = null;
     try {
-    const supabase = createClient();
-    const { data: profileData, error: profileError } = await supabase.from("profiles").select("organization_id").single();
-    if (profileError || !profileData?.organization_id) { setError(friendlyError(profileError, "Não foi possível identificar a organização.")); setUploadingId(""); return; }
+    supabase = createClient();
+    const { data: auth, error: authError } = await supabase.auth.getUser();
+    if (authError || !auth.user) { setError(friendlyError(authError, "Sua sessão expirou. Entre novamente.")); return; }
+    const { data: profileData, error: profileError } = await supabase.from("profiles").select("organization_id").eq("id", auth.user.id).maybeSingle();
+    if (profileError || !profileData?.organization_id) { setError(friendlyError(profileError, "Não foi possível identificar a organização.")); return; }
     const path = `${profileData.organization_id}/${sheet.id}/${crypto.randomUUID()}-${safeFileName(file.name)}`;
     uploadedPath = path;
     const { error: uploadError } = await supabase.storage.from("delivery-terms").upload(path, file, { contentType: file.type, upsert: false });
-    if (uploadError) { setError(friendlyError(uploadError, "Não foi possível enviar o arquivo.")); try { await supabase.storage.from("delivery-terms").remove([uploadedPath]); } catch {} uploadedPath = ""; return; }
-    const { data: auth, error: authError } = await supabase.auth.getUser(); if (authError || !auth.user) { await supabase.storage.from("delivery-terms").remove([path]); setError(friendlyError(authError, "Sua sessão expirou. Entre novamente.")); setUploadingId(""); return; }
+    if (uploadError) { setError(friendlyError(uploadError, "Não foi possível enviar o arquivo.")); return; }
     const uploadedAt = new Date().toISOString();
     const { error: updateError } = await supabase.from("deliveries").update({ term_file_path: path, term_uploaded_at: uploadedAt, term_uploaded_by: auth.user.id }).eq("id", sheet.id);
-    if (updateError) { await supabase.storage.from("delivery-terms").remove([path]); uploadedPath = ""; setError(friendlyError(updateError, "Não foi possível concluir a operação.")); } else {
+    if (updateError) { setError(friendlyError(updateError, "Não foi possível concluir a operação.")); } else {
       uploadedPath = "";
       if (sheet.term_file_path) await supabase.storage.from("delivery-terms").remove([sheet.term_file_path]);
       setItems((current) => current.map((item) => item.delivery?.id === sheet.id ? { ...item, delivery: item.delivery ? { ...item.delivery, term_file_path: path, term_uploaded_at: uploadedAt } : item.delivery } : item));
     }
     setUploadingId("");
     } catch (caught) {
-      if (uploadedPath) { try { await createClient().storage.from("delivery-terms").remove([uploadedPath]); } catch {} }
       setError(friendlyError(caught, "Não foi possível concluir a operação."));
     } finally {
+      if (uploadedPath && supabase) { try { await supabase.storage.from("delivery-terms").remove([uploadedPath]); } catch {} }
       setUploadingId("");
     }
   }
@@ -174,22 +176,22 @@ export default function EmployeeMaterialsPage() {
     const file = event.target.files?.[0]; event.target.value = ""; if (!file) return;
     if (!["application/pdf", "image/jpeg", "image/png", "image/webp"].includes(file.type)) { setError("Anexe um PDF, JPG, PNG ou WEBP."); return; }
     if (file.size > 10 * 1024 * 1024) { setError("O arquivo do termo deve ter no máximo 10 MB."); return; }
-    setUploadingId(sheet.id); setError(""); let uploadedPath = ""; try { const supabase = createClient(); const { data: profileData, error: profileError } = await supabase.from("profiles").select("organization_id").single();
-    if (profileError || !profileData?.organization_id) { setError(friendlyError(profileError, "Não foi possível identificar a organização.")); setUploadingId(""); return; }
+    setUploadingId(sheet.id); setError(""); let uploadedPath = ""; let supabase: ReturnType<typeof createClient> | null = null; try { supabase = createClient(); const { data: auth, error: authError } = await supabase.auth.getUser();
+    if (authError || !auth.user) { setError(friendlyError(authError, "Sua sessão expirou. Entre novamente.")); return; } const { data: profileData, error: profileError } = await supabase.from("profiles").select("organization_id").eq("id", auth.user.id).maybeSingle();
+    if (profileError || !profileData?.organization_id) { setError(friendlyError(profileError, "Não foi possível identificar a organização.")); return; }
     const path = `${profileData.organization_id}/${sheet.id}/${crypto.randomUUID()}-${safeFileName(file.name)}`;
     uploadedPath = path;
     const { error: uploadError } = await supabase.storage.from("delivery-terms").upload(path, file, { contentType: file.type, upsert: false });
-    if (uploadError) { setError(friendlyError(uploadError, "Não foi possível enviar o arquivo.")); try { await supabase.storage.from("delivery-terms").remove([uploadedPath]); } catch {} uploadedPath = ""; return; }
-    const { data: auth, error: authError } = await supabase.auth.getUser(); if (authError || !auth.user) { await supabase.storage.from("delivery-terms").remove([path]); setError(friendlyError(authError, "Sua sessão expirou. Entre novamente.")); setUploadingId(""); return; }
+    if (uploadError) { setError(friendlyError(uploadError, "Não foi possível enviar o arquivo.")); return; }
     const uploadedAt = new Date().toISOString(); const { error: updateError } = await supabase.from("returns").update({ term_file_path: path, term_uploaded_at: uploadedAt, term_uploaded_by: auth.user.id, term_signature_method: "physical_upload", term_signed_at: uploadedAt, term_signer_name: employee!.full_name, term_signer_cpf: employee!.cpf }).eq("id", sheet.id);
-    if (updateError) { await supabase.storage.from("delivery-terms").remove([path]); uploadedPath = ""; setError(friendlyError(updateError, "Não foi possível concluir a operação.")); setUploadingId(""); return; }
+    if (updateError) { setError(friendlyError(updateError, "Não foi possível concluir a operação.")); return; }
     uploadedPath = "";
     if (sheet.term_file_path) await supabase.storage.from("delivery-terms").remove([sheet.term_file_path]);
     setReturnSheets((current) => current.map((item) => item.id === sheet.id ? { ...item, term_file_path: path, term_signature_method: "physical_upload", term_signed_at: uploadedAt } : item)); setUploadingId("");
     } catch (caught) {
-      if (uploadedPath) { try { await createClient().storage.from("delivery-terms").remove([uploadedPath]); } catch {} }
       setError(friendlyError(caught, "Não foi possível concluir a operação."));
     } finally {
+      if (uploadedPath && supabase) { try { await supabase.storage.from("delivery-terms").remove([uploadedPath]); } catch {} }
       setUploadingId("");
     }
   }
