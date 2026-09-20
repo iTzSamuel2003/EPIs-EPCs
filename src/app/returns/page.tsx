@@ -69,6 +69,7 @@ export default function ReturnsPage() {
   }
   useEffect(() => { void loadData(); return () => { mountedRef.current = false; loadRequestRef.current += 1; }; }, [retryKey]);
   useEffect(() => { const refresh = () => setRetryKey((current) => current + 1); const events = ["delivery-created", "return-created", "stock-entry-created", "stock-entry-updated", "stock-entry-deleted"]; events.forEach((eventName) => window.addEventListener(eventName, refresh)); return () => events.forEach((eventName) => window.removeEventListener(eventName, refresh)); }, []);
+  useEffect(() => { if (!success) return; const timer = window.setTimeout(() => setSuccess(""), 4500); return () => window.clearTimeout(timer); }, [success]);
   function retryLoad() { setError(""); setEmployees([]); setItems([]); setRetryKey((current) => current + 1); }
   const employeeItems = useMemo(() => items.filter((item) => item.delivery?.employee_id === employeeId && item.quantity > item.returned), [items, employeeId]);
   const filteredEmployees = employees.filter((employee) => `${employee.full_name} ${employee.registration}`.toLowerCase().includes(employeeQuery.toLowerCase())).slice(0, 8);
