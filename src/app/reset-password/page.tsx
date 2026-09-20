@@ -1,6 +1,6 @@
 "use client";
 
-import { FormEvent, useEffect, useState } from "react";
+import { FormEvent, useEffect, useRef, useState } from "react";
 import { ArrowRight, ShieldCheck } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
@@ -14,6 +14,7 @@ export default function ResetPasswordPage() {
   const [message, setMessage] = useState("");
   const [loading, setLoading] = useState(false);
   const [ready, setReady] = useState(false);
+  const redirectTimerRef = useRef<number | null>(null);
 
   useEffect(() => {
     const supabase = createClient();
@@ -26,11 +27,12 @@ export default function ResetPasswordPage() {
     const { data: listener } = supabase.auth.onAuthStateChange((event, session) => {
       if (active && (event === "PASSWORD_RECOVERY" || session)) setReady(true);
     });
-    return () => { active = false; listener.subscription.unsubscribe(); };
+    return () => { active = false; listener.subscription.unsubscribe(); if (redirectTimerRef.current !== null) window.clearTimeout(redirectTimerRef.current); };
   }, []);
 
   async function onSubmit(event: FormEvent) {
     event.preventDefault();
+    if (loading) return;
     setError("");
     setMessage("");
     if (password.length < 8) { setError("A senha deve ter pelo menos 8 caracteres."); return; }
@@ -39,7 +41,7 @@ export default function ResetPasswordPage() {
     try {
     const { error: updateError } = await createClient().auth.updateUser({ password });
     if (updateError) setError(friendlyError(updateError, "Não foi possível concluir a operação."));
-    else { setMessage("Senha atualizada com sucesso. Você já pode entrar no sistema."); setTimeout(() => router.push("/login"), 1400); }
+    else { setMessage("Senha atualizada com sucesso. Você já pode entrar no sistema."); redirectTimerRef.current = window.setTimeout(() => router.push("/login"), 1400); }
     } catch (caught) {
       setError(friendlyError(caught, "Falha ao atualizar a senha."));
     } finally {

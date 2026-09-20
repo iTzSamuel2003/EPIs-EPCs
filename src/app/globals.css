@@ -1746,3 +1746,177 @@ body{max-width:100%;overflow-x:hidden;}
   main.module-shell:has(.employee-required-courses) .edit-employee-card:last-of-type td:nth-child(5)::before{content:"Anexo";}
   main.module-shell:has(.employee-required-courses) .edit-employee-card:last-of-type td:nth-child(6)::before{content:"Ações";}
 }
+
+@media (max-width:1024px) and (min-width:761px){
+  .employees-table-card table,
+  .employee-delivery-sheets table,
+  .employee-return-sheets table,
+  main.module-shell:has(.employee-required-courses) .edit-employee-card .table-wrap table,
+  main.module-shell:has(.form-grid.four) .module-table-card table,
+  main.module-shell:has(table[aria-label="Histórico de movimentações do estoque"]) .module-table-card table{
+    table-layout:fixed;
+    width:100%;
+    white-space:normal;
+  }
+  .employees-table-card th,
+  .employees-table-card td,
+  .employee-delivery-sheets th,
+  .employee-delivery-sheets td,
+  .employee-return-sheets th,
+  .employee-return-sheets td,
+  main.module-shell:has(.employee-required-courses) .edit-employee-card .table-wrap th,
+  main.module-shell:has(.employee-required-courses) .edit-employee-card .table-wrap td,
+  main.module-shell:has(.form-grid.four) .module-table-card th,
+  main.module-shell:has(.form-grid.four) .module-table-card td,
+  main.module-shell:has(table[aria-label="Histórico de movimentações do estoque"]) .module-table-card th,
+  main.module-shell:has(table[aria-label="Histórico de movimentações do estoque"]) .module-table-card td{
+    min-width:0;
+    white-space:normal;
+    overflow-wrap:anywhere;
+    vertical-align:top;
+  }
+  .employee-delivery-sheets td:last-child,
+  .employee-return-sheets td:last-child,
+  main.module-shell:has(.form-grid.four) .module-table-card td:last-child{
+    overflow:visible;
+  }
+  .employee-sheet-actions,
+  .employee-delivery-sheets td:last-child,
+  .employee-return-sheets td:last-child,
+  main.module-shell:has(.form-grid.four) .module-table-card td:last-child .row-actions{
+    flex-wrap:wrap;
+  }
+}
+
+@media (max-width:760px){
+  .employee-delivery-sheets .table-wrap,
+  .employee-return-sheets .table-wrap,
+  main.module-shell:has(.employee-required-courses) .edit-employee-card .table-wrap,
+  main.module-shell:has(.form-grid.four) .module-table-card .table-wrap,
+  main.module-shell:has(table[aria-label="Histórico de movimentações do estoque"]) .module-table-card .table-wrap{
+    overflow:visible;
+    margin-right:0;
+    padding-bottom:0;
+  }
+  .employee-delivery-sheets table,
+  .employee-return-sheets table,
+  main.module-shell:has(.employee-required-courses) .edit-employee-card .table-wrap table,
+  main.module-shell:has(.form-grid.four) .module-table-card table,
+  main.module-shell:has(table[aria-label="Histórico de movimentações do estoque"]) .module-table-card table{
+    display:block;
+    width:100%;
+    min-width:0;
+    white-space:normal;
+  }
+  .employee-delivery-sheets thead,
+  .employee-return-sheets thead,
+  main.module-shell:has(.employee-required-courses) .edit-employee-card .table-wrap thead,
+  main.module-shell:has(.form-grid.four) .module-table-card thead,
+  main.module-shell:has(table[aria-label="Histórico de movimentações do estoque"]) .module-table-card thead{display:none;}
+  .employee-delivery-sheets tbody,
+  .employee-return-sheets tbody,
+  main.module-shell:has(.employee-required-courses) .edit-employee-card .table-wrap tbody,
+  main.module-shell:has(.form-grid.four) .module-table-card tbody,
+  main.module-shell:has(table[aria-label="Histórico de movimentações do estoque"]) .module-table-card tbody{display:grid;gap:10px;}
+  .employee-delivery-sheets tr,
+  .employee-return-sheets tr,
+  main.module-shell:has(.employee-required-courses) .edit-employee-card .table-wrap tr,
+  main.module-shell:has(.form-grid.four) .module-table-card tr,
+  main.module-shell:has(table[aria-label="Histórico de movimentações do estoque"]) .module-table-card tr{
+    display:grid;
+    grid-template-columns:minmax(0,1fr) minmax(0,1fr);
+    gap:10px 12px;
+    padding:13px;
+    border:1px solid #edf0f5;
+    border-radius:10px;
+    background:#fafbfe;
+  }
+  .employee-delivery-sheets td,
+  .employee-return-sheets td,
+  main.module-shell:has(.employee-required-courses) .edit-employee-card .table-wrap td,
+  main.module-shell:has(.form-grid.four) .module-table-card td,
+  main.module-shell:has(table[aria-label="Histórico de movimentações do estoque"]) .module-table-card td{
+    display:grid;
+    gap:4px;
+    min-width:0;
+    padding:0;
+    border:0;
+    white-space:normal;
+    overflow-wrap:anywhere;
+  }
+  .employee-delivery-sheets td::before,
+  .employee-return-sheets td::before,
+  main.module-shell:has(.employee-required-courses) .edit-employee-card .table-wrap td::before,
+  main.module-shell:has(.form-grid.four) .module-table-card td::before,
+  main.module-shell:has(table[aria-label="Histórico de movimentações do estoque"]) .module-table-card td::before{
+    color:#a1aaba;
+    font-size:9px;
+    font-weight:700;
+    letter-spacing:.5px;
+  }
+  .employee-delivery-sheets td:nth-child(1),
+  .employee-delivery-sheets td:nth-child(5),
+  .employee-return-sheets td:nth-child(1),
+  .employee-return-sheets td:nth-child(5),
+  main.module-shell:has(.employee-required-courses) .edit-employee-card .table-wrap td:nth-child(1),
+  main.module-shell:has(.employee-required-courses) .edit-employee-card .table-wrap td:nth-child(6),
+  main.module-shell:has(.form-grid.four) .module-table-card td:nth-child(1),
+  main.module-shell:has(.form-grid.four) .module-table-card td:nth-child(5),
+  main.module-shell:has(table[aria-label="Histórico de movimentações do estoque"]) .module-table-card td:nth-child(1),
+  main.module-shell:has(table[aria-label="Histórico de movimentações do estoque"]) .module-table-card td:nth-child(8){grid-column:1 / -1;}
+  .employee-delivery-sheets td:nth-child(1)::before{content:"Data";}
+  .employee-delivery-sheets td:nth-child(2)::before{content:"Motivo";}
+  .employee-delivery-sheets td:nth-child(3)::before{content:"Itens";}
+  .employee-delivery-sheets td:nth-child(4)::before{content:"Documento";}
+  .employee-delivery-sheets td:nth-child(5)::before{content:"Ações";}
+  .employee-return-sheets td:nth-child(1)::before{content:"Documento";}
+  .employee-return-sheets td:nth-child(2)::before{content:"Data";}
+  .employee-return-sheets td:nth-child(3)::before{content:"Materiais";}
+  .employee-return-sheets td:nth-child(4)::before{content:"Status";}
+  .employee-return-sheets td:nth-child(5)::before{content:"Ações";}
+  main.module-shell:has(.employee-required-courses) .edit-employee-card .table-wrap td:nth-child(1)::before{content:"Curso";}
+  main.module-shell:has(.employee-required-courses) .edit-employee-card .table-wrap td:nth-child(2)::before{content:"Instituição";}
+  main.module-shell:has(.employee-required-courses) .edit-employee-card .table-wrap td:nth-child(3)::before{content:"Conclusão";}
+  main.module-shell:has(.employee-required-courses) .edit-employee-card .table-wrap td:nth-child(4)::before{content:"Validade";}
+  main.module-shell:has(.employee-required-courses) .edit-employee-card .table-wrap td:nth-child(5)::before{content:"Anexo";}
+  main.module-shell:has(.employee-required-courses) .edit-employee-card .table-wrap td:nth-child(6)::before{content:"Ações";}
+  main.module-shell:has(.form-grid.four) .module-table-card td:nth-child(1)::before{content:"Material";}
+  main.module-shell:has(.form-grid.four) .module-table-card td:nth-child(2)::before{content:"Variação";}
+  main.module-shell:has(.form-grid.four) .module-table-card td:nth-child(3)::before{content:"Tamanho";}
+  main.module-shell:has(.form-grid.four) .module-table-card td:nth-child(4)::before{content:"Custo";}
+  main.module-shell:has(.form-grid.four) .module-table-card td:nth-child(5)::before{content:"Ação";}
+  main.module-shell:has(table[aria-label="Histórico de movimentações do estoque"]) .module-table-card td:nth-child(1)::before{content:"Data";}
+  main.module-shell:has(table[aria-label="Histórico de movimentações do estoque"]) .module-table-card td:nth-child(2)::before{content:"Material / código";}
+  main.module-shell:has(table[aria-label="Histórico de movimentações do estoque"]) .module-table-card td:nth-child(3)::before{content:"Funcionário";}
+  main.module-shell:has(table[aria-label="Histórico de movimentações do estoque"]) .module-table-card td:nth-child(4)::before{content:"Matrícula";}
+  main.module-shell:has(table[aria-label="Histórico de movimentações do estoque"]) .module-table-card td:nth-child(5)::before{content:"Destino / origem";}
+  main.module-shell:has(table[aria-label="Histórico de movimentações do estoque"]) .module-table-card td:nth-child(6)::before{content:"Tipo";}
+  main.module-shell:has(table[aria-label="Histórico de movimentações do estoque"]) .module-table-card td:nth-child(7)::before{content:"Quantidade";}
+  main.module-shell:has(table[aria-label="Histórico de movimentações do estoque"]) .module-table-card td:nth-child(8)::before{content:"Observação";}
+  .employee-delivery-sheets td:last-child,
+  .employee-return-sheets td:last-child{display:flex;flex-wrap:wrap;align-items:flex-start;gap:8px;}
+  .employee-delivery-sheets td:last-child::before,
+  .employee-return-sheets td:last-child::before{width:100%;}
+  .employee-sheet-actions{flex-wrap:wrap;min-width:0;}
+  .employee-sheet-actions .action-button,
+  .employee-delivery-sheets td:last-child>.action-button,
+  .employee-return-sheets td:last-child>.action-button{max-width:100%;white-space:normal;text-align:left;}
+  main.module-shell:has(table[aria-label="Histórico de movimentações do estoque"]) .module-table-card td:nth-child(6) .movement-type{width:max-content;max-width:100%;white-space:normal;}
+}
+
+@media (max-width:480px){
+  .employee-required-courses .required-course-item{align-items:flex-start;flex-wrap:wrap;}
+  .employee-required-courses .required-course-item .status-pill{margin-left:40px;}
+  .employee-sheet .sheet-section-heading h2{font-size:15px;line-height:1.3;}
+  .history-filters{gap:10px;}
+  .history-filters label{width:100%;}
+  .variants-page .edit-employee-card .primary-button,
+  .settings-page .modal-actions .primary-button{width:100%;justify-content:center;}
+}
+
+@media (max-width:380px){
+  .employee-sheet .sheet-section-heading span{font-size:10px;line-height:1.4;}
+  .employee-delivery-sheets td:last-child .action-button,
+  .employee-return-sheets td:last-child .action-button{width:100%;justify-content:flex-start;}
+  .required-course-copy strong{font-size:10px;}
+}

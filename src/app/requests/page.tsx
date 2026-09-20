@@ -66,7 +66,7 @@ export default function RequestsPage() {
       setError("Informe uma data de entrega válida.");
       return;
     }
-    setSavingId(item.id); setError(""); setSuccess(""); ++loadVersion.current;
+    setSavingId(item.id); setError(""); setSuccess("");
     try {
       const { error: updateError } = await createClient().from("employee_portal_requests").update({ status, review_notes: note.trim() || null, delivered_at: status === "completed" ? deliveredAt : null }).eq("id", item.id);
       if (updateError) throw updateError;

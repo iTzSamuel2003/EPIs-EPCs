@@ -18,7 +18,8 @@ export async function updateSession(request: NextRequest) {
     },
   });
   const { data: { user } } = await supabase.auth.getUser();
-  const isPublicPath = request.nextUrl.pathname.startsWith("/login") || request.nextUrl.pathname.startsWith("/reset-password") || request.nextUrl.pathname.startsWith("/medidas/") || request.nextUrl.pathname === "/portal";
+  const pathname = request.nextUrl.pathname;
+  const isPublicPath = pathname === "/login" || pathname === "/reset-password" || pathname.startsWith("/medidas/") || pathname === "/portal";
   if (!user && !isPublicPath) {
     const loginUrl = request.nextUrl.clone();
     loginUrl.pathname = "/login";
