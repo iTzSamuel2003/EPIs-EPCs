@@ -2716,3 +2716,109 @@ main.module-shell:not(:has(.module-toolbar)):has(> .module-summary) > .module-ta
   .module-shell .module-table-card{padding-inline:10px;}
   .module-shell .module-toolbar{padding-inline:10px;}
 }
+
+/* Auditoria final: formularios, feedbacks e estados interativos. */
+:where(.material-form,.login-card form,.signature-modal) label{
+  min-width:0;
+  line-height:1.35;
+}
+:where(.material-form,.login-card form,.signature-modal) input,
+:where(.material-form,.login-card form,.signature-modal) select{
+  min-height:44px;
+}
+:where(.material-form,.login-card form,.signature-modal) textarea{
+  min-height:88px;
+  line-height:1.45;
+}
+:where(.material-form,.login-card form,.signature-modal) :is(input,select,textarea):disabled{
+  color:#8994a8;
+  background:#f4f5f8;
+  cursor:not-allowed;
+  opacity:.82;
+}
+:where(.material-form,.login-card form,.signature-modal) :is(input,select,textarea)[aria-invalid="true"]{
+  border-color:#d8796b;
+  background:#fff9f8;
+}
+:where(.material-form,.login-card form,.signature-modal) :is(input,select,textarea)[aria-invalid="true"]:focus-visible{
+  outline-color:#c66155;
+  box-shadow:0 0 0 3px #c6615526;
+}
+.feedback,.login-error,.public-feedback{
+  border:1px solid transparent;
+  line-height:1.5;
+  overflow-wrap:anywhere;
+}
+.success-feedback,.login-success{border-color:#ccebd9;}
+.error-feedback,.login-error{border-color:#f4c9c1;}
+.info-feedback{color:#416a91;background:#eef6ff;border-color:#cfe3f8;}
+.feedback-copy{flex:1 1 180px;min-width:0;}
+.feedback-retry{flex:0 0 auto;min-height:40px;}
+.file-upload,.upload-term-button,.transaction-photo-picker{position:relative;}
+.file-upload input[type="file"],
+.upload-term-button input[type="file"],
+.transaction-photo-picker input[type="file"]{
+  position:absolute;
+  inset:0;
+  width:100%;
+  height:100%;
+  opacity:0;
+  cursor:pointer;
+}
+.file-upload:focus-within,.upload-term-button:focus-within,.transaction-photo-picker:focus-within{
+  outline:3px solid #7762d6;
+  outline-offset:2px;
+}
+.upload-term-button:has(input[type="file"]:disabled){
+  opacity:.58;
+  cursor:not-allowed;
+}
+.signature-pad{
+  display:block;
+  width:100%;
+  min-height:120px;
+  background:#fcfcff;
+  border:1px solid #dfe3eb;
+  border-radius:9px;
+  touch-action:none;
+  cursor:crosshair;
+}
+.signature-pad:focus-visible{outline:3px solid #7762d6;outline-offset:3px;}
+.signature-modal > p{margin:0 0 16px;color:#71809a;line-height:1.5;overflow-wrap:anywhere;}
+.signature-acceptance{display:flex!important;grid-template-columns:auto minmax(0,1fr);align-items:flex-start;gap:9px;line-height:1.45!important;}
+.signature-acceptance input{flex:0 0 auto;width:18px;height:18px;min-height:18px;margin-top:1px;accent-color:#7762d6;}
+.modal-actions,.signature-modal-actions{align-items:stretch;}
+.modal-actions > button,.modal-actions > a,.signature-modal-actions > button{min-height:44px;}
+.module-loading[aria-busy="true"]{min-height:140px;}
+
+@media (max-width:1024px){
+  .material-form,.login-card form{gap:14px;}
+  .modal-card,.signature-modal{max-width:calc(100vw - 32px);}
+}
+@media (max-width:768px){
+  .form-grid.two,.form-grid.three,.form-grid.four{grid-template-columns:minmax(0,1fr);}
+  .modal-card,.signature-modal{max-height:calc(100dvh - 24px);}
+  .modal-actions,.signature-modal-actions{flex-direction:column-reverse;gap:8px;}
+  .modal-actions > button,.modal-actions > a,.signature-modal-actions > button{width:100%;justify-content:center;}
+  .feedback{align-items:flex-start;}
+  .feedback-retry{width:100%;}
+}
+@media (max-width:480px){
+  :where(.material-form,.login-card form,.signature-modal) input,
+  :where(.material-form,.login-card form,.signature-modal) select,
+  :where(.material-form,.login-card form,.signature-modal) textarea{font-size:16px;}
+  .feedback,.login-error,.public-feedback{padding:11px 12px;}
+  .signature-modal{padding:18px 14px;}
+  .signature-pad{min-height:112px;}
+}
+@media (max-width:380px){
+  .modal-card,.signature-modal{max-width:calc(100vw - 20px);padding-inline:12px;}
+  .feedback-retry{font-size:12px;}
+}
+@media (prefers-reduced-motion:reduce){
+  .spin,.module-loading{animation:none!important;}
+}
+@media (forced-colors:active){
+  .feedback,.login-error,.public-feedback,.signature-pad{border-color:CanvasText;}
+  .file-upload:focus-within,.upload-term-button:focus-within,.transaction-photo-picker:focus-within{outline-color:Highlight;}
+}

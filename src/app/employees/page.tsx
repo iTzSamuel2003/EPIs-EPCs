@@ -16,6 +16,22 @@ const statusLabels = { active: ["Ativo", "success"], away: ["Afastado", "warning
 const functionLabel = (value: string) => value.replace(/\s+(VI|V|IV|III|II|I)$/i, "");
 const classificationOptions = ["I", "II", "III", "IV", "V", "VI"];
 function normalizeSearch(value: string) { return value.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().trim(); }
+function isValidCpf(value: string) {
+  const digits = value.replace(/\D/g, "");
+  if (digits.length !== 11 || /^([0-9])\1+$/.test(digits)) return false;
+  const calculate = (length: number) => {
+    const total = digits.slice(0, length).split("").reduce((sum, digit, index) => sum + Number(digit) * (length + 1 - index), 0);
+    const remainder = (total * 10) % 11;
+    return remainder === 10 ? 0 : remainder;
+  };
+  return calculate(9) === Number(digits[9]) && calculate(10) === Number(digits[10]);
+}
+function isValidDateValue(value: string) {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) return false;
+  const [year, month, day] = value.split("-").map(Number);
+  const date = new Date(year, month - 1, day);
+  return date.getFullYear() === year && date.getMonth() === month - 1 && date.getDate() === day;
+}
 
 export default function EmployeesPage() {
   const router = useRouter();
@@ -75,6 +91,14 @@ export default function EmployeesPage() {
     setSuccess("");
     if (!form.full_name.trim() || !form.cpf.trim()) {
       setError("Informe o nome completo e o CPF do funcionário.");
+      return;
+    }
+    if (!isValidCpf(form.cpf)) {
+      setError("Informe um CPF válido com 11 dígitos.");
+      return;
+    }
+    if (form.admission_date && (!isValidDateValue(form.admission_date) || form.admission_date > new Date().toISOString().slice(0, 10))) {
+      setError("Informe uma data de admissão válida e não futura.");
       return;
     }
     setSaving(true);

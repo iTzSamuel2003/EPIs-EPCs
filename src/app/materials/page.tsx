@@ -43,6 +43,19 @@ function formFromMaterial(material: MaterialRow): MaterialForm {
   };
 }
 
+function isValidDateValue(value: string) {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) return false;
+  const [year, month, day] = value.split("-").map(Number);
+  const date = new Date(year, month - 1, day);
+  return date.getFullYear() === year && date.getMonth() === month - 1 && date.getDate() === day;
+}
+
+function isNonNegativeNumber(value: string, integer = false) {
+  if (!value.trim()) return true;
+  const parsed = Number(value);
+  return Number.isFinite(parsed) && parsed >= 0 && (!integer || Number.isInteger(parsed));
+}
+
 export default function MaterialsPage() {
   const searchParams = useSearchParams();
   const [materials, setMaterials] = useState<MaterialRow[]>([]);
@@ -132,8 +145,16 @@ export default function MaterialsPage() {
 
   async function saveMaterial(event: FormEvent) {
     event.preventDefault();
+    if (saving) return;
     setError(""); setSuccess("");
+    if (!form.name.trim()) { setError("Informe o nome do material."); return; }
+    if (!form.unit.trim()) { setError("Informe a unidade do material."); return; }
     if (form.type === "EPI" && !form.ca_number.trim()) { setError("O número do CA é obrigatório para materiais do tipo EPI."); return; }
+    if (!isValidDateValue(form.ca_expires_at) && form.ca_expires_at) { setError("Informe uma validade de CA válida."); return; }
+    if (!isNonNegativeNumber(form.minimum_stock, true) || !isNonNegativeNumber(form.useful_life_months, true) || !isNonNegativeNumber(form.replacement_interval_days, true)) {
+      setError("Estoque mínimo, vida útil e troca prevista devem ser números inteiros iguais ou maiores que zero.");
+      return;
+    }
     setSaving(true);
     try {
     const supabase = createClient();

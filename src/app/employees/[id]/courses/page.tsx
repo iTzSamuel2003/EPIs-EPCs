@@ -54,7 +54,8 @@ export default function EmployeeCoursesPage() {
   function selectCertificate(event: ChangeEvent<HTMLInputElement>) { const file = event.target.files?.[0] ?? null; event.target.value = ""; setError(""); if (file && !acceptedCertificateTypes.includes(file.type)) { setError("Anexe o certificado em PDF, JPG, PNG ou WEBP."); setCertificateFile(null); return; } if (file && file.size > 10 * 1024 * 1024) { setError("O certificado deve ter no máximo 10 MB."); setCertificateFile(null); return; } setCertificateFile(file); }
   async function addCourse(event: FormEvent) {
     event.preventDefault();
-    if (!course.name.trim()) return;
+    if (saving) return;
+    if (!course.name.trim()) { setError("Informe o nome do curso."); return; }
     if (course.completed_at && !isRealDate(course.completed_at)) { setError("Informe uma data de conclusão válida."); return; }
     if (course.expires_at && !isRealDate(course.expires_at)) { setError("Informe uma data de validade válida."); return; }
     if (course.completed_at && course.completed_at > localDateKey()) { setError("A data de conclusão não pode ser futura."); return; }

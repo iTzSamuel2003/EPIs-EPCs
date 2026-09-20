@@ -135,17 +135,20 @@ export default function TestsPage() {
   }
 
   async function saveTest(event: FormEvent) {
-    event.preventDefault(); setError(""); setSuccess("");
+    event.preventDefault();
+    if (saving) return;
+    setError(""); setSuccess("");
     if (!materialId) { setError("Selecione um material ensaiável."); return; }
     if (!isRealDate(performedAt)) { setError("Informe uma data de ensaio válida."); return; }
     if (performedAt > todayLocal()) { setError("A data do ensaio não pode ser futura."); return; }
     if (!([6, 12] as number[]).includes(Number(interval))) { setError("A periodicidade deve ser de 6 ou 12 meses."); return; }
+    if (!examiner.trim()) { setError("Informe o responsável técnico."); return; }
     const normalizedReportUrl = reportUrl.trim();
     if (normalizedReportUrl && !isHttpUrl(normalizedReportUrl)) { setError("O link do laudo deve começar com http:// ou https://."); return; }
     setSaving(true);
     try {
       const supabase = createClient();
-      const { data: testId, error: saveError } = await supabase.rpc("register_material_test", { p_material_id: materialId, p_performed_at: performedAt, p_interval_months: Number(interval), p_result: result, p_examiner: examiner || null, p_certificate_number: certificate || null, p_notes: notes || null });
+      const { data: testId, error: saveError } = await supabase.rpc("register_material_test", { p_material_id: materialId, p_performed_at: performedAt, p_interval_months: Number(interval), p_result: result, p_examiner: examiner.trim(), p_certificate_number: certificate.trim() || null, p_notes: notes.trim() || null });
       if (saveError || !testId) { setError(friendlyError(saveError, "Não foi possível registrar o ensaio.")); return; }
       const { error: detailsError } = await supabase.from("material_tests").update({ professional_registration: registration.trim() || null, art_number: artNumber.trim() || null, report_reference: reportReference.trim() || null, report_url: normalizedReportUrl || null }).eq("id", testId);
       if (detailsError) {

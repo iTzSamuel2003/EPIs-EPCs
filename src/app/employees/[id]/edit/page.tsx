@@ -14,6 +14,22 @@ type EmployeeForm = { registration: string; full_name: string; cpf: string; carg
 const emptyForm: EmployeeForm = { registration: "", full_name: "", cpf: "", cargo_funcao: "", function_classification: "", department: "", unit: "", admission_date: "", phone: "", email: "", status: "active", notes: "" };
 const classificationOptions = ["I", "II", "III", "IV", "V", "VI"];
 const functionLabel = (value: string) => value.replace(/\s+(VI|V|IV|III|II|I)$/i, "");
+function isValidCpf(value: string) {
+  const digits = value.replace(/\D/g, "");
+  if (digits.length !== 11 || /^([0-9])\1+$/.test(digits)) return false;
+  const calculate = (length: number) => {
+    const total = digits.slice(0, length).split("").reduce((sum, digit, index) => sum + Number(digit) * (length + 1 - index), 0);
+    const remainder = (total * 10) % 11;
+    return remainder === 10 ? 0 : remainder;
+  };
+  return calculate(9) === Number(digits[9]) && calculate(10) === Number(digits[10]);
+}
+function isValidDateValue(value: string) {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) return false;
+  const [year, month, day] = value.split("-").map(Number);
+  const date = new Date(year, month - 1, day);
+  return date.getFullYear() === year && date.getMonth() === month - 1 && date.getDate() === day;
+}
 
 export default function EditEmployeePage() {
   const params = useParams<{ id: string }>(); const router = useRouter(); const [form, setForm] = useState<EmployeeForm>(emptyForm); const [functionTemplates, setFunctionTemplates] = useState<FunctionTemplate[]>([]); const [loading, setLoading] = useState(true); const [saving, setSaving] = useState(false); const [error, setError] = useState(""); const [success, setSuccess] = useState(""); const [retryKey, setRetryKey] = useState(0); const loadVersion = useRef(0);
@@ -42,7 +58,11 @@ export default function EditEmployeePage() {
   async function save(event: FormEvent) {
     event.preventDefault();
     if (saving) return;
-    setError(""); setSuccess(""); setSaving(true);
+    setError(""); setSuccess("");
+    if (!form.full_name.trim()) { setError("Informe o nome completo do funcionário."); return; }
+    if (!isValidCpf(form.cpf)) { setError("Informe um CPF válido com 11 dígitos."); return; }
+    if (form.admission_date && (!isValidDateValue(form.admission_date) || form.admission_date > new Date().toISOString().slice(0, 10))) { setError("Informe uma data de admissão válida e não futura."); return; }
+    setSaving(true);
     try {
       const { error: updateError } = await createClient().from("employees").update({ registration: form.registration.trim() || null, full_name: form.full_name.trim(), cpf: form.cpf.trim(), job_title: null, function_name: form.cargo_funcao.trim() || null, function_classification: form.function_classification || null, department: form.department.trim() || null, unit: form.unit || null, admission_date: form.admission_date || null, phone: form.phone.trim() || null, email: form.email.trim() || null, status: form.status, notes: form.notes.trim() || null }).eq("id", params.id);
       if (updateError) setError(updateError.code === "23505" ? "Já existe um funcionário com esta matrícula ou CPF." : friendlyError(updateError, "Não foi possível salvar as alterações."));
