@@ -109,7 +109,7 @@ Deno.serve(async (req) => {
   const { data: requestId, error: requestError } = await admin.rpc("create_employee_material_request", { p_registration: registration, p_cpf: cpf, p_delivery_item_id: deliveryItemId, p_description: description });
   if (requestError || !requestId) {
     console.error("request creation failed", requestError);
-    return response({ error: requestError?.message ?? "Não foi possível criar a solicitação" }, 409);
+    return response({ error: "Não foi possível criar a solicitação" }, 409, origin);
   }
   if (!attachment) return response({ id: requestId });
 
@@ -124,8 +124,8 @@ Deno.serve(async (req) => {
     await removeAttachment(path, requestId, uploadError);
     return response({ error: "Não foi possível salvar o anexo" }, 500);
   }
-  const { error: updateError } = await admin.from("employee_portal_requests").update({ attachment_path: path, attachment_uploaded_at: new Date().toISOString() }).eq("id", requestId);
-  if (updateError) {
+  const { data: updatedRequest, error: updateError } = await admin.from("employee_portal_requests").update({ attachment_path: path, attachment_uploaded_at: new Date().toISOString() }).eq("id", requestId).select("id").maybeSingle();
+  if (updateError || !updatedRequest) {
     await removeAttachment(path, requestId, updateError);
     return response({ error: "Não foi possível finalizar o anexo" }, 500);
   }

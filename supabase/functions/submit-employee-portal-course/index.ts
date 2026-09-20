@@ -119,7 +119,7 @@ Deno.serve(async (req) => {
   });
   if (courseError || !courseId) {
     await admin.storage.from(bucket).remove([path]);
-    return response({ error: courseError?.message ?? "Nao foi possivel registrar o curso" }, 400, origin);
+    return response({ error: "Nao foi possivel registrar o curso" }, 400, origin);
   }
   return response({ id: courseId, has_attachment: true }, 200, origin);
 });
