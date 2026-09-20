@@ -23,6 +23,7 @@ export function DeliverySignatureModal({ deliveryId, employeeName, employeeCpf, 
   const [hasSignature, setHasSignature] = useState(false);
   const [drawing, setDrawing] = useState(false);
   const [saving, setSaving] = useState(false);
+  const saveLockRef = useRef(false);
   const [error, setError] = useState("");
   useModalFocus(open, modalRef, "input");
   useEffect(() => {
@@ -47,9 +48,11 @@ export function DeliverySignatureModal({ deliveryId, employeeName, employeeCpf, 
   function close() { if (saving) return; setOpen(false); setError(""); clearSignature(); setCpf(""); setAccepted(false); }
 
   async function submit() {
+    if (saving || saveLockRef.current) return;
     if (!digits(employeeCpf) || digits(cpf) !== digits(employeeCpf)) { setError("Informe o CPF cadastrado do colaborador para confirmar a assinatura."); return; }
     if (!hasSignature) { setError("Faça a assinatura no campo indicado."); return; }
     if (!accepted) { setError("Confirme que o colaborador leu e concorda com o termo."); return; }
+    saveLockRef.current = true;
     setSaving(true); setError("");
     let uploadedPath = "";
     let supabase: ReturnType<typeof createClient> | null = null;
@@ -78,6 +81,7 @@ export function DeliverySignatureModal({ deliveryId, employeeName, employeeCpf, 
       setError(friendlyError(caught, "Não foi possível salvar a assinatura."));
     } finally {
       if (uploadedPath && supabase) { try { await supabase.storage.from("delivery-terms").remove([uploadedPath]); } catch {} }
+      saveLockRef.current = false;
       setSaving(false);
     }
   }

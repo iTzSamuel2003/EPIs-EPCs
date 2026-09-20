@@ -14,6 +14,7 @@ const emptyForm = { material_id: "", unit_identifier: "", lot_number: "", serial
 export default function UnitsPage() {
   const [materials, setMaterials] = useState<Material[]>([]); const [units, setUnits] = useState<Unit[]>([]); const [form, setForm] = useState(emptyForm); const [query, setQuery] = useState(""); const [showForm, setShowForm] = useState(false); const [loading, setLoading] = useState(true); const [retryKey, setRetryKey] = useState(0); const [saving, setSaving] = useState(false); const [error, setError] = useState(""); const [success, setSuccess] = useState("");
   const loadVersion = useRef(0);
+  const saveLockRef = useRef(false);
   const mountedRef = useRef(true);
   async function load() {
     const version = ++loadVersion.current;
@@ -39,7 +40,8 @@ export default function UnitsPage() {
   const filtered = units.filter((unit) => `${unit.unit_identifier} ${unit.serial_number ?? ""} ${unit.lot_number ?? ""} ${unit.material?.name ?? ""}`.toLowerCase().includes(query.toLowerCase()));
   async function save(event: FormEvent) {
     event.preventDefault();
-    if (saving) return;
+    if (saving || saveLockRef.current) return;
+    saveLockRef.current = true;
     setError(""); setSuccess(""); setSaving(true);
     try {
       const supabase = createClient();
@@ -55,6 +57,7 @@ export default function UnitsPage() {
     } catch (caught) {
       setError(friendlyError(caught, "Não foi possível concluir a operação."));
     } finally {
+      saveLockRef.current = false;
       setSaving(false);
     }
   }

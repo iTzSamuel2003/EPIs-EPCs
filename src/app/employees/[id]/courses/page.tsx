@@ -23,7 +23,7 @@ function safeFileName(value: string) { return value.normalize("NFD").replace(/[\
 
 export default function EmployeeCoursesPage() {
   const { id } = useParams<{ id: string }>();
-  const [name, setName] = useState(""); const [functionName, setFunctionName] = useState(""); const [courses, setCourses] = useState<Course[]>([]); const [requirements, setRequirements] = useState<Requirement[]>([]); const [course, setCourse] = useState(emptyCourse); const [certificateFile, setCertificateFile] = useState<File | null>(null); const [loading, setLoading] = useState(true); const [saving, setSaving] = useState(false); const [removingCourseId, setRemovingCourseId] = useState<string | null>(null); const [openingCertificatePath, setOpeningCertificatePath] = useState<string | null>(null); const [error, setError] = useState(""); const [success, setSuccess] = useState(""); const [confirmingCourseId, setConfirmingCourseId] = useState<string | null>(null); const loadVersion = useRef(0); const mountedRef = useRef(true);
+  const [name, setName] = useState(""); const [functionName, setFunctionName] = useState(""); const [courses, setCourses] = useState<Course[]>([]); const [requirements, setRequirements] = useState<Requirement[]>([]); const [course, setCourse] = useState(emptyCourse); const [certificateFile, setCertificateFile] = useState<File | null>(null); const [loading, setLoading] = useState(true); const [saving, setSaving] = useState(false); const [removingCourseId, setRemovingCourseId] = useState<string | null>(null); const [openingCertificatePath, setOpeningCertificatePath] = useState<string | null>(null); const [error, setError] = useState(""); const [success, setSuccess] = useState(""); const [confirmingCourseId, setConfirmingCourseId] = useState<string | null>(null); const loadVersion = useRef(0); const mountedRef = useRef(true); const saveLockRef = useRef(false);
   const load = useCallback(async () => {
     const version = ++loadVersion.current;
     setLoading(true);
@@ -55,12 +55,13 @@ export default function EmployeeCoursesPage() {
   function selectCertificate(event: ChangeEvent<HTMLInputElement>) { const file = event.target.files?.[0] ?? null; event.target.value = ""; setError(""); if (file && !acceptedCertificateTypes.includes(file.type)) { setError("Anexe o certificado em PDF, JPG, PNG ou WEBP."); setCertificateFile(null); return; } if (file && file.size > 10 * 1024 * 1024) { setError("O certificado deve ter no máximo 10 MB."); setCertificateFile(null); return; } setCertificateFile(file); }
   async function addCourse(event: FormEvent) {
     event.preventDefault();
-    if (saving) return;
+    if (saving || saveLockRef.current) return;
     if (!course.name.trim()) { setError("Informe o nome do curso."); return; }
     if (course.completed_at && !isRealDate(course.completed_at)) { setError("Informe uma data de conclusão válida."); return; }
     if (course.expires_at && !isRealDate(course.expires_at)) { setError("Informe uma data de validade válida."); return; }
     if (course.completed_at && course.completed_at > localDateKey()) { setError("A data de conclusão não pode ser futura."); return; }
     if (course.completed_at && course.expires_at && course.expires_at < course.completed_at) { setError("A validade não pode ser anterior à data de conclusão."); return; }
+    saveLockRef.current = true;
     setSaving(true); setError(""); setSuccess("");
     let uploadedPath = "";
     try {
@@ -84,6 +85,7 @@ export default function EmployeeCoursesPage() {
       if (uploadedPath) await createClient().storage.from("employee-course-documents").remove([uploadedPath]);
       setError(friendlyError(caught, "Não foi possível concluir a operação."));
     } finally {
+      saveLockRef.current = false;
       setSaving(false);
     }
   }
