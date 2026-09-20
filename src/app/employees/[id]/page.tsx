@@ -131,9 +131,9 @@ export default function EmployeeMaterialsPage() {
     uploadedPath = path;
     const { error: uploadError } = await supabase.storage.from("delivery-terms").upload(path, file, { contentType: file.type, upsert: false });
     if (uploadError) { setError(friendlyError(uploadError, "Não foi possível enviar o arquivo.")); try { await supabase.storage.from("delivery-terms").remove([uploadedPath]); } catch {} uploadedPath = ""; return; }
-    const { data: auth, error: authError } = await supabase.auth.getUser(); if (authError) { await supabase.storage.from("delivery-terms").remove([path]); setError(friendlyError(authError, "Não foi possível concluir a operação.")); setUploadingId(""); return; }
+    const { data: auth, error: authError } = await supabase.auth.getUser(); if (authError || !auth.user) { await supabase.storage.from("delivery-terms").remove([path]); setError(friendlyError(authError, "Sua sessão expirou. Entre novamente.")); setUploadingId(""); return; }
     const uploadedAt = new Date().toISOString();
-    const { error: updateError } = await supabase.from("deliveries").update({ term_file_path: path, term_uploaded_at: uploadedAt, term_uploaded_by: auth.user?.id ?? null }).eq("id", sheet.id);
+    const { error: updateError } = await supabase.from("deliveries").update({ term_file_path: path, term_uploaded_at: uploadedAt, term_uploaded_by: auth.user.id }).eq("id", sheet.id);
     if (updateError) { await supabase.storage.from("delivery-terms").remove([path]); uploadedPath = ""; setError(friendlyError(updateError, "Não foi possível concluir a operação.")); } else {
       uploadedPath = "";
       if (sheet.term_file_path) await supabase.storage.from("delivery-terms").remove([sheet.term_file_path]);

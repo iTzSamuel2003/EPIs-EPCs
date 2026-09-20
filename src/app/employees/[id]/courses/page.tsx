@@ -22,7 +22,7 @@ function safeFileName(value: string) { return value.normalize("NFD").replace(/[\
 
 export default function EmployeeCoursesPage() {
   const { id } = useParams<{ id: string }>();
-  const [name, setName] = useState(""); const [functionName, setFunctionName] = useState(""); const [courses, setCourses] = useState<Course[]>([]); const [requirements, setRequirements] = useState<Requirement[]>([]); const [course, setCourse] = useState(emptyCourse); const [certificateFile, setCertificateFile] = useState<File | null>(null); const [loading, setLoading] = useState(true); const [saving, setSaving] = useState(false); const [removingCourseId, setRemovingCourseId] = useState<string | null>(null); const [openingCertificatePath, setOpeningCertificatePath] = useState<string | null>(null); const [error, setError] = useState(""); const [success, setSuccess] = useState(""); const [confirmingCourseId, setConfirmingCourseId] = useState<string | null>(null); const loadVersion = useRef(0);
+  const [name, setName] = useState(""); const [functionName, setFunctionName] = useState(""); const [courses, setCourses] = useState<Course[]>([]); const [requirements, setRequirements] = useState<Requirement[]>([]); const [course, setCourse] = useState(emptyCourse); const [certificateFile, setCertificateFile] = useState<File | null>(null); const [loading, setLoading] = useState(true); const [saving, setSaving] = useState(false); const [removingCourseId, setRemovingCourseId] = useState<string | null>(null); const [openingCertificatePath, setOpeningCertificatePath] = useState<string | null>(null); const [error, setError] = useState(""); const [success, setSuccess] = useState(""); const [confirmingCourseId, setConfirmingCourseId] = useState<string | null>(null); const loadVersion = useRef(0); const mountedRef = useRef(true);
   const load = useCallback(async () => {
     const version = ++loadVersion.current;
     setLoading(true);
@@ -34,7 +34,7 @@ export default function EmployeeCoursesPage() {
         supabase.from("employee_courses").select("id,name,provider,completed_at,expires_at,certificate_number,certificate_file_path").eq("employee_id", id).order("expires_at", { ascending: true, nullsFirst: false }),
         supabase.from("contract_training_requirements").select("id,function_group,course_name,source_annex,mandatory,validity_months,notes").order("function_group").order("course_name"),
       ]);
-      if (version !== loadVersion.current) return;
+      if (!mountedRef.current || version !== loadVersion.current) return;
       const loadErrorResult = employeeError ?? loadError ?? requirementError;
       if (loadErrorResult) { setError(friendlyError(loadErrorResult, "Não foi possível carregar os cursos.")); return; }
       setName(employee?.full_name ?? "");
@@ -44,10 +44,10 @@ export default function EmployeeCoursesPage() {
     } catch (caught) {
       if (version === loadVersion.current) setError(friendlyError(caught, "Não foi possível carregar os cursos."));
     } finally {
-      if (version === loadVersion.current) setLoading(false);
+      if (mountedRef.current && version === loadVersion.current) setLoading(false);
     }
   }, [id]);
-  useEffect(() => { void load(); }, [load]);
+  useEffect(() => { mountedRef.current = true; void load(); return () => { mountedRef.current = false; }; }, [load]);
   useEffect(() => { if (!success) return; const timer = window.setTimeout(() => setSuccess(""), 4500); return () => window.clearTimeout(timer); }, [success]);
   const requiredCourses = useMemo(() => requirements.filter((item) => matchesGroup(functionName, item.function_group)), [requirements, functionName]);
   const pendingRequired = requiredCourses.filter((item) => !hasValidCourse(courses, item)).length;

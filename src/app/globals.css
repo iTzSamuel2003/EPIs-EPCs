@@ -2354,3 +2354,105 @@ main.module-shell:not(:has(.module-toolbar)):has(> .module-summary) > .module-ta
   .dashboard-page .recent-deliveries td:nth-child(n),
   main.module-shell:not(:has(.module-toolbar)):has(> .module-summary) > .module-table-card td:nth-child(n){grid-column:1 / -1;}
 }
+
+/* Auditoria de Funcionarios, ficha, perfil, cursos, historico e portal. */
+.employee-header-tools,
+.employee-header-tools > *,
+.employee-navigation,
+.employee-sheet,
+.employee-sheet .sheet-card,
+.employee-portal-card,
+.portal-panel,
+.required-course-copy,
+.history-table-card,
+.history-filters{min-width:0;max-width:100%;}
+.employee-navigation{overscroll-behavior-inline:contain;scrollbar-width:thin;}
+.employee-navigation a{min-height:40px;display:inline-flex;align-items:center;justify-content:center;}
+.employee-navigation a:focus-visible{outline:3px solid #7762d6aa;outline-offset:2px;position:relative;z-index:1;}
+.employee-sheet .sheet-brand,
+.employee-sheet .sheet-employee-heading,
+.employee-sheet .sheet-section-heading{min-width:0;}
+.employee-sheet .sheet-brand > div,
+.employee-sheet .sheet-employee-heading > div{min-width:0;max-width:100%;}
+.employee-sheet .sheet-brand strong,
+.employee-sheet .sheet-brand small,
+.employee-sheet .sheet-employee-heading h2,
+.employee-sheet .sheet-employee-heading span,
+.employee-sheet .sheet-section-heading h2,
+.employee-sheet .sheet-section-heading span{overflow-wrap:anywhere;}
+.employee-sheet .sheet-document{min-width:0;max-width:42%;}
+.employee-sheet .sheet-document strong{overflow-wrap:anywhere;}
+.employee-sheet-actions{min-width:0;max-width:100%;}
+.employee-sheet-actions .action-button{max-width:100%;overflow-wrap:anywhere;}
+.employee-required-courses .form-section-title h2{display:flex;align-items:flex-start;gap:7px;line-height:1.35;}
+.employee-required-courses .form-section-title h2 svg{flex:0 0 auto;margin-top:2px;}
+.required-course-item{min-width:0;}
+.required-course-item .status-pill{flex:0 0 auto;}
+.history-filters label{min-width:130px;flex:1 1 150px;}
+.history-filters input,.history-filters select{width:100%;min-height:42px;}
+.history-table-card td strong,.history-table-card td small{overflow-wrap:anywhere;}
+.employee-portal-card{overflow:hidden;}
+.employee-portal-card .public-brand,
+.employee-portal-card .portal-heading,
+.employee-portal-card .portal-section-title{min-width:0;}
+.employee-portal-card .portal-heading > div,
+.employee-portal-card .portal-section-title > div{min-width:0;}
+.employee-portal-card .portal-heading h1,
+.employee-portal-card .portal-heading span,
+.employee-portal-card .portal-section-title h2,
+.employee-portal-card .portal-section-title p{overflow-wrap:anywhere;}
+.portal-file-label input{width:100%;max-width:100%;min-width:0;overflow:hidden;text-overflow:ellipsis;}
+.portal-panel .primary-button,
+.portal-panel .secondary-button{min-height:42px;max-width:100%;white-space:normal;justify-content:center;text-align:center;}
+.portal-request-list > div > div{min-width:0;}
+.portal-request-list > div > div span{overflow-wrap:anywhere;}
+
+@media (max-width:1024px) and (min-width:761px){
+  .employee-header-tools{width:100%;align-items:flex-end;}
+  .employee-navigation{max-width:100%;}
+  .employee-sheet .sheet-document{max-width:34%;}
+  .employee-sheet .sheet-table-wrap{overflow-x:auto;}
+  .employee-sheet-actions{flex-wrap:wrap;}
+}
+
+@media (max-width:760px){
+  .employee-header-tools{width:100%;}
+  .employee-navigation{width:100%;overflow-x:auto;}
+  .employee-navigation a{flex:0 0 auto;padding-inline:12px;}
+  .employee-sheet .sheet-brand{align-items:flex-start;gap:10px;}
+  .employee-sheet .sheet-document{width:100%;max-width:none;margin-left:0;text-align:left;}
+  .employee-sheet .sheet-employee-heading h2{font-size:18px;line-height:1.25;}
+  .employee-sheet .sheet-section-heading{gap:10px;flex-wrap:wrap;}
+  .employee-sheet .sheet-section-heading > div{min-width:0;}
+  .employee-sheet-actions{display:flex;flex-wrap:wrap;gap:7px;}
+  .employee-sheet-actions .action-button{flex:1 1 180px;justify-content:flex-start;text-align:left;}
+  .required-course-item{align-items:flex-start;flex-wrap:wrap;}
+  .required-course-item .status-pill{margin-left:40px;}
+  .history-filters{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px;}
+  .history-filters label{min-width:0;}
+  .portal-panel .primary-button,
+  .portal-panel .secondary-button{width:100%;}
+}
+
+@media (max-width:480px){
+  .employee-navigation a{min-height:44px;padding-inline:11px;font-size:10px;}
+  .employee-sheet .sheet-details{grid-template-columns:1fr;gap:10px;}
+  .employee-sheet .sheet-metrics > div{min-width:0;}
+  .employee-sheet .sheet-table-wrap table{font-size:11px;}
+  .employee-sheet-actions .action-button{flex-basis:100%;}
+  .history-filters{grid-template-columns:1fr;}
+  .employee-required-courses .form-section-title h2{font-size:15px;}
+  .portal-panel{padding:13px 12px;}
+  .portal-section-title{gap:8px;}
+  .portal-section-title h2{font-size:13px;line-height:1.35;}
+  .portal-file-label input{font-size:12px!important;}
+}
+
+@media (max-width:380px){
+  .employee-sheet .sheet-card{padding-inline:11px;}
+  .employee-sheet .sheet-employee-heading{gap:10px;}
+  .employee-sheet .sheet-employee-heading h2{font-size:17px;}
+  .employee-portal{padding-inline:10px;}
+  .employee-portal-card{padding-inline:13px;}
+  .portal-panel{padding-inline:10px;}
+}
