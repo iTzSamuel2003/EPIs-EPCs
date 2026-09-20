@@ -75,15 +75,17 @@ export default function ReportsPage() {
     const matches = (item.name + " " + item.internal_code).toLowerCase().includes(query.toLowerCase());
     return matches && (report !== "low" || Number(item.minimum_stock) > 0 && (totals[item.id] ?? 0) < Number(item.minimum_stock));
   }), [materials, query, report, totals]);
+  const invalidDateRange = Boolean(fromDate && toDate && fromDate > toDate);
   const filteredLots = useMemo(() => lots.filter((lot) => {
     const days = daysUntil(lot.expires_at);
     return (lot.material?.name + " " + lot.material?.internal_code + " " + lot.lot_number).toLowerCase().includes(query.toLowerCase()) && days !== null && days <= alertDays;
   }), [lots, query, alertDays]);
   const filteredMovements = useMemo(() => movements.filter((item) => {
+    if (invalidDateRange) return false;
     const movementDate = localDateKey(new Date(item.created_at));
     const textMatch = (item.material?.name + " " + item.material?.internal_code).toLowerCase().includes(query.trim().toLowerCase());
     return textMatch && (!fromDate || movementDate >= fromDate) && (!toDate || movementDate <= toDate);
-  }), [movements, query, fromDate, toDate]);
+  }), [movements, query, fromDate, toDate, invalidDateRange]);
 
   const pageSize = 50;
   const reportRows = report === "validity" ? filteredLots : report === "movements" ? filteredMovements : filteredMaterials;
@@ -94,8 +96,12 @@ export default function ReportsPage() {
 
   useEffect(() => { setPage(1); }, [report, query, fromDate, toDate, alertDays]);
   useEffect(() => { setPage((current) => Math.min(current, pageCount)); }, [pageCount]);
+  useEffect(() => {
+    const message = "A data inicial deve ser anterior ou igual à data final.";
+    setError((current) => invalidDateRange ? message : current === message ? "" : current);
+  }, [invalidDateRange]);
 
-  if (error && !loading) return <main className="module-shell"><header className="module-header"><div><p className="eyebrow">GESTÃO E CONFORMIDADE</p><h1>Relatórios</h1><p className="module-subtitle">Consulte indicadores operacionais e exporte os dados para CSV.</p></div></header><section className="panel runtime-error-card" aria-live="polite"><FeedbackMessage onRetry={() => setReloadKey((current) => current + 1)}>{error}</FeedbackMessage></section></main>;
+  if (error && !loading && !invalidDateRange) return <main className="module-shell"><header className="module-header"><div><p className="eyebrow">GESTÃO E CONFORMIDADE</p><h1>Relatórios</h1><p className="module-subtitle">Consulte indicadores operacionais e exporte os dados para CSV.</p></div></header><section className="panel runtime-error-card" aria-live="polite"><FeedbackMessage onRetry={() => setReloadKey((current) => current + 1)}>{error}</FeedbackMessage></section></main>;
 
   function exportCsv() {
     let rows: string[][];
