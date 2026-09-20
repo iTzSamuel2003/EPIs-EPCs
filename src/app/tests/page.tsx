@@ -7,7 +7,7 @@ import { friendlyError } from "@/lib/ui-feedback";
 import { FeedbackMessage } from "@/components/feedback-message";
 
 type Material = { id: string; name: string; internal_code: string; type: "EPI" | "EPC" | "FERRAMENTAL"; unit: string; test_required: boolean };
-type MaterialTest = { id: string; performed_at: string; interval_months: number; next_due_at: string; result: "approved" | "approved_with_restrictions" | "failed" | "pending"; examiner: string | null; professional_registration: string | null; art_number: string | null; certificate_number: string | null; report_reference: string | null; report_url: string | null; material: Material | null };
+type MaterialTest = { id: string; performed_at: string; created_at: string; interval_months: number; next_due_at: string; result: "approved" | "approved_with_restrictions" | "failed" | "pending"; examiner: string | null; professional_registration: string | null; art_number: string | null; certificate_number: string | null; report_reference: string | null; report_url: string | null; material: Material | null };
 type TestOverview = { material: Material; latestTest: MaterialTest | null; stockQuantity: number };
 
 const results = [["approved", "Aprovado"], ["approved_with_restrictions", "Aprovado com restrições"], ["failed", "Reprovado"], ["pending", "Pendente"]];
@@ -58,7 +58,7 @@ export default function TestsPage() {
       const supabase = createClient();
       const [{ data: materialData, error: materialError }, { data: testData, error: testError }, { data: lotData, error: lotError }] = await Promise.all([
         supabase.from("materials").select("id, name, internal_code, type, unit, test_required").eq("status", "active").order("name"),
-        supabase.from("material_tests").select("id, performed_at, interval_months, next_due_at, result, examiner, professional_registration, art_number, certificate_number, report_reference, report_url, material:materials(id, name, internal_code, type, unit, test_required)").order("performed_at", { ascending: false }),
+        supabase.from("material_tests").select("id, performed_at, created_at, interval_months, next_due_at, result, examiner, professional_registration, art_number, certificate_number, report_reference, report_url, material:materials(id, name, internal_code, type, unit, test_required)").order("performed_at", { ascending: false }).order("created_at", { ascending: false }),
         supabase.from("material_lots").select("material_id, available_quantity"),
       ]);
       if (version !== loadVersion.current) return;
@@ -140,13 +140,14 @@ export default function TestsPage() {
     if (!isRealDate(performedAt)) { setError("Informe uma data de ensaio válida."); return; }
     if (performedAt > todayLocal()) { setError("A data do ensaio não pode ser futura."); return; }
     if (!([6, 12] as number[]).includes(Number(interval))) { setError("A periodicidade deve ser de 6 ou 12 meses."); return; }
-    if (reportUrl && !isHttpUrl(reportUrl)) { setError("O link do laudo deve começar com http:// ou https://."); return; }
+    const normalizedReportUrl = reportUrl.trim();
+    if (normalizedReportUrl && !isHttpUrl(normalizedReportUrl)) { setError("O link do laudo deve começar com http:// ou https://."); return; }
     setSaving(true);
     try {
       const supabase = createClient();
       const { data: testId, error: saveError } = await supabase.rpc("register_material_test", { p_material_id: materialId, p_performed_at: performedAt, p_interval_months: Number(interval), p_result: result, p_examiner: examiner || null, p_certificate_number: certificate || null, p_notes: notes || null });
       if (saveError || !testId) { setError(friendlyError(saveError, "Não foi possível registrar o ensaio.")); return; }
-      const { error: detailsError } = await supabase.from("material_tests").update({ professional_registration: registration || null, art_number: artNumber || null, report_reference: reportReference || null, report_url: reportUrl || null }).eq("id", testId);
+      const { error: detailsError } = await supabase.from("material_tests").update({ professional_registration: registration.trim() || null, art_number: artNumber.trim() || null, report_reference: reportReference.trim() || null, report_url: normalizedReportUrl || null }).eq("id", testId);
       if (detailsError) {
         await supabase.from("material_tests").delete().eq("id", testId);
         setError(`Não foi possível concluir o registro do ensaio: ${friendlyError(detailsError, "tente novamente")}`);

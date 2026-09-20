@@ -1409,6 +1409,169 @@ body{max-width:100%;overflow-x:hidden;}
   .module-table-card{padding-top:14px;padding-bottom:14px;}
 }
 
+/* Auditoria visual: conformidade, listas, ensaios, treinamentos, validades e navegação */
+.contract-requirements-page .module-table-card,
+.function-templates-page .template-detail,
+.tests-page .module-table-card,
+.training-compliance-page .module-table-card,
+.validities-page .module-table-card{overflow:hidden;}
+.contract-requirements-page .module-table-card .table-wrap,
+.function-templates-page .template-detail .table-wrap,
+.tests-page .module-table-card .table-wrap,
+.training-compliance-page .module-table-card .table-wrap,
+.validities-page .module-table-card .table-wrap{max-width:100%;overflow-x:auto;overscroll-behavior-x:contain;}
+.contract-requirements-page .module-table-card table,
+.function-templates-page .template-detail table,
+.tests-page .module-table-card table,
+.training-compliance-page .module-table-card table,
+.validities-page .module-table-card table{min-width:720px;}
+.contract-requirements-page .module-table-card th,
+.function-templates-page .template-detail th,
+.tests-page .module-table-card th,
+.training-compliance-page .module-table-card th,
+.validities-page .module-table-card th{line-height:1.3;white-space:normal;}
+.contract-requirements-page .module-table-card td,
+.function-templates-page .template-detail td,
+.tests-page .module-table-card td,
+.training-compliance-page .module-table-card td,
+.validities-page .module-table-card td{vertical-align:top;line-height:1.4;}
+.function-templates-page .template-options button:focus-visible,
+.function-templates-page .template-detail .action-button:focus-visible,
+.contract-requirements-page select:focus-visible,
+.contract-requirements-page input:focus-visible,
+.tests-page input:focus-visible,
+.tests-page select:focus-visible,
+.tests-page textarea:focus-visible,
+.training-compliance-page select:focus-visible,
+.validities-page input:focus-visible,
+.validities-page select:focus-visible,
+.sidebar a:focus-visible,
+.sidebar button:focus-visible{outline:3px solid #8d7be1;outline-offset:2px;}
+.function-templates-page .template-source,
+.training-compliance-page .module-table-card td small,
+.tests-page .module-table-card td small,
+.validities-page .module-table-card td small{line-height:1.4;overflow-wrap:anywhere;}
+.sidebar-section h2{line-height:1.3;}
+.sidebar-section nav a{min-height:44px;}
+.sidebar-section nav a.active{box-shadow:inset 3px 0 #7762d6;}
+
+@media (max-width:1024px) and (min-width:761px){
+  .contract-requirements-page .module-table-card,
+  .function-templates-page .template-detail,
+  .tests-page .module-table-card,
+  .training-compliance-page .module-table-card,
+  .validities-page .module-table-card{padding:18px 16px;}
+  .contract-requirements-page .module-table-card table,
+  .function-templates-page .template-detail table,
+  .tests-page .module-table-card table,
+  .training-compliance-page .module-table-card table,
+  .validities-page .module-table-card table{min-width:760px;}
+  .function-templates-page .function-template-layout{grid-template-columns:250px minmax(0,1fr);gap:14px;}
+}
+
+@media (max-width:760px){
+  .contract-requirements-page .module-table-card .table-wrap,
+  .function-templates-page .template-detail .table-wrap,
+  .tests-page .module-table-card .table-wrap,
+  .training-compliance-page .module-table-card .table-wrap,
+  .validities-page .module-table-card .table-wrap{overflow:visible;padding-bottom:0;}
+  .contract-requirements-page .module-table-card table,
+  .function-templates-page .template-detail table,
+  .tests-page .module-table-card table,
+  .training-compliance-page .module-table-card table,
+  .validities-page .module-table-card table{display:block;min-width:0;width:100%;white-space:normal;}
+  .contract-requirements-page .module-table-card thead,
+  .function-templates-page .template-detail thead,
+  .tests-page .module-table-card thead,
+  .training-compliance-page .module-table-card thead,
+  .validities-page .module-table-card thead{display:none;}
+  .contract-requirements-page .module-table-card tbody,
+  .function-templates-page .template-detail tbody,
+  .tests-page .module-table-card tbody,
+  .training-compliance-page .module-table-card tbody,
+  .validities-page .module-table-card tbody{display:grid;gap:10px;}
+  .contract-requirements-page .module-table-card tr,
+  .function-templates-page .template-detail tr,
+  .tests-page .module-table-card tr,
+  .training-compliance-page .module-table-card tr,
+  .validities-page .module-table-card tr{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:10px 12px;padding:13px;border:1px solid #edf0f5;border-radius:10px;background:#fafbfe;}
+  .contract-requirements-page .module-table-card td,
+  .function-templates-page .template-detail td,
+  .tests-page .module-table-card td,
+  .training-compliance-page .module-table-card td,
+  .validities-page .module-table-card td{display:grid;gap:4px;min-width:0;padding:0;border:0;white-space:normal;overflow-wrap:anywhere;}
+  .contract-requirements-page .module-table-card td::before,
+  .function-templates-page .template-detail td::before,
+  .tests-page .module-table-card td::before,
+  .training-compliance-page .module-table-card td::before,
+  .validities-page .module-table-card td::before{color:#52627c;font-size:9px;font-weight:700;letter-spacing:.5px;line-height:1.2;}
+  .contract-requirements-page .module-table-card td:nth-child(1),
+  .contract-requirements-page .module-table-card td:nth-child(6),
+  .function-templates-page .template-detail td:nth-child(1),
+  .tests-page .module-table-card td:nth-child(1),
+  .tests-page .module-table-card td:nth-child(7),
+  .training-compliance-page .module-table-card td:nth-child(1),
+  .training-compliance-page .module-table-card td:nth-child(2),
+  .training-compliance-page .module-table-card td:nth-child(7),
+  .validities-page .module-table-card td:nth-child(1),
+  .validities-page .module-table-card td:nth-child(4){grid-column:1 / -1;}
+  .contract-requirements-page .module-table-card td:nth-child(1)::before{content:"Item contratual";}
+  .contract-requirements-page .module-table-card td:nth-child(2)::before{content:"Categoria";}
+  .contract-requirements-page .module-table-card td:nth-child(3)::before{content:"Uso";}
+  .contract-requirements-page .module-table-card td:nth-child(4)::before{content:"Requerido";}
+  .contract-requirements-page .module-table-card td:nth-child(5)::before{content:"Disponível";}
+  .contract-requirements-page .module-table-card td:nth-child(6)::before{content:"Conformidade";}
+  .function-templates-page .template-detail td:nth-child(1)::before{content:"Material";}
+  .function-templates-page .template-detail td:nth-child(2)::before{content:"Tipo";}
+  .function-templates-page .template-detail td:nth-child(3)::before{content:"Quantidade";}
+  .tests-page .module-table-card td:nth-child(1)::before{content:"Material";}
+  .tests-page .module-table-card td:nth-child(2)::before{content:"Estoque";}
+  .tests-page .module-table-card td:nth-child(3)::before{content:"Status";}
+  .tests-page .module-table-card td:nth-child(4)::before{content:"Último ensaio";}
+  .tests-page .module-table-card td:nth-child(5)::before{content:"Próximo ensaio";}
+  .tests-page .module-table-card td:nth-child(6)::before{content:"Resultado";}
+  .tests-page .module-table-card td:nth-child(7)::before{content:"Laudo / ART";}
+  .training-compliance-page .module-table-card td:nth-child(1)::before{content:"Grupo / função";}
+  .training-compliance-page .module-table-card td:nth-child(2)::before{content:"Curso";}
+  .training-compliance-page .module-table-card td:nth-child(3)::before{content:"Validade";}
+  .training-compliance-page .module-table-card td:nth-child(4)::before{content:"Aplicável";}
+  .training-compliance-page .module-table-card td:nth-child(5)::before{content:"Cobertos";}
+  .training-compliance-page .module-table-card td:nth-child(6)::before{content:"Pendências";}
+  .training-compliance-page .module-table-card td:nth-child(7)::before{content:"Ação";}
+  .validities-page .module-table-card td:nth-child(1)::before{content:"Material";}
+  .validities-page .module-table-card td:nth-child(2)::before{content:"Tamanho";}
+  .validities-page .module-table-card td:nth-child(3)::before{content:"Quantidade";}
+  .validities-page .module-table-card td:nth-child(4)::before{content:"Localização";}
+  .validities-page .module-table-card td:nth-child(5)::before{content:"Validade";}
+  .validities-page .module-table-card td:nth-child(6)::before{content:"Situação";}
+  .function-templates-page .template-detail .panel-header .action-button{width:100%;justify-content:center;}
+  .function-templates-page .delivery-items-header{width:100%;}
+  .function-templates-page .delivery-items-header .secondary-button{width:100%;justify-content:center;}
+}
+
+@media (max-width:480px){
+  .contract-requirements-page .module-toolbar,
+  .training-compliance-page .module-toolbar{gap:8px;}
+  .contract-requirements-page .module-table-card,
+  .function-templates-page .template-detail,
+  .tests-page .module-table-card,
+  .training-compliance-page .module-table-card,
+  .validities-page .module-table-card{padding:14px 12px;}
+  .function-templates-page .template-options{grid-template-columns:1fr;}
+  .function-templates-page .delivery-item-row{grid-template-columns:26px minmax(0,1fr) 32px;gap:8px;}
+  .function-templates-page .delivery-item-row label:nth-of-type(1){grid-column:2 / 4;}
+  .function-templates-page .delivery-item-row label:nth-of-type(2){grid-column:2;}
+  .function-templates-page .delivery-item-row label:nth-of-type(3){grid-column:2;}
+  .function-templates-page .delivery-item-row .remove-item{grid-column:3;grid-row:2;}
+}
+
+@media (max-width:380px){
+  .contract-requirements-page .module-summary,
+  .training-compliance-page .module-summary{grid-template-columns:1fr;}
+  .contract-requirements-page .module-summary>div,
+  .training-compliance-page .module-summary>div{min-height:64px;}
+}
+
 /* Auditoria de acessibilidade e responsividade dos fluxos de movimentação e portal. */
 .employee-suggestions button,
 .return-line-select,
