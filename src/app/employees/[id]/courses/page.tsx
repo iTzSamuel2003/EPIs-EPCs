@@ -42,12 +42,12 @@ export default function EmployeeCoursesPage() {
       setCourses((data ?? []) as Course[]);
       setRequirements((requirementData ?? []) as Requirement[]);
     } catch (caught) {
-      if (version === loadVersion.current) setError(friendlyError(caught, "Não foi possível carregar os cursos."));
+      if (mountedRef.current && version === loadVersion.current) setError(friendlyError(caught, "Não foi possível carregar os cursos."));
     } finally {
       if (mountedRef.current && version === loadVersion.current) setLoading(false);
     }
   }, [id]);
-  useEffect(() => { mountedRef.current = true; void load(); return () => { mountedRef.current = false; }; }, [load]);
+  useEffect(() => { mountedRef.current = true; void load(); return () => { mountedRef.current = false; loadVersion.current += 1; }; }, [load]);
   useEffect(() => { if (!success) return; const timer = window.setTimeout(() => setSuccess(""), 4500); return () => window.clearTimeout(timer); }, [success]);
   const requiredCourses = useMemo(() => requirements.filter((item) => matchesGroup(functionName, item.function_group)), [requirements, functionName]);
   const pendingRequired = requiredCourses.filter((item) => !hasValidCourse(courses, item)).length;

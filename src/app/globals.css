@@ -288,6 +288,278 @@ main.module-shell:has(> .module-table-card .module-loading) > .module-summary{di
   .global-search{flex:1;min-width:0}
   .search{width:min(270px,100%)}
 }
+
+/* Auditoria visual focada em tabelas e filtros: histórico, validades,
+   movimentações, relatórios, auditoria e cursos. */
+.history-page .history-filters,
+.validities-page .module-toolbar,
+main.module-shell:has(.audit-filters) .audit-filters,
+main.module-shell:has(table[aria-label="Movimentações do estoque"]) .module-toolbar,
+main.module-shell:has(table[aria-label="Lotes próximos do vencimento"]) .module-toolbar,
+main.module-shell:has(.employee-required-courses) .module-toolbar {
+  min-width: 0;
+}
+
+.history-page .history-filters label,
+.validities-page .module-toolbar > *,
+main.module-shell:has(.audit-filters) .audit-filters > label,
+main.module-shell:has(.audit-filters) .audit-filters .module-search,
+main.module-shell:has(.employee-required-courses) .module-toolbar > *,
+main.module-shell:has(table[aria-label="Movimentações do estoque"]) .module-toolbar > *,
+main.module-shell:has(table[aria-label="Lotes próximos do vencimento"]) .module-toolbar > * {
+  min-width: 0;
+}
+
+.history-page .history-table-card table,
+.validities-page .module-table-card table,
+main.module-shell:has(table[aria-label="Histórico de movimentações do estoque"]) .module-table-card table,
+main.module-shell:has(table[aria-label="Lotes próximos do vencimento"]) .module-table-card table,
+main.module-shell:has(table[aria-label="Movimentações do estoque"]) .module-table-card table,
+main.module-shell:has(table[aria-label="Estoque de materiais"]) .module-table-card table,
+main.module-shell:has(.employee-required-courses) .edit-employee-card:last-of-type table {
+  max-width: 100%;
+}
+
+.history-page .history-table-card th,
+.history-page .history-table-card td,
+.validities-page .module-table-card th,
+.validities-page .module-table-card td,
+main.module-shell:has(table[aria-label="Histórico de movimentações do estoque"]) .module-table-card th,
+main.module-shell:has(table[aria-label="Histórico de movimentações do estoque"]) .module-table-card td,
+main.module-shell:has(table[aria-label="Lotes próximos do vencimento"]) .module-table-card th,
+main.module-shell:has(table[aria-label="Lotes próximos do vencimento"]) .module-table-card td,
+main.module-shell:has(table[aria-label="Movimentações do estoque"]) .module-table-card th,
+main.module-shell:has(table[aria-label="Movimentações do estoque"]) .module-table-card td,
+main.module-shell:has(table[aria-label="Estoque de materiais"]) .module-table-card th,
+main.module-shell:has(table[aria-label="Estoque de materiais"]) .module-table-card td,
+main.module-shell:has(.employee-required-courses) .edit-employee-card:last-of-type th,
+main.module-shell:has(.employee-required-courses) .edit-employee-card:last-of-type td {
+  overflow-wrap: anywhere;
+  word-break: break-word;
+}
+
+main.module-shell:has(.audit-filters) .audit-filters,
+main.module-shell:has(.training-filters) .training-filters {
+  align-items: end;
+}
+
+main.module-shell:has(.audit-filters) .audit-filters > label,
+main.module-shell:has(.training-filters) .training-filters > label {
+  display: grid;
+  gap: 6px;
+  color: #536078;
+  font-size: 11px;
+  font-weight: 600;
+}
+
+main.module-shell:has(.audit-filters) .audit-filters input,
+main.module-shell:has(.audit-filters) .audit-filters select,
+main.module-shell:has(.training-filters) .training-filters select,
+.history-page .history-filters input,
+.history-page .history-filters select,
+.validities-page .module-toolbar input,
+.validities-page .module-toolbar select {
+  min-height: 42px;
+  max-width: 100%;
+}
+
+main.module-shell:has(.audit-filters) .audit-filters input:focus-visible,
+main.module-shell:has(.audit-filters) .audit-filters select:focus-visible,
+main.module-shell:has(.training-filters) .training-filters select:focus-visible,
+.history-page .history-filters input:focus-visible,
+.history-page .history-filters select:focus-visible,
+.validities-page .module-toolbar input:focus-visible,
+.validities-page .module-toolbar select:focus-visible {
+  outline: 3px solid #7762d655;
+  outline-offset: 2px;
+}
+
+@media (max-width: 1024px) and (min-width: 761px) {
+  main.module-shell:has(.audit-filters) .audit-filters {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+
+  main.module-shell:has(.audit-filters) .audit-filters .module-search {
+    grid-column: 1 / -1;
+  }
+
+  main.module-shell:has(.training-filters) .training-filters {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 760px) {
+  .history-page .history-filters,
+  main.module-shell:has(.audit-filters) .audit-filters,
+  main.module-shell:has(.training-filters) .training-filters {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 10px;
+  }
+
+  main.module-shell:has(.audit-filters) .audit-filters .module-search,
+  main.module-shell:has(.training-filters) .training-filters > svg {
+    grid-column: 1 / -1;
+  }
+
+  .history-page .history-filters label,
+  main.module-shell:has(.audit-filters) .audit-filters > label,
+  main.module-shell:has(.training-filters) .training-filters > label {
+    width: 100%;
+  }
+
+  .history-page .history-table-card .table-wrap,
+  .validities-page .module-table-card .table-wrap,
+  main.module-shell:has(.audit-filters) .module-table-card .table-wrap,
+  main.module-shell:has(table[aria-label="Histórico de movimentações do estoque"]) .module-table-card .table-wrap,
+  main.module-shell:has(table[aria-label="Lotes próximos do vencimento"]) .module-table-card .table-wrap,
+  main.module-shell:has(table[aria-label="Movimentações do estoque"]) .module-table-card .table-wrap,
+  main.module-shell:has(table[aria-label="Estoque de materiais"]) .module-table-card .table-wrap,
+  main.module-shell:has(.employee-required-courses) .edit-employee-card:last-of-type .table-wrap {
+    overflow: visible;
+    margin-right: 0;
+    padding-bottom: 0;
+  }
+
+  .history-page .history-table-card table,
+  .validities-page .module-table-card table,
+  main.module-shell:has(.audit-filters) .module-table-card table,
+  main.module-shell:has(table[aria-label="Histórico de movimentações do estoque"]) .module-table-card table,
+  main.module-shell:has(table[aria-label="Lotes próximos do vencimento"]) .module-table-card table,
+  main.module-shell:has(table[aria-label="Movimentações do estoque"]) .module-table-card table,
+  main.module-shell:has(table[aria-label="Estoque de materiais"]) .module-table-card table,
+  main.module-shell:has(.employee-required-courses) .edit-employee-card:last-of-type table {
+    display: block;
+    width: 100%;
+    min-width: 0;
+    white-space: normal;
+  }
+
+  .history-page .history-table-card thead,
+  .validities-page .module-table-card thead,
+  main.module-shell:has(.audit-filters) .module-table-card thead,
+  main.module-shell:has(table[aria-label="Histórico de movimentações do estoque"]) .module-table-card thead,
+  main.module-shell:has(table[aria-label="Lotes próximos do vencimento"]) .module-table-card thead,
+  main.module-shell:has(table[aria-label="Movimentações do estoque"]) .module-table-card thead,
+  main.module-shell:has(table[aria-label="Estoque de materiais"]) .module-table-card thead,
+  main.module-shell:has(.employee-required-courses) .edit-employee-card:last-of-type thead {
+    display: none;
+  }
+
+  .history-page .history-table-card tbody,
+  .validities-page .module-table-card tbody,
+  main.module-shell:has(.audit-filters) .module-table-card tbody,
+  main.module-shell:has(table[aria-label="Histórico de movimentações do estoque"]) .module-table-card tbody,
+  main.module-shell:has(table[aria-label="Lotes próximos do vencimento"]) .module-table-card tbody,
+  main.module-shell:has(table[aria-label="Movimentações do estoque"]) .module-table-card tbody,
+  main.module-shell:has(table[aria-label="Estoque de materiais"]) .module-table-card tbody,
+  main.module-shell:has(.employee-required-courses) .edit-employee-card:last-of-type tbody {
+    display: grid;
+    gap: 10px;
+  }
+
+  .history-page .history-table-card tr,
+  .validities-page .module-table-card tr,
+  main.module-shell:has(.audit-filters) .module-table-card tr,
+  main.module-shell:has(table[aria-label="Histórico de movimentações do estoque"]) .module-table-card tr,
+  main.module-shell:has(table[aria-label="Lotes próximos do vencimento"]) .module-table-card tr,
+  main.module-shell:has(table[aria-label="Movimentações do estoque"]) .module-table-card tr,
+  main.module-shell:has(table[aria-label="Estoque de materiais"]) .module-table-card tr,
+  main.module-shell:has(.employee-required-courses) .edit-employee-card:last-of-type tr {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 9px 12px;
+    padding: 13px;
+    border: 1px solid #edf0f5;
+    border-radius: 10px;
+    background: #fafbfe;
+  }
+
+  .history-page .history-table-card td,
+  .validities-page .module-table-card td,
+  main.module-shell:has(.audit-filters) .module-table-card td,
+  main.module-shell:has(table[aria-label="Histórico de movimentações do estoque"]) .module-table-card td,
+  main.module-shell:has(table[aria-label="Lotes próximos do vencimento"]) .module-table-card td,
+  main.module-shell:has(table[aria-label="Movimentações do estoque"]) .module-table-card td,
+  main.module-shell:has(table[aria-label="Estoque de materiais"]) .module-table-card td,
+  main.module-shell:has(.employee-required-courses) .edit-employee-card:last-of-type td {
+    display: grid;
+    gap: 4px;
+    min-width: 0;
+    padding: 0;
+    border: 0;
+    white-space: normal;
+    overflow-wrap: anywhere;
+  }
+
+  .history-page .history-table-card td::before,
+  .validities-page .module-table-card td::before,
+  main.module-shell:has(.audit-filters) .module-table-card td::before,
+  main.module-shell:has(table[aria-label="Histórico de movimentações do estoque"]) .module-table-card td::before,
+  main.module-shell:has(table[aria-label="Lotes próximos do vencimento"]) .module-table-card td::before,
+  main.module-shell:has(table[aria-label="Movimentações do estoque"]) .module-table-card td::before,
+  main.module-shell:has(table[aria-label="Estoque de materiais"]) .module-table-card td::before,
+  main.module-shell:has(.employee-required-courses) .edit-employee-card:last-of-type td::before {
+    color: #687893;
+    font-size: 9px;
+    font-weight: 700;
+    letter-spacing: .5px;
+    line-height: 1.2;
+  }
+
+  .history-page .history-table-card td:nth-child(1),
+  .history-page .history-table-card td:nth-child(2),
+  .history-page .history-table-card td:nth-child(6),
+  .history-page .history-table-card td:nth-child(7),
+  .validities-page .module-table-card td:nth-child(1),
+  .validities-page .module-table-card td:nth-child(4),
+  main.module-shell:has(.audit-filters) .module-table-card td:nth-child(1),
+  main.module-shell:has(.audit-filters) .module-table-card td:nth-child(5),
+  main.module-shell:has(table[aria-label="Lotes próximos do vencimento"]) .module-table-card td:nth-child(1),
+  main.module-shell:has(table[aria-label="Lotes próximos do vencimento"]) .module-table-card td:nth-child(4),
+  main.module-shell:has(table[aria-label="Movimentações do estoque"]) .module-table-card td:nth-child(1),
+  main.module-shell:has(table[aria-label="Estoque de materiais"]) .module-table-card td:nth-child(1),
+  main.module-shell:has(.employee-required-courses) .edit-employee-card:last-of-type td:nth-child(1),
+  main.module-shell:has(.employee-required-courses) .edit-employee-card:last-of-type td:nth-child(6) {
+    grid-column: 1 / -1;
+  }
+}
+
+@media (max-width: 480px) {
+  .history-page .history-filters,
+  main.module-shell:has(.audit-filters) .audit-filters,
+  main.module-shell:has(.training-filters) .training-filters {
+    grid-template-columns: 1fr;
+  }
+
+  .history-page .history-filters label,
+  main.module-shell:has(.audit-filters) .audit-filters > label,
+  main.module-shell:has(.training-filters) .training-filters > label {
+    width: 100%;
+  }
+
+  .module-table-card .status-pill,
+  .module-table-card .movement-type,
+  .module-table-card .text-link {
+    max-width: 100%;
+    white-space: normal;
+    overflow-wrap: anywhere;
+  }
+}
+
+@media (max-width: 380px) {
+  .history-page .history-table-card tr,
+  .validities-page .module-table-card tr,
+  main.module-shell:has(.audit-filters) .module-table-card tr,
+  main.module-shell:has(table[aria-label="Lotes próximos do vencimento"]) .module-table-card tr,
+  main.module-shell:has(table[aria-label="Movimentações do estoque"]) .module-table-card tr,
+  main.module-shell:has(table[aria-label="Estoque de materiais"]) .module-table-card tr,
+  main.module-shell:has(.employee-required-courses) .edit-employee-card:last-of-type tr {
+    padding: 11px;
+    gap: 8px 10px;
+  }
+}
 @media (max-width:600px){
   .topbar{height:auto;min-height:64px;padding-top:10px;padding-bottom:10px}
   .top-actions{flex:1;gap:6px}

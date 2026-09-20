@@ -29,6 +29,15 @@ export function RecentReturns() {
 
   useEffect(() => {
     let active = true;
+    const runLoad = () => {
+      const requestId = requestRef.current + 1;
+      void load().catch((caught) => {
+        if (active && requestId === requestRef.current) {
+          setError(friendlyError(caught, "Não foi possível carregar as devoluções."));
+          setLoading(false);
+        }
+      });
+    };
     async function load() {
       const requestId = ++requestRef.current;
       setLoading(true); setError(""); setReturns([]);
@@ -43,13 +52,8 @@ export function RecentReturns() {
       if (loadError) setError(friendlyError(loadError, "Não foi possível carregar as devoluções.")); else setReturns((data ?? []) as unknown as ReturnRecord[]);
       setLoading(false);
     }
-    void load().catch((caught) => {
-      if (active && requestRef.current > 0) {
-        setError(friendlyError(caught, "Nao foi possivel carregar as devolucoes."));
-        setLoading(false);
-      }
-    });
-    const refresh = () => { void load().catch((caught) => { if (active) { setError(friendlyError(caught, "Nao foi possivel atualizar as devolucoes.")); setLoading(false); } }); };
+    runLoad();
+    const refresh = runLoad;
     window.addEventListener("return-created", refresh);
     return () => { active = false; requestRef.current += 1; window.removeEventListener("return-created", refresh); };
   }, [retryKey]);

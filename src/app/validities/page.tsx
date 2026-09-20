@@ -15,7 +15,12 @@ type Employee = { id: string; full_name: string; registration: string | null };
 type ReturnItem = { delivery_item_id: string; quantity: number };
 type InventoryRow = { id: string; material: Material | null; variant: Variant | null; lot_number: string; expires_at: string | null; quantity: number; location: "Estoque" | "Com funcionário"; employee: Employee | null };
 
-function daysUntil(value: string | null) { if (!value) return null; return Math.ceil((new Date(`${value}T00:00:00`).getTime() - new Date(new Date().toDateString()).getTime()) / 86400000); }
+function daysUntil(value: string | null) {
+  if (!value) return null;
+  const expiresAt = new Date(`${value}T00:00:00`);
+  if (Number.isNaN(expiresAt.getTime())) return null;
+  return Math.ceil((expiresAt.getTime() - new Date(new Date().toDateString()).getTime()) / 86400000);
+}
 function normalize(value: string) { return value.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().trim(); }
 
 export default function ValiditiesPage() {

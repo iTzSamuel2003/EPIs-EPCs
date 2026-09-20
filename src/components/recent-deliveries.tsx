@@ -23,8 +23,18 @@ export function RecentDeliveries() {
 
   useEffect(() => {
     let active = true;
+    const runLoad = () => {
+      const requestId = requestRef.current + 1;
+      void load().catch((caught) => {
+        if (active && requestId === requestRef.current) {
+          setError(friendlyError(caught, "Não foi possível carregar as entregas."));
+          setLoading(false);
+        }
+      });
+    };
     async function load() {
       const requestId = ++requestRef.current; setLoading(true); setError(""); setDeliveries([]);
+      setCompanyName("");
       const supabase = createClient(); const { data: auth, error: authError } = await supabase.auth.getUser();
       if (authError || !auth.user) { if (active && requestId === requestRef.current) { setError(friendlyError(authError, "Sua sessão expirou. Entre novamente.")); setLoading(false); } return; }
       const [{ data, error: loadError }, { data: profileData, error: profileError }] = await Promise.all([
@@ -37,8 +47,8 @@ export function RecentDeliveries() {
       if (profileData?.organization_id) { const { data: organization, error: organizationError } = await supabase.from("organizations").select("name").eq("id", profileData.organization_id).maybeSingle(); if (!active || requestId !== requestRef.current) return; if (organizationError) setError(friendlyError(organizationError, "Não foi possível carregar os dados da organização.")); else setCompanyName(organization?.name ?? ""); }
       setLoading(false);
     }
-    void load().catch((caught) => { if (active) { setError(friendlyError(caught, "Nao foi possivel carregar as entregas.")); setLoading(false); } });
-    const refresh = () => { void load().catch((caught) => { if (active) { setError(friendlyError(caught, "Nao foi possivel atualizar as entregas.")); setLoading(false); } }); }; window.addEventListener("delivery-created", refresh); return () => { active = false; requestRef.current += 1; window.removeEventListener("delivery-created", refresh); };
+    runLoad();
+    const refresh = runLoad; window.addEventListener("delivery-created", refresh); return () => { active = false; requestRef.current += 1; window.removeEventListener("delivery-created", refresh); };
   }, [retryKey]);
 
   async function uploadTerm(delivery: Delivery, event: ChangeEvent<HTMLInputElement>) {
