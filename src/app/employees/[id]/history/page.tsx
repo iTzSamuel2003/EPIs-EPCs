@@ -87,7 +87,11 @@ export default function EmployeeHistoryPage() {
       const returnEvents = returnItemRows.flatMap((item): HistoryEvent[] => { const returned = returnById.get(item.return_id); if (!returned) return []; const delivered = itemById.get(item.delivery_item_id); const accountability = accountabilityByReturn.get(item.return_id); return [{ id: `return-${item.return_id}-${item.delivery_item_id}`, date: returned.returned_at, kind: "return", material: delivered?.material?.name ?? "Material", code: delivered?.material?.internal_code ?? "", unit: delivered?.material?.unit ?? "un.", quantity: -item.quantity, lot: delivered?.lot?.lot_number ?? "—", reason: returnReasons[returned.reason] ?? returned.reason, notes: returned.notes ?? "", responsible: profileById.get(returned.responsible_id) ?? "Usuário do sistema", condition: conditionLabels[item.equipment_condition] ?? item.equipment_condition, destination: destinationLabels[item.destination] ?? item.destination, accountability }]; });
       setEmployee(employeeData as Employee); setEvents([...deliveryEvents, ...returnEvents].sort((a, b) => b.date.localeCompare(a.date))); setLoading(false);
     }
-    void load();
+    void load().catch((caught) => {
+      if (cancelled) return;
+      setError(friendlyError(caught, "Falha ao carregar o historico."));
+      setLoading(false);
+    });
     return () => { cancelled = true; };
   }, [id]);
 

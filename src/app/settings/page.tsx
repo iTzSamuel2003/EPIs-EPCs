@@ -36,7 +36,10 @@ export default function SettingsPage() {
       }
       setLoading(false);
     }
-    void load();
+    void load().catch((caught) => {
+      setError(friendlyError(caught, "Falha ao carregar as configuracoes."));
+      setLoading(false);
+    });
   }, []);
   useEffect(() => { if (!success) return; const timer = window.setTimeout(() => setSuccess(""), 4500); return () => window.clearTimeout(timer); }, [success]);
 
@@ -45,6 +48,7 @@ export default function SettingsPage() {
     setSaving(true);
     setError("");
     setSuccess("");
+    try {
     const supabase = createClient();
     const { data: auth, error: authError } = await supabase.auth.getUser();
     const { data: profile, error: profileError } = auth.user ? await supabase.from("profiles").select("organization_id").eq("id", auth.user.id).maybeSingle() : { data: null, error: authError };
@@ -59,7 +63,11 @@ export default function SettingsPage() {
       default_minimum_stock: nonNegativeInteger(form.default_minimum_stock, 0),
     }).eq("id", profile.organization_id);
     if (saveError) setError(friendlyError(saveError, "Não foi possível salvar as configurações.")); else setSuccess("Configurações salvas.");
-    setSaving(false);
+    } catch (caught) {
+      setError(friendlyError(caught, "Falha ao salvar as configuracoes."));
+    } finally {
+      setSaving(false);
+    }
   }
 
   if (loading) return <main className="module-shell"><div className="module-loading" role="status" aria-live="polite">Carregando configurações...</div></main>;

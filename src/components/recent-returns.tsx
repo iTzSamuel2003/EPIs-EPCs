@@ -43,8 +43,13 @@ export function RecentReturns() {
       if (loadError) setError(friendlyError(loadError, "Não foi possível carregar as devoluções.")); else setReturns((data ?? []) as unknown as ReturnRecord[]);
       setLoading(false);
     }
-    void load();
-    const refresh = () => { void load(); };
+    void load().catch((caught) => {
+      if (active && requestRef.current > 0) {
+        setError(friendlyError(caught, "Nao foi possivel carregar as devolucoes."));
+        setLoading(false);
+      }
+    });
+    const refresh = () => { void load().catch((caught) => { if (active) { setError(friendlyError(caught, "Nao foi possivel atualizar as devolucoes.")); setLoading(false); } }); };
     window.addEventListener("return-created", refresh);
     return () => { active = false; window.removeEventListener("return-created", refresh); };
   }, [retryKey]);

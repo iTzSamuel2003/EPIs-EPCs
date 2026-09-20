@@ -71,6 +71,7 @@ export default function MaterialsPage() {
     setError("");
     setMaterials([]);
     setStockByMaterial({});
+    try {
     const supabase = createClient();
     const [{ data, error: materialsError }, { data: lots, error: lotsError }] = await Promise.all([
       supabase.from("materials").select("id,internal_code,name,type,unit,size,description,brand,manufacturer,model,ca_number,ca_expires_at,useful_life_months,replacement_interval_days,minimum_stock,location,notes,status").order("name"),
@@ -84,7 +85,11 @@ export default function MaterialsPage() {
         return total;
       }, {}));
     }
-    setLoading(false);
+    } catch (caught) {
+      setError(friendlyError(caught, "Falha ao carregar materiais."));
+    } finally {
+      setLoading(false);
+    }
   }
 
   useEffect(() => { void loadMaterials(); }, []);
@@ -115,6 +120,7 @@ export default function MaterialsPage() {
     setError(""); setSuccess("");
     if (form.type === "EPI" && !form.ca_number.trim()) { setError("O número do CA é obrigatório para materiais do tipo EPI."); return; }
     setSaving(true);
+    try {
     const supabase = createClient();
     const { data: auth, error: authError } = await supabase.auth.getUser();
     if (authError) { setError(friendlyError(authError, "Não foi possível concluir a operação.")); setSaving(false); return; }
@@ -137,7 +143,11 @@ export default function MaterialsPage() {
       : await supabase.from("materials").insert({ ...payload, organization_id: profile.organization_id });
     if (saveError) setError(saveError.code === "23505" ? "Já existe um material com este código interno." : friendlyError(saveError, "Não foi possível salvar as alterações."));
     else { setSuccess(editingId ? "Material atualizado com sucesso." : "Material cadastrado com sucesso."); setShowForm(false); await loadMaterials(); }
-    setSaving(false);
+    } catch (caught) {
+      setError(friendlyError(caught, "Falha ao salvar o material."));
+    } finally {
+      setSaving(false);
+    }
   }
 
   return <main className="module-shell materials-page">

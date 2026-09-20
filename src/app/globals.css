@@ -1136,4 +1136,83 @@ body{overflow-wrap:normal}
   .recent-entries-card .table-wrap td:nth-child(4)::before{content:"Quantidade";}
   .recent-entries-card .table-wrap td:nth-child(5)::before{content:"Ações";}
   .recent-entries-card .row-actions{flex-wrap:wrap;}
+ }
+
+@media (max-width:900px) and (min-width:601px){
+  .employees-table-card .table-wrap{overflow:visible;margin-right:0;padding-bottom:0;}
+  .employees-table-card .table-wrap::after{display:none;}
+  .employees-table-card table{display:block;min-width:0;width:100%;white-space:normal;}
+  .employees-table-card thead{display:none;}
+  .employees-table-card tbody{display:grid;gap:10px;}
+  .employees-table-card tr{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:10px 12px;padding:13px;border:1px solid #edf0f5;border-radius:10px;background:#fafbfe;}
+  .employees-table-card td{display:grid;gap:4px;min-width:0;padding:0;border:0;white-space:normal;overflow-wrap:anywhere;}
+  .employees-table-card td::before{color:#a1aaba;font-size:9px;font-weight:700;letter-spacing:.5px;}
+  .employees-table-card td:nth-child(1),.employees-table-card td:nth-child(7){grid-column:1 / -1;}
+  .employees-table-card td:nth-child(1)::before{content:"Funcionário";}
+  .employees-table-card td:nth-child(2)::before{content:"Matrícula";}
+  .employees-table-card td:nth-child(3)::before{content:"Cargo / função";}
+  .employees-table-card td:nth-child(4)::before{content:"Setor";}
+  .employees-table-card td:nth-child(5)::before{content:"Unidade";}
+  .employees-table-card td:nth-child(6)::before{content:"Status";}
+  .employees-table-card td:nth-child(7)::before{content:"Ações";}
+  .employees-table-card .row-actions{display:flex;flex-wrap:wrap;gap:6px;max-width:none;}
+  .employees-table-card .row-actions .action-button{width:42px;min-width:42px;justify-content:center;padding:8px;}
+}
+
+@media (max-width:760px){
+  main.module-shell:has(.request-status-select) .table-wrap,
+  .recent-entries-card .table-wrap,
+  .recent-deliveries .table-wrap{overflow:visible;margin-right:0;padding-bottom:0;}
+  main.module-shell:has(.request-status-select) .table-wrap::after,
+  .recent-entries-card .table-wrap::after,
+  .recent-deliveries .table-wrap::after{display:none;}
+  main.module-shell:has(.request-status-select) .table-wrap table,
+  .recent-entries-card .table-wrap table,
+  .recent-deliveries .table-wrap table{display:block;min-width:0;width:100%;white-space:normal;}
+  main.module-shell:has(.request-status-select) .table-wrap thead,
+  .recent-entries-card .table-wrap thead,
+  .recent-deliveries .table-wrap thead{display:none;}
+  main.module-shell:has(.request-status-select) .table-wrap tbody,
+  .recent-entries-card .table-wrap tbody,
+  .recent-deliveries .table-wrap tbody{display:grid;gap:10px;}
+  main.module-shell:has(.request-status-select) .table-wrap tr,
+  .recent-entries-card .table-wrap tr,
+  .recent-deliveries .table-wrap tr{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:10px 12px;padding:13px;border:1px solid #edf0f5;border-radius:10px;background:#fafbfe;}
+  main.module-shell:has(.request-status-select) .table-wrap td,
+  .recent-entries-card .table-wrap td,
+  .recent-deliveries .table-wrap td{display:grid;gap:4px;min-width:0;padding:0;border:0;white-space:normal;overflow-wrap:anywhere;}
+  main.module-shell:has(.request-status-select) .table-wrap td::before,
+  .recent-entries-card .table-wrap td::before,
+  .recent-deliveries .table-wrap td::before{color:#a1aaba;font-size:9px;font-weight:700;letter-spacing:.5px;}
+  main.module-shell:has(.request-status-select) .table-wrap td:nth-child(1),
+  main.module-shell:has(.request-status-select) .table-wrap td:nth-child(4),
+  main.module-shell:has(.request-status-select) .table-wrap td:nth-child(7),
+  .recent-entries-card .table-wrap td:nth-child(1),
+  .recent-entries-card .table-wrap td:nth-child(3),
+  .recent-entries-card .table-wrap td:nth-child(5),
+  .recent-deliveries .table-wrap td:nth-child(1),
+  .recent-deliveries .table-wrap td:nth-child(3),
+  .recent-deliveries .table-wrap td:nth-child(6){grid-column:1 / -1;}
+  main.module-shell:has(.request-status-select) .table-wrap td:nth-child(1)::before{content:"Data";}
+  main.module-shell:has(.request-status-select) .table-wrap td:nth-child(2)::before{content:"Funcionário";}
+  main.module-shell:has(.request-status-select) .table-wrap td:nth-child(3)::before{content:"Material";}
+  main.module-shell:has(.request-status-select) .table-wrap td:nth-child(4)::before{content:"Tipo / descrição";}
+  main.module-shell:has(.request-status-select) .table-wrap td:nth-child(5)::before{content:"Anexo";}
+  main.module-shell:has(.request-status-select) .table-wrap td:nth-child(6)::before{content:"Status";}
+  main.module-shell:has(.request-status-select) .table-wrap td:nth-child(7)::before{content:"Ação";}
+  .recent-entries-card .table-wrap td:nth-child(1)::before{content:"Nota";}
+  .recent-entries-card .table-wrap td:nth-child(2)::before{content:"Data";}
+  .recent-entries-card .table-wrap td:nth-child(3)::before{content:"Materiais";}
+  .recent-entries-card .table-wrap td:nth-child(4)::before{content:"Quantidade";}
+  .recent-entries-card .table-wrap td:nth-child(5)::before{content:"Ações";}
+  .recent-deliveries .table-wrap td:nth-child(1)::before{content:"Funcionário";}
+  .recent-deliveries .table-wrap td:nth-child(2)::before{content:"Matrícula";}
+  .recent-deliveries .table-wrap td:nth-child(3)::before{content:"Materiais";}
+  .recent-deliveries .table-wrap td:nth-child(4)::before{content:"Data";}
+  .recent-deliveries .table-wrap td:nth-child(5)::before{content:"Motivo";}
+  .recent-deliveries .table-wrap td:nth-child(6)::before{content:"Status";}
+  .recent-deliveries .dashboard-delivery-materials{min-width:0;}
+  .recent-entries-card .row-actions{flex-wrap:wrap;}
+  main.module-shell:has(.request-status-select) .request-status-select{width:100%;min-width:0;}
+  main.module-shell:has(.request-status-select) .action-button{max-width:100%;white-space:normal;}
 }

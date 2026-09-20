@@ -37,7 +37,8 @@ export function RecentDeliveries() {
       if (profileData?.organization_id) { const { data: organization, error: organizationError } = await supabase.from("organizations").select("name").eq("id", profileData.organization_id).maybeSingle(); if (!active || requestId !== requestRef.current) return; if (organizationError) setError(friendlyError(organizationError, "Não foi possível carregar os dados da organização.")); else setCompanyName(organization?.name ?? ""); }
       setLoading(false);
     }
-    void load(); const refresh = () => { void load(); }; window.addEventListener("delivery-created", refresh); return () => { active = false; window.removeEventListener("delivery-created", refresh); };
+    void load().catch((caught) => { if (active) { setError(friendlyError(caught, "Nao foi possivel carregar as entregas.")); setLoading(false); } });
+    const refresh = () => { void load().catch((caught) => { if (active) { setError(friendlyError(caught, "Nao foi possivel atualizar as entregas.")); setLoading(false); } }); }; window.addEventListener("delivery-created", refresh); return () => { active = false; window.removeEventListener("delivery-created", refresh); };
   }, [retryKey]);
 
   async function uploadTerm(delivery: Delivery, event: ChangeEvent<HTMLInputElement>) {
