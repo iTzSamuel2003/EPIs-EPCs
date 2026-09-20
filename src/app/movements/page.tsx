@@ -26,6 +26,7 @@ export default function MovementsPage() {
     async function load() {
       setLoading(true);
       setError("");
+      try {
       const supabase = createClient();
       const { data: movementData, error: movementError } = await supabase
         .from("stock_movements")
@@ -35,7 +36,6 @@ export default function MovementsPage() {
 
       if (movementError) {
         setError(friendlyError(movementError, "Não foi possível concluir a operação."));
-        setLoading(false);
         return;
       }
 
@@ -64,7 +64,11 @@ export default function MovementsPage() {
         });
         setMovements(enriched as unknown as Movement[]);
       }
-      setLoading(false);
+      } catch (caught) {
+        setError(friendlyError(caught, "Não foi possível carregar as movimentações."));
+      } finally {
+        setLoading(false);
+      }
     }
     void load();
   }, [reloadKey]);

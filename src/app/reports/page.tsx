@@ -34,6 +34,7 @@ export default function ReportsPage() {
     async function load() {
       setLoading(true);
       setError("");
+      try {
       const supabase = createClient();
       const [{ data: materialData, error: materialError }, { data: lotData, error: lotError }, { data: movementData, error: movementError }, { data: organizationData, error: organizationError }] = await Promise.all([
         supabase.from("materials").select("id, internal_code, name, type, minimum_stock, unit, location, status").eq("status", "active").order("name"),
@@ -50,7 +51,11 @@ export default function ReportsPage() {
         setTotals((lotData ?? []).reduce<Record<string, number>>((acc, lot) => { acc[lot.material_id] = (acc[lot.material_id] ?? 0) + lot.available_quantity; return acc; }, {}));
         setAlertDays(Math.max(0, Number(organizationData?.validity_alert_days ?? 30)));
       }
-      setLoading(false);
+      } catch (caught) {
+        setError(friendlyError(caught, "Não foi possível carregar os relatórios."));
+      } finally {
+        setLoading(false);
+      }
     }
     void load();
   }, [reloadKey]);
