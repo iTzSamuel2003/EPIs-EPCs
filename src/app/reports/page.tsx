@@ -103,7 +103,7 @@ export default function ReportsPage() {
     else rows = [["Código", "Material", "Tipo", "Estoque atual", "Estoque mínimo"], ...filteredMaterials.map((item) => [item.internal_code, item.name, item.type, String(totals[item.id] ?? 0), String(item.minimum_stock)])];
     const csv = rows.map((row) => row.map((cell) => '"' + cell.replaceAll('"', '""') + '"').join(";")).join("\n");
     const url = URL.createObjectURL(new Blob(["\ufeff" + csv], { type: "text/csv;charset=utf-8" }));
-    const link = document.createElement("a"); link.href = url; link.download = "relatorio-epis.csv"; link.click(); URL.revokeObjectURL(url);
+    const link = document.createElement("a"); link.href = url; link.download = "relatorio-epis.csv"; document.body.appendChild(link); link.click(); link.remove(); window.setTimeout(() => URL.revokeObjectURL(url), 0);
   }
 
   const title = reportTypes.find(([value]) => value === report)?.[1] ?? "Relatórios";

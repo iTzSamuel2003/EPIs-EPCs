@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { ArrowDownToLine, ArrowUpRight, Boxes, LoaderCircle, Search, SlidersHorizontal, X } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 import { friendlyError } from "@/lib/ui-feedback";
@@ -22,7 +22,9 @@ export default function MovementsPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [reloadKey, setReloadKey] = useState(0);
+  const loadVersion = useRef(0);
   useEffect(() => {
+    const version = ++loadVersion.current;
     async function load() {
       setLoading(true);
       setError("");
@@ -33,6 +35,8 @@ export default function MovementsPage() {
         .select("id, movement_type, quantity, notes, created_at, material:materials(name, internal_code, unit)")
         .order("created_at", { ascending: false })
         .limit(500);
+
+      if (version !== loadVersion.current) return;
 
       if (movementError) {
         setError(friendlyError(movementError, "Não foi possível concluir a operação."));
@@ -52,6 +56,8 @@ export default function MovementsPage() {
         references.returns.length ? supabase.from("returns").select("id, employee:employees(full_name, registration)").in("id", references.returns) : Promise.resolve({ data: [], error: null }),
       ]);
 
+      if (version !== loadVersion.current) return;
+
       if (deliveryError || returnError) {
         setError(friendlyError(deliveryError ?? returnError, "Não foi possível carregar os funcionários vinculados."));
       } else {
@@ -67,7 +73,7 @@ export default function MovementsPage() {
       } catch (caught) {
         setError(friendlyError(caught, "Não foi possível carregar as movimentações."));
       } finally {
-        setLoading(false);
+        if (version === loadVersion.current) setLoading(false);
       }
     }
     void load();

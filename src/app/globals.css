@@ -2040,3 +2040,154 @@ body{max-width:100%;overflow-x:hidden;}
   .module-header .secondary-button,.module-header .primary-button{width:100%;}
   .module-table-card{padding-left:11px;padding-right:11px;}
 }
+
+/* Revisão visual dos módulos de análise: mantém a lógica e prioriza leitura sem overflow. */
+:where(a,button,input,select,textarea):focus-visible{
+  outline:3px solid #7762d688;
+  outline-offset:2px;
+}
+.topbar{
+  position:sticky;
+  top:0;
+  z-index:15;
+  box-shadow:0 1px 0 rgba(23,35,60,.02);
+}
+.sidebar-section h2{
+  line-height:1.2;
+  text-transform:uppercase;
+}
+.sidebar-section nav a{
+  min-height:42px;
+  min-width:0;
+}
+.sidebar-section nav a span,
+.sidebar-bottom>a span{
+  min-width:0;
+  overflow-wrap:anywhere;
+}
+.nav-count{flex:0 0 auto;}
+.global-search,.top-actions,.search{min-width:0;}
+.profile{min-width:0;}
+.profile>div:not(.avatar){min-width:0;}
+.profile strong,.profile small{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+
+.metrics-grid{grid-template-columns:repeat(4,minmax(0,1fr));}
+.metric-card,.metric-copy{min-width:0;}
+.metric-copy span,.metric-copy small{overflow-wrap:anywhere;}
+.dashboard-grid>.panel{min-width:0;}
+.dashboard-page .recent-deliveries{min-width:0;}
+.dashboard-page .recent-deliveries .table-wrap{min-width:0;}
+.dashboard-page .recent-deliveries td,
+.dashboard-page .recent-deliveries th{vertical-align:middle;}
+.dashboard-delivery-materials{display:flex;flex-wrap:wrap;gap:4px;min-width:0;}
+.dashboard-delivery-materials span{display:inline-flex;max-width:100%;overflow-wrap:anywhere;}
+
+.module-shell{min-width:0;}
+.module-header>div,.module-header h1,.module-subtitle{min-width:0;max-width:100%;}
+.module-header h1,.module-subtitle{overflow-wrap:anywhere;}
+.module-toolbar,.module-summary,.module-table-card{min-width:0;}
+.module-toolbar label{min-width:0;color:#536078;font-size:11px;font-weight:600;}
+.module-toolbar label input,
+.module-toolbar label select{min-width:0;max-width:100%;}
+.module-summary>div{min-width:0;}
+.module-summary strong,.module-summary span{overflow-wrap:anywhere;}
+.module-table-card .panel-header>div{min-width:0;}
+.module-table-card .panel-header h2,
+.module-table-card .panel-header p{overflow-wrap:anywhere;}
+.module-table-card .table-wrap{min-width:0;}
+.module-table-card table{table-layout:auto;}
+.module-table-card th,.module-table-card td{overflow-wrap:anywhere;}
+.module-table-card td strong,.module-table-card td small{max-width:100%;}
+.module-table-card .material-cell>div:last-child{min-width:0;}
+.module-table-card .material-cell strong{overflow-wrap:anywhere;}
+.module-table-card .material-cell small{overflow-wrap:anywhere;}
+
+/* O resumo financeiro usa uma hierarquia consistente sem colunas comprimidas. */
+main.module-shell:has(> .module-summary) > .module-summary strong{color:#1f2d49;line-height:1.15;}
+main.module-shell:has(> .module-summary) > .module-summary svg{color:#7762d6;margin-bottom:8px;}
+main.module-shell:has(> .module-summary) > .module-summary > div{display:flex;flex-direction:column;justify-content:flex-start;}
+main.module-shell:not(:has(.module-toolbar)):has(> .module-summary) > .module-table-card td:nth-child(n+2){white-space:nowrap;}
+main.module-shell:not(:has(.module-toolbar)):has(> .module-summary) > .module-table-card td:nth-child(n+2),
+main.module-shell:not(:has(.module-toolbar)):has(> .module-summary) > .module-table-card th:nth-child(n+2){text-align:right;}
+main.module-shell:not(:has(.module-toolbar)):has(> .module-summary) > .module-table-card td:first-child,
+main.module-shell:not(:has(.module-toolbar)):has(> .module-summary) > .module-table-card th:first-child{text-align:left;}
+
+@media (max-width:1024px) and (min-width:761px){
+  .topbar,.page-content,.module-shell{padding-left:22px;padding-right:22px;}
+  .topbar{height:70px;}
+  .top-actions{gap:13px;}
+  .module-header{gap:16px;}
+  .module-header h1{font-size:27px;}
+  .module-summary{grid-template-columns:repeat(4,minmax(0,1fr));gap:10px;}
+  .module-summary>div{padding:13px 12px;}
+  .module-summary strong{font-size:20px;}
+  .module-table-card{padding:19px 17px;}
+  .module-table-card table{table-layout:fixed;}
+  .module-table-card th,.module-table-card td{white-space:normal;min-width:0;}
+  .module-table-card td{line-height:1.35;}
+  .module-table-card .material-cell{align-items:flex-start;}
+  .module-table-card .table-wrap{overflow-x:visible;}
+}
+
+@media (max-width:760px){
+  .metrics-grid{grid-template-columns:repeat(2,minmax(0,1fr));}
+  .metric-card{align-items:flex-start;}
+  .metric-copy strong{font-size:20px;}
+  .module-header{width:100%;}
+  .module-toolbar{width:100%;}
+  .module-summary{grid-template-columns:repeat(2,minmax(0,1fr));}
+  .module-summary>div{min-height:74px;}
+  .module-table-card .panel-header{gap:8px;}
+  .module-table-card .panel-header h2{line-height:1.25;}
+  .module-table-card .table-wrap{width:100%;}
+  main.module-shell:not(:has(.module-toolbar)):has(> .module-summary) > .module-table-card .table-wrap{overflow:visible;}
+  main.module-shell:not(:has(.module-toolbar)):has(> .module-summary) > .module-table-card table{display:block;min-width:0;width:100%;white-space:normal;}
+  main.module-shell:not(:has(.module-toolbar)):has(> .module-summary) > .module-table-card thead{display:none;}
+  main.module-shell:not(:has(.module-toolbar)):has(> .module-summary) > .module-table-card tbody{display:grid;gap:10px;}
+  main.module-shell:not(:has(.module-toolbar)):has(> .module-summary) > .module-table-card tr{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:9px 12px;padding:13px;border:1px solid #edf0f5;border-radius:10px;background:#fafbfe;}
+  main.module-shell:not(:has(.module-toolbar)):has(> .module-summary) > .module-table-card td{display:grid;gap:4px;min-width:0;padding:0;border:0;white-space:normal;text-align:left;line-height:1.35;}
+  main.module-shell:not(:has(.module-toolbar)):has(> .module-summary) > .module-table-card td::before{color:#687893;font-size:9px;font-weight:700;letter-spacing:.5px;}
+  main.module-shell:not(:has(.module-toolbar)):has(> .module-summary) > .module-table-card td:nth-child(1),
+  main.module-shell:not(:has(.module-toolbar)):has(> .module-summary) > .module-table-card td:nth-child(6){grid-column:1 / -1;}
+  main.module-shell:not(:has(.module-toolbar)):has(> .module-summary) > .module-table-card td:nth-child(1)::before{content:"Material";}
+  main.module-shell:not(:has(.module-toolbar)):has(> .module-summary) > .module-table-card td:nth-child(2)::before{content:"Adquirido";}
+  main.module-shell:not(:has(.module-toolbar)):has(> .module-summary) > .module-table-card td:nth-child(3)::before{content:"Em estoque";}
+  main.module-shell:not(:has(.module-toolbar)):has(> .module-summary) > .module-table-card td:nth-child(4)::before{content:"Custo unitário médio";}
+  main.module-shell:not(:has(.module-toolbar)):has(> .module-summary) > .module-table-card td:nth-child(5)::before{content:"Valor total";}
+  main.module-shell:not(:has(.module-toolbar)):has(> .module-summary) > .module-table-card td:nth-child(6)::before{content:"Reposição prevista";}
+  .dashboard-page .recent-deliveries .table-wrap{overflow:visible;padding-bottom:0;}
+  .dashboard-page .recent-deliveries table{display:block;min-width:0;white-space:normal;}
+  .dashboard-page .recent-deliveries thead{display:none;}
+  .dashboard-page .recent-deliveries tbody{display:grid;gap:10px;}
+  .dashboard-page .recent-deliveries tr{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:8px 12px;padding:12px;border:1px solid #edf0f5;border-radius:10px;background:#fafbfe;}
+  .dashboard-page .recent-deliveries td{display:grid;gap:4px;min-width:0;padding:0;border:0;white-space:normal;line-height:1.35;}
+  .dashboard-page .recent-deliveries td::before{color:#687893;font-size:9px;font-weight:700;letter-spacing:.5px;}
+  .dashboard-page .recent-deliveries td:nth-child(1),.dashboard-page .recent-deliveries td:nth-child(3){grid-column:1 / -1;}
+  .dashboard-page .recent-deliveries td:nth-child(1)::before{content:"Funcionário";}
+  .dashboard-page .recent-deliveries td:nth-child(2)::before{content:"Matrícula";}
+  .dashboard-page .recent-deliveries td:nth-child(3)::before{content:"Materiais";}
+  .dashboard-page .recent-deliveries td:nth-child(4)::before{content:"Data";}
+  .dashboard-page .recent-deliveries td:nth-child(5)::before{content:"Motivo";}
+  .dashboard-page .recent-deliveries td:nth-child(6)::before{content:"Status";}
+}
+
+@media (max-width:480px){
+  .metrics-grid{grid-template-columns:1fr;}
+  .module-summary{gap:8px;}
+  .module-summary>div{padding:11px;}
+  .module-summary strong{font-size:19px;}
+  .module-header h1{font-size:24px;}
+  .module-toolbar label{line-height:1.3;}
+}
+
+@media (max-width:380px){
+  .topbar{padding-left:8px;padding-right:8px;}
+  .top-actions{gap:7px;}
+  .search{width:min(55vw,180px);}
+  .module-summary{grid-template-columns:1fr;}
+  .module-summary>div{min-height:64px;}
+  .dashboard-page .recent-deliveries tr,
+  main.module-shell:not(:has(.module-toolbar)):has(> .module-summary) > .module-table-card tr{grid-template-columns:1fr;}
+  .dashboard-page .recent-deliveries td:nth-child(n),
+  main.module-shell:not(:has(.module-toolbar)):has(> .module-summary) > .module-table-card td:nth-child(n){grid-column:1 / -1;}
+}
