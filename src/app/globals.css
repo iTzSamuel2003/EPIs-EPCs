@@ -113,6 +113,203 @@
 @media (max-width:600px){.signature-modal-backdrop{padding:12px;align-items:end}.signature-modal{max-height:calc(100dvh - 24px);padding:22px 17px;border-radius:14px}.signature-pad{height:min(150px,30dvh)}}
 @media (max-width: 600px){.module-table-card .table-wrap table{min-width:0;width:100%;white-space:normal}.module-table-card th,.module-table-card td{padding:9px 6px;overflow-wrap:anywhere}.module-table-card th:first-child,.module-table-card td:first-child{padding-left:0}.module-table-card td:nth-child(2){min-width:0;max-width:none}.material-cell{min-width:0;max-width:none}.material-cell strong,.module-table-card td:nth-child(2)>strong{overflow-wrap:anywhere}.request-confirm-modal{padding:22px 17px}.request-confirm-modal .modal-actions{flex-direction:column-reverse}.request-confirm-modal .modal-actions button{width:100%;justify-content:center}}
 .material-type-icon.ferramental,td:has(.type-badge.ferramental) .material-type-icon{background:#fff1e8;color:#d48759}.type-badge.ferramental{color:#d48759;background:#fff1e8}
+
+/* Focused public, form and print presentation pass. */
+:where(.employee-portal,.public-measurements) :where(button,a,input,select,textarea,[tabindex]):focus-visible,
+:where(.signature-modal,.request-confirm-modal) :where(button,a,input,select,textarea,[tabindex]):focus-visible{
+  outline:3px solid #6954c9;
+  outline-offset:3px;
+}
+
+.employee-portal-card,
+.public-measurement-card{
+  overflow:hidden;
+}
+
+.public-measurement-card .public-title span,
+.employee-portal-card .portal-heading span,
+.employee-portal-card .portal-section-title p{
+  max-width:68ch;
+  overflow-wrap:anywhere;
+}
+
+.public-measurement-card .public-form,
+.employee-portal-card .public-form{
+  min-width:0;
+}
+
+.public-measurement-card .public-form > label,
+.employee-portal-card .public-form > label,
+.employee-portal-card .public-form .form-grid > label{
+  min-width:0;
+}
+
+.public-measurement-card input,
+.public-measurement-card textarea,
+.employee-portal-card input,
+.employee-portal-card select,
+.employee-portal-card textarea{
+  min-height:44px;
+}
+
+.public-measurement-card textarea,
+.employee-portal-card textarea{
+  min-height:92px;
+}
+
+.portal-heading,
+.portal-section-title,
+.required-course-item,
+.requests-page .panel-header{
+  min-width:0;
+}
+
+.portal-heading > div,
+.portal-section-title > div,
+.required-course-copy,
+.requests-page .panel-header > div{
+  min-width:0;
+}
+
+.portal-panel .required-course-item{
+  align-items:flex-start;
+}
+
+.portal-panel .required-course-item .status-pill{
+  margin-left:auto;
+}
+
+.requests-page .module-toolbar{
+  align-items:stretch;
+}
+
+.requests-page .module-toolbar > *{
+  min-width:0;
+}
+
+.requests-page .module-search input{
+  min-width:0;
+}
+
+.requests-page .requests-table td,
+.requests-page .requests-table th{
+  vertical-align:top;
+}
+
+.requests-page .requests-table td strong,
+.requests-page .requests-table td small{
+  overflow-wrap:anywhere;
+}
+
+.signature-modal-backdrop{
+  padding:max(16px,env(safe-area-inset-top)) max(16px,env(safe-area-inset-right)) max(16px,env(safe-area-inset-bottom)) max(16px,env(safe-area-inset-left));
+}
+
+.signature-modal{
+  width:min(100%,560px);
+  max-height:calc(100dvh - 32px);
+  overflow:auto;
+  overscroll-behavior:contain;
+}
+
+.signature-modal p{
+  max-width:60ch;
+  line-height:1.55;
+}
+
+.signature-pad{
+  display:block;
+  width:100%;
+  max-width:100%;
+  min-height:120px;
+  touch-action:none;
+}
+
+.signature-acceptance{
+  align-items:flex-start;
+  line-height:1.45;
+}
+
+.signature-acceptance input{
+  flex:0 0 auto;
+  margin-top:2px;
+}
+
+.delivery-term-print{
+  overflow-wrap:anywhere;
+}
+
+.delivery-term-print table,
+.delivery-term-signatures,
+.delivery-term-text,
+.delivery-term-notes{
+  break-inside:avoid;
+}
+
+@media (max-width:760px){
+  .employee-portal-card,
+  .public-measurement-card{
+    padding:22px 16px;
+    border-radius:14px;
+  }
+
+  .employee-portal-wide .portal-heading{
+    align-items:flex-start;
+  }
+
+  .employee-portal-wide .portal-heading .portal-logout{
+    min-height:42px;
+    padding-inline:12px;
+  }
+
+  .portal-panel .required-course-item .status-pill{
+    margin-left:40px;
+  }
+
+  .requests-page .module-toolbar{
+    gap:12px;
+  }
+
+  .requests-page .module-summary{
+    grid-template-columns:repeat(2,minmax(0,1fr));
+  }
+
+  .signature-modal-actions{
+    gap:8px;
+  }
+}
+
+@media (max-width:420px){
+  .employee-portal-card,
+  .public-measurement-card{
+    padding-inline:13px;
+  }
+
+  .public-measurement-card .public-title h1,
+  .employee-portal-card .portal-heading h1{
+    font-size:21px;
+    line-height:1.2;
+  }
+
+  .requests-page .module-summary{
+    gap:8px;
+  }
+
+  .requests-page .module-summary > div{
+    padding-inline:12px;
+  }
+}
+
+@media print{
+  .delivery-term-print{
+    width:100%;
+    max-width:none;
+  }
+
+  .delivery-term-signatures{
+    break-before:auto;
+  }
+}
 .module-table-card td>small{display:block;margin-top:4px;color:#9ca6b5;font-size:9px;line-height:1.35}
 .employees-table-card td:nth-child(3) small{display:block;margin-top:4px;color:#9ca6b5;font-size:9px;line-height:1.35}
 @media (max-width: 1024px) and (min-width: 761px){
