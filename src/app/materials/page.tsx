@@ -176,10 +176,18 @@ export default function MaterialsPage() {
       minimum_stock: Number(form.minimum_stock) || 0, location: form.location.trim() || null,
       notes: form.notes.trim() || null, status: form.status,
     };
-    const { error: saveError } = editingId
-      ? await supabase.from("materials").update(payload).eq("id", editingId)
-      : await supabase.from("materials").insert({ ...payload, organization_id: profile.organization_id });
-    if (saveError) setError(saveError.code === "23505" ? "Já existe um material com este código interno." : friendlyError(saveError, "Não foi possível salvar as alterações."));
+    let saveError: { code?: string; message?: string } | null = null;
+    let savedId: string | null = null;
+    if (editingId) {
+      const result = await supabase.from("materials").update(payload).eq("id", editingId).select("id").maybeSingle();
+      saveError = result.error;
+      savedId = result.data?.id ?? null;
+    } else {
+      const result = await supabase.from("materials").insert({ ...payload, organization_id: profile.organization_id }).select("id").single();
+      saveError = result.error;
+      savedId = result.data?.id ?? null;
+    }
+    if (saveError || !savedId) setError(saveError?.code === "23505" ? "Já existe um material com este código interno." : friendlyError(saveError, "Não foi possível salvar as alterações. Verifique suas permissões."));
     else { setSuccess(editingId ? "Material atualizado com sucesso." : "Material cadastrado com sucesso."); setShowForm(false); await loadMaterials(); }
     } catch (caught) {
       setError(friendlyError(caught, "Falha ao salvar o material."));

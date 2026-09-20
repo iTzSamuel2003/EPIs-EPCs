@@ -54,15 +54,15 @@ export default function SettingsPage() {
     const { data: profile, error: profileError } = auth.user ? await supabase.from("profiles").select("organization_id").eq("id", auth.user.id).maybeSingle() : { data: null, error: authError };
     if (profileError || !profile) { setError(friendlyError(profileError ?? authError, "Não foi possível identificar a organização.")); setSaving(false); return; }
     if (!profile?.organization_id) { setError("Organização não encontrada."); setSaving(false); return; }
-    const { error: saveError } = await supabase.from("organizations").update({
+    const { data: savedOrganization, error: saveError } = await supabase.from("organizations").update({
       name: form.name.trim(),
       cnpj: form.cnpj.trim() || null,
       phone: form.phone.trim() || null,
       validity_alert_days: nonNegativeInteger(form.validity_alert_days, 30),
       replacement_alert_days: nonNegativeInteger(form.replacement_alert_days, 7),
       default_minimum_stock: nonNegativeInteger(form.default_minimum_stock, 0),
-    }).eq("id", profile.organization_id);
-    if (saveError) setError(friendlyError(saveError, "Não foi possível salvar as configurações.")); else setSuccess("Configurações salvas.");
+    }).eq("id", profile.organization_id).select("id").maybeSingle();
+    if (saveError || !savedOrganization) setError(friendlyError(saveError, "Não foi possível salvar as configurações. Verifique suas permissões de administrador.")); else setSuccess("Configurações salvas.");
     } catch (caught) {
       setError(friendlyError(caught, "Falha ao salvar as configuracoes."));
     } finally {

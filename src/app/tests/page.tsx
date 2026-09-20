@@ -152,8 +152,8 @@ export default function TestsPage() {
       const supabase = createClient();
       const { data: testId, error: saveError } = await supabase.rpc("register_material_test", { p_material_id: materialId, p_performed_at: performedAt, p_interval_months: Number(interval), p_result: result, p_examiner: examiner.trim(), p_certificate_number: certificate.trim() || null, p_notes: notes.trim() || null });
       if (saveError || !testId) { setError(friendlyError(saveError, "Não foi possível registrar o ensaio.")); return; }
-      const { error: detailsError } = await supabase.from("material_tests").update({ professional_registration: registration.trim() || null, art_number: artNumber.trim() || null, report_reference: reportReference.trim() || null, report_url: normalizedReportUrl || null }).eq("id", testId);
-      if (detailsError) {
+      const { data: updatedTest, error: detailsError } = await supabase.from("material_tests").update({ professional_registration: registration.trim() || null, art_number: artNumber.trim() || null, report_reference: reportReference.trim() || null, report_url: normalizedReportUrl || null }).eq("id", testId).select("id").maybeSingle();
+      if (detailsError || !updatedTest) {
         await supabase.from("material_tests").delete().eq("id", testId);
         setError(`Não foi possível concluir o registro do ensaio: ${friendlyError(detailsError, "tente novamente")}`);
         return;

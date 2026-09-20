@@ -64,8 +64,8 @@ export default function EditEmployeePage() {
     if (form.admission_date && (!isValidDateValue(form.admission_date) || form.admission_date > new Date().toISOString().slice(0, 10))) { setError("Informe uma data de admissão válida e não futura."); return; }
     setSaving(true);
     try {
-      const { error: updateError } = await createClient().from("employees").update({ registration: form.registration.trim() || null, full_name: form.full_name.trim(), cpf: form.cpf.trim(), job_title: null, function_name: form.cargo_funcao.trim() || null, function_classification: form.function_classification || null, department: form.department.trim() || null, unit: form.unit || null, admission_date: form.admission_date || null, phone: form.phone.trim() || null, email: form.email.trim() || null, status: form.status, notes: form.notes.trim() || null }).eq("id", params.id);
-      if (updateError) setError(updateError.code === "23505" ? "Já existe um funcionário com esta matrícula ou CPF." : friendlyError(updateError, "Não foi possível salvar as alterações."));
+      const { data: updatedEmployee, error: updateError } = await createClient().from("employees").update({ registration: form.registration.trim() || null, full_name: form.full_name.trim(), cpf: form.cpf.trim(), job_title: null, function_name: form.cargo_funcao.trim() || null, function_classification: form.function_classification || null, department: form.department.trim() || null, unit: form.unit || null, admission_date: form.admission_date || null, phone: form.phone.trim() || null, email: form.email.trim() || null, status: form.status, notes: form.notes.trim() || null }).eq("id", params.id).select("id").maybeSingle();
+      if (updateError || !updatedEmployee) setError(updateError?.code === "23505" ? "Já existe um funcionário com esta matrícula ou CPF." : friendlyError(updateError, "Não foi possível salvar as alterações. Verifique suas permissões."));
       else { setSuccess("Funcionário atualizado com sucesso."); window.setTimeout(() => router.push("/employees"), 500); }
     } catch (caught) {
       setError(friendlyError(caught, "Não foi possível salvar as alterações."));

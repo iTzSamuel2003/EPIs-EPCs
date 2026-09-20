@@ -4,6 +4,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { Check, ClipboardList, Download, LoaderCircle, Search, X } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 import { friendlyError } from "@/lib/ui-feedback";
+import { closePendingDownload, finishPendingDownload, openPendingDownload } from "@/lib/external-download";
 import { FeedbackMessage } from "@/components/feedback-message";
 
 type RequestRow = { id: string; request_type: string; description: string; status: string; review_notes: string | null; attachment_path: string | null; created_at: string; updated_at: string; delivered_at: string | null; employee: { full_name: string; registration: string | null } | null; delivery_item: { material: { name: string; unit: string } | null; lot: { lot_number: string } | null } | null };
@@ -83,12 +84,14 @@ export default function RequestsPage() {
   async function openAttachment(item: RequestRow) {
     if (!item.attachment_path || openingId) return;
     setOpeningId(item.id); setError("");
+    const popup = openPendingDownload();
     try {
+      if (!popup) throw new Error("O navegador bloqueou a abertura do anexo. Permita pop-ups para este site.");
       const { data, error: signedUrlError } = await createClient().storage.from("employee-request-attachments").createSignedUrl(item.attachment_path, 300);
       if (signedUrlError || !data?.signedUrl) throw signedUrlError ?? new Error("Não foi possível abrir o anexo.");
-      const opened = window.open(data.signedUrl, "_blank", "noopener,noreferrer");
-      if (!opened) throw new Error("O navegador bloqueou a abertura do anexo. Permita pop-ups para este site.");
+      finishPendingDownload(popup, data.signedUrl);
     } catch (caught) {
+      closePendingDownload(popup);
       setError(friendlyError(caught, "Não foi possível abrir o anexo."));
     } finally {
       setOpeningId("");

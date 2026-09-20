@@ -7,6 +7,7 @@ import { useParams } from "next/navigation";
 import { EmployeeNavigation } from "@/components/employee-navigation";
 import { createClient } from "@/lib/supabase/client";
 import { friendlyError } from "@/lib/ui-feedback";
+import { closePendingDownload, finishPendingDownload, openPendingDownload } from "@/lib/external-download";
 import { FeedbackMessage } from "@/components/feedback-message";
 
 type Course = { id: string; name: string; provider: string | null; completed_at: string | null; expires_at: string | null; certificate_number: string | null; certificate_file_path: string | null };
@@ -110,11 +111,14 @@ export default function EmployeeCoursesPage() {
   async function openCertificate(path: string) {
     if (openingCertificatePath) return;
     setOpeningCertificatePath(path); setError("");
+    const popup = openPendingDownload();
     try {
+      if (!popup) throw new Error("O navegador bloqueou a abertura do comprovante. Permita pop-ups para este site.");
       const { data, error: signedUrlError } = await createClient().storage.from("employee-course-documents").createSignedUrl(path, 300);
       if (signedUrlError || !data?.signedUrl) throw signedUrlError ?? new Error("Não foi possível abrir o comprovante.");
-      window.open(data.signedUrl, "_blank", "noopener,noreferrer");
+      finishPendingDownload(popup, data.signedUrl);
     } catch (caught) {
+      closePendingDownload(popup);
       setError(friendlyError(caught, "Não foi possível abrir o comprovante."));
     } finally {
       setOpeningCertificatePath(null);

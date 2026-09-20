@@ -7,6 +7,7 @@ import { useParams } from "next/navigation";
 import { jsPDF } from "jspdf";
 import { createClient } from "@/lib/supabase/client";
 import { friendlyError } from "@/lib/ui-feedback";
+import { closePendingDownload, finishPendingDownload, openPendingDownload } from "@/lib/external-download";
 import { EmployeeNavigation } from "@/components/employee-navigation";
 import { DeliverySignatureModal } from "@/components/delivery-signature-modal";
 import { ReturnSignatureModal } from "@/components/return-signature-modal";
@@ -135,8 +136,8 @@ export default function EmployeeMaterialsPage() {
     const { error: uploadError } = await supabase.storage.from("delivery-terms").upload(path, file, { contentType: file.type, upsert: false });
     if (uploadError) { setError(friendlyError(uploadError, "Não foi possível enviar o arquivo.")); return; }
     const uploadedAt = new Date().toISOString();
-    const { error: updateError } = await supabase.from("deliveries").update({ term_file_path: path, term_uploaded_at: uploadedAt, term_uploaded_by: auth.user.id }).eq("id", sheet.id);
-    if (updateError) { setError(friendlyError(updateError, "Não foi possível concluir a operação.")); } else {
+    const { data: updatedDelivery, error: updateError } = await supabase.from("deliveries").update({ term_file_path: path, term_uploaded_at: uploadedAt, term_uploaded_by: auth.user.id }).eq("id", sheet.id).select("id").maybeSingle();
+    if (updateError || !updatedDelivery) { setError(friendlyError(updateError, "Não foi possível atualizar o termo. Verifique se você ainda tem permissão para esta ficha.")); } else {
       uploadedPath = "";
       if (sheet.term_file_path) await supabase.storage.from("delivery-terms").remove([sheet.term_file_path]);
       setItems((current) => current.map((item) => item.delivery?.id === sheet.id ? { ...item, delivery: item.delivery ? { ...item.delivery, term_file_path: path, term_uploaded_at: uploadedAt } : item.delivery } : item));
@@ -167,9 +168,16 @@ export default function EmployeeMaterialsPage() {
   async function downloadSignedTerm(sheet: (typeof deliverySheets)[number]) {
     if (!sheet.term_file_path) return;
     setError("");
-    const { data, error: signedUrlError } = await createClient().storage.from("delivery-terms").createSignedUrl(sheet.term_file_path, 300);
-    if (signedUrlError || !data?.signedUrl) { setError(friendlyError(signedUrlError, "Não foi possível abrir o termo assinado.")); return; }
-    window.open(data.signedUrl, "_blank", "noopener,noreferrer");
+    const popup = openPendingDownload();
+    try {
+      if (!popup) throw new Error("O navegador bloqueou a abertura do termo. Permita pop-ups para este site.");
+      const { data, error: signedUrlError } = await createClient().storage.from("delivery-terms").createSignedUrl(sheet.term_file_path, 300);
+      if (signedUrlError || !data?.signedUrl) throw signedUrlError ?? new Error("Não foi possível abrir o termo assinado.");
+      finishPendingDownload(popup, data.signedUrl);
+    } catch (caught) {
+      closePendingDownload(popup);
+      setError(friendlyError(caught, "Não foi possível abrir o termo assinado."));
+    }
   }
 
   async function uploadReturnTerm(sheet: ReturnSheet, event: ChangeEvent<HTMLInputElement>) {
@@ -183,8 +191,8 @@ export default function EmployeeMaterialsPage() {
     uploadedPath = path;
     const { error: uploadError } = await supabase.storage.from("delivery-terms").upload(path, file, { contentType: file.type, upsert: false });
     if (uploadError) { setError(friendlyError(uploadError, "Não foi possível enviar o arquivo.")); return; }
-    const uploadedAt = new Date().toISOString(); const { error: updateError } = await supabase.from("returns").update({ term_file_path: path, term_uploaded_at: uploadedAt, term_uploaded_by: auth.user.id, term_signature_method: "physical_upload", term_signed_at: uploadedAt, term_signer_name: employee!.full_name, term_signer_cpf: employee!.cpf }).eq("id", sheet.id);
-    if (updateError) { setError(friendlyError(updateError, "Não foi possível concluir a operação.")); return; }
+    const uploadedAt = new Date().toISOString(); const { data: updatedReturn, error: updateError } = await supabase.from("returns").update({ term_file_path: path, term_uploaded_at: uploadedAt, term_uploaded_by: auth.user.id, term_signature_method: "physical_upload", term_signed_at: uploadedAt, term_signer_name: employee!.full_name, term_signer_cpf: employee!.cpf }).eq("id", sheet.id).select("id").maybeSingle();
+    if (updateError || !updatedReturn) { setError(friendlyError(updateError, "Não foi possível atualizar o termo. Verifique se você ainda tem permissão para esta ficha.")); return; }
     uploadedPath = "";
     if (sheet.term_file_path) await supabase.storage.from("delivery-terms").remove([sheet.term_file_path]);
     setReturnSheets((current) => current.map((item) => item.id === sheet.id ? { ...item, term_file_path: path, term_signature_method: "physical_upload", term_signed_at: uploadedAt } : item)); setUploadingId("");
@@ -205,7 +213,17 @@ export default function EmployeeMaterialsPage() {
   }
 
   async function openSignedReturnTerm(sheet: ReturnSheet) {
-    if (!sheet.term_file_path) return; const { data, error: signedUrlError } = await createClient().storage.from("delivery-terms").createSignedUrl(sheet.term_file_path, 300); if (signedUrlError || !data?.signedUrl) { setError(friendlyError(signedUrlError, "Não foi possível abrir o termo assinado.")); return; } window.open(data.signedUrl, "_blank", "noopener,noreferrer");
+    if (!sheet.term_file_path) return;
+    const popup = openPendingDownload();
+    try {
+      if (!popup) throw new Error("O navegador bloqueou a abertura do termo. Permita pop-ups para este site.");
+      const { data, error: signedUrlError } = await createClient().storage.from("delivery-terms").createSignedUrl(sheet.term_file_path, 300);
+      if (signedUrlError || !data?.signedUrl) throw signedUrlError ?? new Error("Não foi possível abrir o termo assinado.");
+      finishPendingDownload(popup, data.signedUrl);
+    } catch (caught) {
+      closePendingDownload(popup);
+      setError(friendlyError(caught, "Não foi possível abrir o termo assinado."));
+    }
   }
 
   if (loading) return <main className="module-shell"><div className="module-loading"><LoaderCircle className="spin" size={22} /> Carregando ficha...</div></main>;
