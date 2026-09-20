@@ -544,6 +544,32 @@ button:disabled{cursor:not-allowed}
   main.module-shell:has(.stock-table) .stock-table .material-cell strong{overflow-wrap:anywhere}
 }
 
+@media (max-width:1024px) and (min-width:761px){
+  .employees-table-card .row-actions{flex-wrap:wrap;max-width:220px;gap:6px}
+  .employees-table-card .row-actions .action-button{flex:0 0 30px}
+}
+
+@media(max-width:600px){
+  main.module-shell:has(.request-status-select) .table-wrap{overflow:visible;margin-right:0;padding-bottom:0}
+  main.module-shell:has(.request-status-select) .table-wrap::after{display:none}
+  main.module-shell:has(.request-status-select) .table-wrap table{display:block;min-width:0;width:100%;white-space:normal}
+  main.module-shell:has(.request-status-select) .table-wrap thead{display:none}
+  main.module-shell:has(.request-status-select) .table-wrap tbody{display:grid;gap:10px}
+  main.module-shell:has(.request-status-select) .table-wrap tr{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:10px 12px;padding:13px;border:1px solid #edf0f5;border-radius:10px;background:#fafbfe}
+  main.module-shell:has(.request-status-select) .table-wrap td{display:grid;gap:4px;min-width:0;padding:0;border:0;white-space:normal;overflow-wrap:anywhere}
+  main.module-shell:has(.request-status-select) .table-wrap td::before{color:#a1aaba;font-size:9px;font-weight:700;letter-spacing:.5px}
+  main.module-shell:has(.request-status-select) .table-wrap td:nth-child(1),main.module-shell:has(.request-status-select) .table-wrap td:nth-child(4),main.module-shell:has(.request-status-select) .table-wrap td:nth-child(7){grid-column:1 / -1}
+  main.module-shell:has(.request-status-select) .table-wrap td:nth-child(1)::before{content:"Data"}
+  main.module-shell:has(.request-status-select) .table-wrap td:nth-child(2)::before{content:"Funcionário"}
+  main.module-shell:has(.request-status-select) .table-wrap td:nth-child(3)::before{content:"Material"}
+  main.module-shell:has(.request-status-select) .table-wrap td:nth-child(4)::before{content:"Tipo / descrição"}
+  main.module-shell:has(.request-status-select) .table-wrap td:nth-child(5)::before{content:"Anexo"}
+  main.module-shell:has(.request-status-select) .table-wrap td:nth-child(6)::before{content:"Status"}
+  main.module-shell:has(.request-status-select) .table-wrap td:nth-child(7)::before{content:"Ação"}
+  main.module-shell:has(.request-status-select) .request-status-select{width:100%;min-width:0}
+  main.module-shell:has(.request-status-select) .action-button{white-space:normal;max-width:100%}
+}
+
 body{overflow-wrap:normal}
 .module-header,.module-toolbar,.panel-header,.delivery-items-header{min-width:0}
 .module-header>div,.module-toolbar>*,.panel-header>*,.delivery-items-header>*{min-width:0}

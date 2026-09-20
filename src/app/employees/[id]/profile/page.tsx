@@ -1,6 +1,6 @@
 "use client";
 
-import { FormEvent, useCallback, useEffect, useState } from "react";
+import { FormEvent, useCallback, useEffect, useRef, useState } from "react";
 import { ArrowLeft, Ban, Check, Copy, Mail, MessageCircle, Save, Send, X } from "lucide-react";
 import Link from "next/link";
 import { useParams } from "next/navigation";
@@ -16,16 +16,26 @@ const emptyProfile: Profile = { shirt_size: "", pants_size: "", shoe_size: "", h
 export default function EmployeeProfilePage() {
   const { id } = useParams<{ id: string }>();
   const [name, setName] = useState(""); const [profile, setProfile] = useState<Profile>(emptyProfile); const [request, setRequest] = useState<MeasurementRequest | null>(null); const [loading, setLoading] = useState(true); const [saving, setSaving] = useState(false); const [sharing, setSharing] = useState(false); const [error, setError] = useState(""); const [success, setSuccess] = useState(""); const [confirmingRevoke, setConfirmingRevoke] = useState(false);
+  const loadVersion = useRef(0);
+  const mountedRef = useRef(true);
   const load = useCallback(async () => {
+    const version = ++loadVersion.current;
     setLoading(true); setError(""); setSuccess("");
-    const supabase = createClient();
-    const [{ data: employee, error: employeeError }, { data: profileData, error: profileDataError }, { data: requestData, error: requestError }] = await Promise.all([
-      supabase.from("employees").select("full_name").eq("id", id).single(), supabase.from("employee_profiles").select("shirt_size,pants_size,shoe_size,helmet_size,glove_size,uniform_notes,completed_by_employee").eq("employee_id", id).maybeSingle(), supabase.from("employee_measurement_requests").select("token,expires_at,completed_at").eq("employee_id", id).maybeSingle(),
-    ]);
-    if (employeeError || profileDataError || requestError) setError(friendlyError(employeeError ?? profileDataError ?? requestError, "Não foi possível carregar a ficha."));
-    setName(employee?.full_name ?? ""); setProfile({ ...emptyProfile, ...(profileData ?? {}) }); setRequest(requestData as MeasurementRequest | null); setLoading(false);
+    try {
+      const supabase = createClient();
+      const [{ data: employee, error: employeeError }, { data: profileData, error: profileDataError }, { data: requestData, error: requestError }] = await Promise.all([
+        supabase.from("employees").select("full_name").eq("id", id).single(), supabase.from("employee_profiles").select("shirt_size,pants_size,shoe_size,helmet_size,glove_size,uniform_notes,completed_by_employee").eq("employee_id", id).maybeSingle(), supabase.from("employee_measurement_requests").select("token,expires_at,completed_at").eq("employee_id", id).maybeSingle(),
+      ]);
+      if (!mountedRef.current || version !== loadVersion.current) return;
+      if (employeeError || profileDataError || requestError) { setError(friendlyError(employeeError ?? profileDataError ?? requestError, "Não foi possível carregar a ficha.")); return; }
+      setName(employee?.full_name ?? ""); setProfile({ ...emptyProfile, ...(profileData ?? {}) }); setRequest(requestData as MeasurementRequest | null);
+    } catch (caught) {
+      if (mountedRef.current && version === loadVersion.current) setError(friendlyError(caught, "Não foi possível carregar a ficha."));
+    } finally {
+      if (mountedRef.current && version === loadVersion.current) setLoading(false);
+    }
   }, [id]);
-  useEffect(() => { void load(); }, [load]);
+  useEffect(() => { mountedRef.current = true; void load(); return () => { mountedRef.current = false; }; }, [load]);
   function update(field: keyof Profile, value: string | boolean) { setProfile((current) => ({ ...current, [field]: value })); }
   async function saveProfile(event: FormEvent) {
     event.preventDefault();
