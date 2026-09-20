@@ -1163,6 +1163,43 @@ body{overflow-wrap:normal}
   .recent-entries-card .row-actions{flex-wrap:wrap;}
  }
 
+@media (max-width:600px){
+  .module-table-card:has(table th:nth-child(4)) .table-wrap,
+  .module-table-card:has(table th:nth-child(6)) .table-wrap,
+  .module-table-card:has(table th:nth-child(7)) .table-wrap,
+  main.module-shell:has(.employee-required-courses) .edit-employee-card .table-wrap{
+    overflow-x:auto;
+    overscroll-behavior-inline:contain;
+    scrollbar-width:thin;
+    padding-bottom:6px;
+  }
+  .module-table-card:has(table th:nth-child(4)) .table-wrap table,
+  .module-table-card:has(table th:nth-child(6)) .table-wrap table,
+  .module-table-card:has(table th:nth-child(7)) .table-wrap table,
+  main.module-shell:has(.employee-required-courses) .edit-employee-card .table-wrap table{
+    min-width:620px;
+    width:max-content;
+    white-space:nowrap;
+  }
+  .module-table-card:has(table th:nth-child(6)) .table-wrap table,
+  .module-table-card:has(table th:nth-child(7)) .table-wrap table,
+  main.module-shell:has(.employee-required-courses) .edit-employee-card .table-wrap table{
+    min-width:820px;
+  }
+  .module-table-card:has(table th:nth-child(4)) .table-wrap td,
+  .module-table-card:has(table th:nth-child(6)) .table-wrap td,
+  .module-table-card:has(table th:nth-child(7)) .table-wrap td,
+  main.module-shell:has(.employee-required-courses) .edit-employee-card .table-wrap td{
+    vertical-align:top;
+  }
+  .module-table-card:has(table th:nth-child(4)) .table-wrap .material-cell,
+  .module-table-card:has(table th:nth-child(6)) .table-wrap .material-cell,
+  .module-table-card:has(table th:nth-child(7)) .table-wrap .material-cell,
+  main.module-shell:has(.employee-required-courses) .edit-employee-card .table-wrap .material-cell{
+    white-space:normal;
+  }
+}
+
 @media (max-width:900px) and (min-width:601px){
   .employees-table-card .table-wrap{overflow:visible;margin-right:0;padding-bottom:0;}
   .employees-table-card .table-wrap::after{display:none;}
