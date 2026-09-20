@@ -61,6 +61,7 @@ export default function ReportsPage() {
       }
     }
     void load();
+    return () => { loadVersion.current += 1; };
   }, [reloadKey]);
 
   useEffect(() => {

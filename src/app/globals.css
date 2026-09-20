@@ -2617,3 +2617,102 @@ main.module-shell:not(:has(.module-toolbar)):has(> .module-summary) > .module-ta
   .help-page .help-guide{gap:10px;}
   .help-page .help-guide > svg{width:18px;height:18px;}
 }
+
+/* Revisão administrativa: conteúdo longo, filtros e ações. */
+.module-shell .module-header > div,
+.module-shell .panel-header > div,
+.module-shell .module-toolbar > label,
+.module-shell .module-search,
+.module-shell .module-search input,
+.module-shell .material-cell,
+.module-shell td,
+.module-shell th{min-width:0;}
+.module-shell h1,
+.module-shell h2,
+.module-shell h3,
+.module-shell p,
+.module-shell strong,
+.module-shell small,
+.module-shell td,
+.module-shell th{overflow-wrap:anywhere;word-break:break-word;}
+.module-shell .module-header{align-items:flex-start;}
+.module-shell .module-header .primary-button,
+.module-shell .module-header .secondary-button,
+.module-shell .header-actions{flex:0 0 auto;}
+.module-shell .header-actions{flex-wrap:wrap;justify-content:flex-end;}
+.module-shell .module-toolbar{align-items:stretch;}
+.module-shell .module-toolbar > label{display:grid;gap:6px;color:#536078;font-size:11px;font-weight:600;}
+.module-shell .module-toolbar input,
+.module-shell .module-toolbar select{min-height:42px;min-width:0;max-width:100%;}
+.module-shell .table-wrap{max-width:100%;overflow-x:auto;overscroll-behavior-inline:contain;}
+.module-shell .module-table-card{overflow:hidden;}
+.module-shell .module-table-card table{min-width:680px;}
+.module-shell .module-table-card td{vertical-align:top;line-height:1.45;}
+.module-shell .module-table-card td > strong,
+.module-shell .module-table-card td > small,
+.module-shell .module-table-card td > span,
+.module-shell .module-table-card td > div{max-width:100%;}
+.module-shell .row-actions,
+.module-shell .modal-actions{flex-wrap:wrap;}
+.module-shell .action-button,
+.module-shell .text-link{min-height:36px;}
+.module-shell .empty-state{padding:28px 18px;text-align:center;line-height:1.5;}
+.module-shell .empty-state span{max-width:520px;overflow-wrap:anywhere;}
+.module-shell button:focus-visible,
+.module-shell a:focus-visible,
+.module-shell input:focus-visible,
+.module-shell select:focus-visible,
+.module-shell textarea:focus-visible{outline:3px solid #7762d655;outline-offset:2px;}
+.teams-page .template-options,
+.function-templates-page .template-options{min-width:0;}
+.teams-page .template-options button,
+.function-templates-page .template-options button{min-width:0;text-align:left;}
+.teams-page .template-options button > span:last-child,
+.function-templates-page .template-options button > span:last-child{min-width:0;overflow-wrap:anywhere;}
+.teams-page .template-detail,
+.function-templates-page .template-detail{min-width:0;}
+
+@media (max-width:1024px){
+  .module-shell .module-header{gap:14px;}
+  .module-shell .module-header .primary-button,
+  .module-shell .module-header .secondary-button{white-space:normal;text-align:center;}
+  .module-shell .module-summary{grid-template-columns:repeat(2,minmax(0,1fr));}
+  .module-shell .module-table-card table{min-width:620px;}
+  .teams-page .function-template-layout,
+  .function-templates-page .function-template-layout{grid-template-columns:minmax(210px,.8fr) minmax(0,1.5fr);}
+}
+
+@media (max-width:760px){
+  .module-shell .module-header .primary-button,
+  .module-shell .module-header .secondary-button{width:100%;justify-content:center;}
+  .module-shell .header-actions{width:100%;justify-content:stretch;}
+  .module-shell .header-actions > *{flex:1 1 180px;justify-content:center;}
+  .module-shell .module-summary{grid-template-columns:1fr 1fr;}
+  .module-shell .module-table-card table{min-width:0;white-space:normal;}
+  .module-shell .module-table-card .table-wrap{overflow:visible;}
+  .module-shell .module-table-card th{white-space:normal;}
+  .module-shell .module-table-card td{white-space:normal;}
+  .module-shell .row-actions,
+  .module-shell .modal-actions{width:100%;}
+  .module-shell .row-actions > *,
+  .module-shell .modal-actions > *{flex:1 1 150px;justify-content:center;}
+  .teams-page .function-template-layout,
+  .function-templates-page .function-template-layout{grid-template-columns:1fr;}
+  .teams-page .template-selector,
+  .function-templates-page .template-selector{max-height:360px;overflow:auto;}
+}
+
+@media (max-width:480px){
+  .module-shell .module-summary{grid-template-columns:1fr;}
+  .module-shell .module-table-card{padding-inline:12px;}
+  .module-shell .module-table-card table{font-size:11px;}
+  .module-shell .empty-state{min-height:160px;padding-inline:10px;}
+  .module-shell .header-actions > *,
+  .module-shell .row-actions > *,
+  .module-shell .modal-actions > *{flex-basis:100%;}
+}
+
+@media (max-width:380px){
+  .module-shell .module-table-card{padding-inline:10px;}
+  .module-shell .module-toolbar{padding-inline:10px;}
+}

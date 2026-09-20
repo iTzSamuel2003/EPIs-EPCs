@@ -38,7 +38,7 @@ export function RecentDeliveries() {
       setLoading(false);
     }
     void load().catch((caught) => { if (active) { setError(friendlyError(caught, "Nao foi possivel carregar as entregas.")); setLoading(false); } });
-    const refresh = () => { void load().catch((caught) => { if (active) { setError(friendlyError(caught, "Nao foi possivel atualizar as entregas.")); setLoading(false); } }); }; window.addEventListener("delivery-created", refresh); return () => { active = false; window.removeEventListener("delivery-created", refresh); };
+    const refresh = () => { void load().catch((caught) => { if (active) { setError(friendlyError(caught, "Nao foi possivel atualizar as entregas.")); setLoading(false); } }); }; window.addEventListener("delivery-created", refresh); return () => { active = false; requestRef.current += 1; window.removeEventListener("delivery-created", refresh); };
   }, [retryKey]);
 
   async function uploadTerm(delivery: Delivery, event: ChangeEvent<HTMLInputElement>) {

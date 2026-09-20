@@ -22,7 +22,7 @@ export default function ValiditiesPage() {
   const [retryKey, setRetryKey] = useState(0);
   const [rows, setRows] = useState<InventoryRow[]>([]); const [query, setQuery] = useState(""); const [filter, setFilter] = useState("all"); const [loading, setLoading] = useState(true); const [error, setError] = useState(""); const [alertDays, setAlertDays] = useState(30);
   const loadVersion = useRef(0);
-  useEffect(() => { const version = ++loadVersion.current; async function load() {
+  useEffect(() => { const version = ++loadVersion.current; let active = true; async function load() {
     setLoading(true); setError("");
     try {
       const supabase = createClient();
@@ -36,7 +36,7 @@ export default function ValiditiesPage() {
         supabase.from("return_items").select("delivery_item_id,quantity"),
         supabase.from("organizations").select("validity_alert_days").single()
       ]);
-      if (version !== loadVersion.current) return;
+      if (!active || version !== loadVersion.current) return;
       const loadError = materialError ?? lotError ?? variantError ?? itemError ?? deliveryError ?? employeeError ?? returnError ?? organizationError;
       if (loadError) { setError(friendlyError(loadError, "Não foi possível concluir a operação.")); return; }
       const materials = new Map((materialData ?? []).map((item) => [item.id, item as Material])); const lots = (lotData ?? []) as Lot[]; const lotById = new Map(lots.map((lot) => [lot.id, lot])); const variants = new Map((variantData ?? []).map((item) => [item.id, item as Variant])); const deliveries = new Map((deliveryData ?? []).map((item) => [item.id, item as Delivery])); const employees = new Map((employeeData ?? []).map((item) => [item.id, item as Employee])); const returned = new Map<string, number>();
@@ -50,7 +50,7 @@ export default function ValiditiesPage() {
     } finally {
       if (version === loadVersion.current) setLoading(false);
     }
-  } void load(); }, [retryKey]);
+  } void load(); return () => { active = false; loadVersion.current += 1; }; }, [retryKey]);
   useEffect(() => { if (retryKey === 0) return; setLoading(true); setError(""); setRows([]); }, [retryKey]);
   useEffect(() => { const refresh = () => setRetryKey((current) => current + 1); const events = ["delivery-created", "return-created", "stock-entry-created", "stock-entry-updated", "stock-entry-deleted"]; events.forEach((eventName) => window.addEventListener(eventName, refresh)); return () => events.forEach((eventName) => window.removeEventListener(eventName, refresh)); }, []);
   useEffect(() => { const requestedFilter = new URLSearchParams(window.location.search).get("filter"); if (requestedFilter === "expired" || requestedFilter === "urgent" || requestedFilter === "ok") setFilter(requestedFilter); }, []);

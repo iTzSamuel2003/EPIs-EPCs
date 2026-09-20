@@ -77,6 +77,7 @@ export default function MovementsPage() {
       }
     }
     void load();
+    return () => { loadVersion.current += 1; };
   }, [reloadKey]);
   useEffect(() => {
     const refresh = () => setReloadKey((current) => current + 1);

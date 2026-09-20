@@ -51,7 +51,7 @@ export function RecentReturns() {
     });
     const refresh = () => { void load().catch((caught) => { if (active) { setError(friendlyError(caught, "Nao foi possivel atualizar as devolucoes.")); setLoading(false); } }); };
     window.addEventListener("return-created", refresh);
-    return () => { active = false; window.removeEventListener("return-created", refresh); };
+    return () => { active = false; requestRef.current += 1; window.removeEventListener("return-created", refresh); };
   }, [retryKey]);
 
   async function downloadTerm(item: ReturnRecord) {
