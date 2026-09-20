@@ -24,6 +24,7 @@ export default function ReturnsPage() {
   const [retryKey, setRetryKey] = useState(0);
   const [employees, setEmployees] = useState<Employee[]>([]); const [items, setItems] = useState<DeliveredItem[]>([]); const [employeeId, setEmployeeId] = useState(""); const [employeeQuery, setEmployeeQuery] = useState(""); const [suggestionsOpen, setSuggestionsOpen] = useState(false); const [selectedIds, setSelectedIds] = useState<string[]>([]); const [lines, setLines] = useState<Record<string, ReturnLine>>({}); const [reason, setReason] = useState("replacement"); const [returnedAt, setReturnedAt] = useState(localDateValue()); const [signature, setSignature] = useState(""); const [notes, setNotes] = useState(""); const [photoFiles, setPhotoFiles] = useState<File[]>([]); const [loading, setLoading] = useState(true); const [saving, setSaving] = useState(false); const [error, setError] = useState(""); const [success, setSuccess] = useState("");
   const loadRequestRef = useRef(0);
+  const submitLockRef = useRef(false);
   const mountedRef = useRef(true);
   async function loadData() {
     mountedRef.current = true;
@@ -82,7 +83,7 @@ export default function ReturnsPage() {
   function generateTerm(employee: Employee, selected: DeliveredItem[], selectedLines: ReturnLine[], returnId: string, incidentsOnly: boolean) { const lineItems = selected.filter((item) => { const line = lines[item.id]; return !incidentsOnly || line.incident_type !== "normal"; }); if (incidentsOnly && !lineItems.length) return; const doc = new jsPDF({ unit: "mm", format: "a4" }); const margin = 18; const width = 210; const lineWidth = width - margin * 2; let y = 20; doc.setTextColor(23, 35, 60); doc.setFont("helvetica", "bold"); doc.setFontSize(16); doc.text("EPIS+", margin, y); doc.setFont("helvetica", "normal"); doc.setFontSize(10); doc.setTextColor(100, 112, 135); doc.text(incidentsOnly ? "TERMO DE OCORRÊNCIA E RESPONSABILIDADE" : "TERMO DE DEVOLUÇÃO DE MATERIAIS", margin, y + 7); y += 15; doc.setDrawColor(210, 216, 227); doc.line(margin, y, width - margin, y); y += 10; doc.setFontSize(9); doc.setTextColor(52, 64, 87); doc.text(`Colaborador: ${employee.full_name}`, margin, y); doc.text(`Matrícula: ${employee.registration}`, margin + 95, y); y += 6; doc.text(`Data: ${date(returnedAt)}`, margin, y); doc.text(`Registro: ${returnId.slice(0, 8)}`, margin + 95, y); y += 12; doc.setFont("helvetica", "bold"); doc.setFontSize(12); doc.text(incidentsOnly ? "Materiais com ocorrência" : "Materiais devolvidos", margin, y); y += 8; doc.setFontSize(8); doc.text("Material", margin, y); doc.text("Qtd.", margin + 105, y); doc.text("Condição / ocorrência", margin + 130, y); y += 5; lineItems.forEach((item) => { const line = lines[item.id]; const text = `${item.material?.name || "Material"} · ${line.quantity} ${item.material?.unit || "un."}`; const detail = `${line.equipment_condition} · ${incidentLabels[line.incident_type]}`; doc.setFont("helvetica", "normal"); doc.setTextColor(52, 64, 87); doc.text(doc.splitTextToSize(text, 98), margin, y); doc.text(String(line.quantity), margin + 105, y); doc.text(doc.splitTextToSize(detail, 55), margin + 130, y); y += 10; }); y += 8; const paragraph = incidentsOnly ? "Declaro ciência da ocorrência registrada e autorizo a apuração conforme as políticas internas e a legislação aplicável. Qualquer desconto dependerá da análise e dos requisitos legais aplicáveis." : "Declaro que os materiais acima foram devolvidos e conferidos, encerrando a responsabilidade sobre os itens indicados neste termo."; doc.setFontSize(8.5); doc.setTextColor(79, 93, 115); doc.text(doc.splitTextToSize(paragraph, lineWidth), margin, y, { lineHeightFactor: 1.5 }); y += 30; doc.setDrawColor(70, 82, 103); doc.line(margin, y, margin + 72, y); doc.line(width - margin - 72, y, width - margin, y); doc.setFontSize(8); doc.text("Assinatura do colaborador", margin + 36, y + 5, { align: "center" }); doc.text("Responsável pela entrega", width - margin - 36, y + 5, { align: "center" }); doc.setFont("helvetica", "bold"); doc.text(signature || employee.full_name, margin + 36, y + 10, { align: "center" }); doc.save(`${incidentsOnly ? "termo-responsabilidade" : "termo-devolucao"}-${safeFileName(employee.full_name)}.pdf`); }
   async function submit(event: FormEvent) {
     event.preventDefault();
-    if (saving) return;
+    if (saving || submitLockRef.current) return;
     setError(""); setSuccess("");
     const selected = employeeItems.filter((item) => selectedIds.includes(item.id));
     if (!employeeId || !selected.length) { setError("Selecione o funcionário e pelo menos um material."); return; }
@@ -98,6 +99,7 @@ export default function ReturnsPage() {
       setError("Confira as quantidades inteiras e os valores de desconto dos materiais selecionados.");
       return;
     }
+    submitLockRef.current = true;
     setSaving(true);
     try {
       const supabase = createClient();
@@ -141,6 +143,7 @@ export default function ReturnsPage() {
     } catch (caught) {
       setError(friendlyError(caught, "Não foi possível registrar a devolução."));
     } finally {
+      submitLockRef.current = false;
       setSaving(false);
     }
   }

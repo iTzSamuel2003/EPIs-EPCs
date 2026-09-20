@@ -1,6 +1,6 @@
 "use client";
 
-import { FormEvent, useEffect, useState } from "react";
+import { FormEvent, useEffect, useRef, useState } from "react";
 import { AlertTriangle, Calendar, Check, Edit3, FileText, LoaderCircle, Trash2, X } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 import { friendlyError } from "@/lib/ui-feedback";
@@ -26,6 +26,8 @@ export function RecentStockEntries({ refreshKey = 0 }: Props) {
   const [error, setError] = useState("");
   const [success, setSuccess] = useState("");
   const [retryKey, setRetryKey] = useState(0);
+  const saveLockRef = useRef(false);
+  const deleteLockRef = useRef(false);
 
   async function load() {
     setLoading(true);
@@ -53,7 +55,8 @@ export function RecentStockEntries({ refreshKey = 0 }: Props) {
   function updateItem(index: number, field: keyof EntryItem, value: string) { setItems((current) => current.map((item, itemIndex) => itemIndex === index ? { ...item, [field]: value } : item)); }
   async function save(event: FormEvent) {
     event.preventDefault();
-    if (!editing) return;
+    if (!editing || saveLockRef.current) return;
+    saveLockRef.current = true;
     setSaving(true);
     setError("");
     setSuccess("");
@@ -64,10 +67,13 @@ export function RecentStockEntries({ refreshKey = 0 }: Props) {
     } catch (caught) {
       setError(friendlyError(caught, "Não foi possível corrigir a entrada."));
     } finally {
+      saveLockRef.current = false;
       setSaving(false);
     }
   }
   async function deleteEntry(entry: Entry) {
+    if (deleteLockRef.current) return;
+    deleteLockRef.current = true;
     setDeleting(true);
     setConfirming(null);
     setError("");
@@ -83,6 +89,7 @@ export function RecentStockEntries({ refreshKey = 0 }: Props) {
     } catch (caught) {
       setError(friendlyError(caught, "Não foi possível excluir a entrada."));
     } finally {
+      deleteLockRef.current = false;
       setDeleting(false);
     }
   }

@@ -27,6 +27,7 @@ export default function DeliveriesPage() {
   const [employees, setEmployees] = useState<Employee[]>([]); const [materials, setMaterials] = useState<Material[]>([]); const [templates, setTemplates] = useState<FunctionTemplate[]>([]); const [employeeId, setEmployeeId] = useState(""); const [employeeFunction, setEmployeeFunction] = useState(""); const [employeeQuery, setEmployeeQuery] = useState(""); const [employeeSuggestionsOpen, setEmployeeSuggestionsOpen] = useState(false); const [materialSuggestionsOpen, setMaterialSuggestionsOpen] = useState<number | null>(null); const [reason, setReason] = useState("admission"); const [deliveredAt, setDeliveredAt] = useState(localDateValue()); const [notes, setNotes] = useState(""); const [items, setItems] = useState<DeliveryItem[]>([newDeliveryItem()]); const [photoFiles, setPhotoFiles] = useState<File[]>([]); const [loading, setLoading] = useState(true); const [saving, setSaving] = useState(false); const [error, setError] = useState(""); const [success, setSuccess] = useState(""); const [canRetryLoad, setCanRetryLoad] = useState(true);
   const loadOptionsRequestRef = useRef(0);
   const loadVariantStockRequestRef = useRef(0);
+  const submitLockRef = useRef(false);
   const mountedRef = useRef(true);
   function selectPhotos(event: ChangeEvent<HTMLInputElement>) { setCanRetryLoad(false); const files = Array.from(event.target.files ?? []); event.target.value = ""; const invalid = files.find((file) => !["image/jpeg", "image/png", "image/webp"].includes(file.type) || file.size > 10 * 1024 * 1024); if (invalid) { setError(invalid.size > 10 * 1024 * 1024 ? "Cada foto deve ter no máximo 10 MB." : "As fotos devem estar em formato JPG, PNG ou WEBP."); return; } setPhotoFiles((current) => [...current, ...files].slice(0, 5)); }
   async function loadOptions() {
@@ -140,7 +141,7 @@ export default function DeliveriesPage() {
   const hasMissingRequiredVariant = items.some((item) => variantsFor(item.material_id).length > 0 && !item.variant_id); const hasMissingTestValidity = items.some((item) => { const material = materials.find((candidate) => candidate.id === item.material_id); return Boolean(material?.test_required && (!isValidDateValue(item.test_performed_at) || !isValidDateValue(item.test_expires_at) || item.test_expires_at < item.test_performed_at || item.test_expires_at < deliveredAt)); });
   async function submit(event: FormEvent) {
     event.preventDefault();
-    if (saving) return;
+    if (saving || submitLockRef.current) return;
     setError("");
     setSuccess("");
     setCanRetryLoad(false);
@@ -171,6 +172,7 @@ export default function DeliveriesPage() {
       setError("A data do ensaio não pode ser posterior à data da entrega.");
       return;
     }
+    submitLockRef.current = true;
     setSaving(true);
     try {
       const supabase = createClient();
@@ -205,6 +207,7 @@ export default function DeliveriesPage() {
     } catch (unexpectedError) {
       setError(friendlyError(unexpectedError, "Não foi possível registrar a entrega."));
     } finally {
+      submitLockRef.current = false;
       setSaving(false);
     }
   }

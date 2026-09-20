@@ -31,6 +31,7 @@ export default function EntriesPage() {
   const [canRetryMaterials, setCanRetryMaterials] = useState(false);
   const [entriesRefreshKey, setEntriesRefreshKey] = useState(0);
   const loadRequestRef = useRef(0);
+  const submitLockRef = useRef(false);
 
   async function loadMaterials() {
     const requestId = ++loadRequestRef.current;
@@ -84,7 +85,9 @@ export default function EntriesPage() {
   }
 
   async function submit(event: FormEvent) {
-    event.preventDefault(); setError(""); setSuccess(""); setCanRetryMaterials(false);
+    event.preventDefault();
+    if (saving || submitLockRef.current) return;
+    setError(""); setSuccess(""); setCanRetryMaterials(false);
     if (!isValidDateValue(entryDate)) { setError("Informe uma data de entrada válida."); return; }
     const hasInvalidItem = items.some((item) => {
       const material = materials.find((candidate) => candidate.id === item.material_id);
@@ -97,6 +100,7 @@ export default function EntriesPage() {
         || invalidTestDates || invalidMaterialDates;
     });
     if (hasInvalidItem) { setError("Preencha material, tamanho, quantidade inteira e custo. Confira também se as datas e a validade do ensaio estão corretas."); return; }
+    submitLockRef.current = true;
     setSaving(true); const supabase = createClient(); let uploadedPath = ""; try {
     if (invoiceFile) {
       const { data: auth, error: authError } = await supabase.auth.getUser();
@@ -122,6 +126,7 @@ if (uploadError) { setError(friendlyError(uploadError, "Não foi possível anexa
       if (uploadedPath) { try { await supabase.storage.from("invoice-attachments").remove([uploadedPath]); } catch {} }
       setError(friendlyError(caught, "Não foi possível concluir a operação."));
     } finally {
+      submitLockRef.current = false;
       setSaving(false);
     }
   }
