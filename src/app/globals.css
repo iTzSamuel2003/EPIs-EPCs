@@ -3871,3 +3871,19 @@ html,body{max-width:100%;overflow-x:hidden}
   .module-header h1{font-size:22px;}
   .entry-intro{gap:9px;}
 }
+
+@media (max-width:600px){
+  .recent-deliveries .table-wrap{overflow:visible;}
+  .recent-deliveries table{min-width:0;width:100%;white-space:normal;}
+}
+
+@media (max-width:600px){
+  .search input,
+  .login-card input,
+  .public-measurement-card input,
+  .public-measurement-card select,
+  .public-measurement-card textarea,
+  .employee-portal-card input,
+  .employee-portal-card select,
+  .employee-portal-card textarea{font-size:16px;}
+}

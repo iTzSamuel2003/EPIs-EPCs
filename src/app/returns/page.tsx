@@ -116,10 +116,15 @@ export default function ReturnsPage() {
       let followUpError = "";
       if (incidentLines.length) {
         try {
+          const incidentTypes = [...new Set(incidentLines.map((line) => line.incident_type))];
+          const accountabilityDescription = incidentLines.map((line) => {
+            const label = incidentLabels[line.incident_type] || line.incident_type;
+            return line.incident_description ? `${label}: ${line.incident_description}` : label;
+          }).join("; ");
           const { error: accountabilityError } = await supabase.rpc("record_return_accountability", {
             p_return_id: returnId,
-            p_incident_type: incidentLines[0].incident_type,
-            p_incident_description: incidentLines.map((line) => line.incident_description).filter(Boolean).join("; ") || null,
+            p_incident_type: incidentTypes.length === 1 ? incidentTypes[0] : "other",
+            p_incident_description: accountabilityDescription || null,
             p_employee_signature_name: signature.trim() || null,
             p_deduction_requested: incidentLines.some((line) => line.deduction_requested),
             p_deduction_amount: incidentLines.reduce((total, line) => total + (Number(line.deduction_amount) || 0), 0) || null,

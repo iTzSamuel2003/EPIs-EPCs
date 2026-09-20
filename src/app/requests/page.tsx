@@ -43,10 +43,10 @@ export default function RequestsPage() {
     try {
       const { data, error: loadError } = await createClient().from("employee_portal_requests").select("id,request_type,description,status,review_notes,attachment_path,created_at,updated_at,delivered_at,employee:employees(full_name,registration),delivery_item:delivery_items(material:materials(name,unit),lot:material_lots(lot_number))").order("created_at", { ascending: false });
       if (version !== loadVersion.current) return;
-      if (loadError) { setError(friendlyError(loadError, "Não foi possível carregar as solicitações.")); return; }
+      if (loadError) { setRequests([]); setError(friendlyError(loadError, "Não foi possível carregar as solicitações.")); return; }
       setRequests((data ?? []) as unknown as RequestRow[]);
     } catch (caught) {
-      if (version === loadVersion.current) setError(friendlyError(caught, "Não foi possível carregar as solicitações."));
+      if (version === loadVersion.current) { setRequests([]); setError(friendlyError(caught, "Não foi possível carregar as solicitações.")); }
     } finally {
       if (version === loadVersion.current) setLoading(false);
     }

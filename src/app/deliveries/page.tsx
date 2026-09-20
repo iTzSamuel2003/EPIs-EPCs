@@ -148,7 +148,17 @@ export default function DeliveriesPage() {
   function isRubberBoot(material: Material | undefined) { return Boolean(material && normalize(material.name).includes("bota de borracha")); }
   function variantsFor(materialId: string) { return variants.filter((variant) => variant.material_id === materialId && variant.active); }
   function availableFor(item: DeliveryItem) { return item.variant_id ? variantAvailable[item.variant_id] ?? 0 : materials.find((material) => material.id === item.material_id)?.available_quantity ?? 0; }
-  function selectEmployee(employee: Employee) { setEmployeeId(employee.id); setEmployeeFunction(employee.function_name || employee.job_title || ""); setEmployeeQuery(employee.full_name); setEmployeeSuggestionsOpen(false); }
+  function selectEmployee(employee: Employee) {
+    const employeeChanged = employee.id !== employeeId;
+    setEmployeeId(employee.id);
+    setEmployeeFunction(employee.function_name || employee.job_title || "");
+    setEmployeeQuery(employee.full_name);
+    setEmployeeSuggestionsOpen(false);
+    if (employeeChanged) {
+      setItems([newDeliveryItem()]);
+      setMaterialSuggestionsOpen(null);
+    }
+  }
   const selectedTemplate = templates.find((template) => employeeFunction && functionKey(template.name) === functionKey(employeeFunction));
   function loadFunctionMaterials() { if (!selectedTemplate) return; const missing: string[] = []; const loaded = selectedTemplate.items.map((templateItem) => { const material = materials.find((candidate) => candidate.id === templateItem.material_id) ?? materials.find((candidate) => normalize(candidate.name) === normalize(templateItem.material_name)); if (!material) { missing.push(templateItem.material_name); return null; } return { ...newDeliveryItem(), material_id: material.id, materialQuery: material.name, quantity: String(templateItem.quantity), expected_replacement_at: calculateReplacementDate(deliveredAt, material.replacement_interval_days) }; }).filter((item): item is DeliveryItem => item !== null); setItems(loaded.length ? loaded : [newDeliveryItem()]); setError(missing.length ? `Alguns materiais da função não foram encontrados no catálogo: ${missing.join(", ")}.` : ""); }
   function selectMaterial(index: number, material: Material) { setItems((current) => current.map((item, itemIndex) => itemIndex === index ? { ...item, material_id: material.id, materialQuery: material.name, variant_id: "", quantity: material.available_quantity > 0 ? String(Math.min(Math.max(Number(item.quantity) || 1, 1), material.available_quantity)) : "1", expected_replacement_at: calculateReplacementDate(deliveredAt, material.replacement_interval_days), test_performed_at: "", test_expires_at: "" } : item)); setMaterialSuggestionsOpen(null); }

@@ -60,7 +60,11 @@ export default function EmployeesPage() {
         supabase.from("function_templates").select("id,name").order("name"),
       ]);
       if (!mountedRef.current || requestId !== loadRequestRef.current) return;
-      if (loadError || templateError) setError(friendlyError(loadError ?? templateError, "Não foi possível carregar os dados."));
+      if (loadError || templateError) {
+        setEmployees([]);
+        setFunctionTemplates([]);
+        setError(friendlyError(loadError ?? templateError, "Não foi possível carregar os dados."));
+      }
       else { setEmployees((data ?? []) as Employee[]); setFunctionTemplates((templateData ?? []) as FunctionTemplate[]); }
     } catch (caught) {
       if (mountedRef.current && requestId === loadRequestRef.current) setError(friendlyError(caught, "Não foi possível carregar os dados."));
