@@ -46,6 +46,7 @@ export default function TestsPage() {
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
   const [success, setSuccess] = useState("");
+  const saveLockRef = useRef(false);
   const [stockByMaterial, setStockByMaterial] = useState<Record<string, number>>({});
   const [retryKey, setRetryKey] = useState(0);
   const loadVersion = useRef(0);
@@ -136,7 +137,7 @@ export default function TestsPage() {
 
   async function saveTest(event: FormEvent) {
     event.preventDefault();
-    if (saving) return;
+    if (saving || saveLockRef.current) return;
     setError(""); setSuccess("");
     if (!materialId) { setError("Selecione um material ensaiável."); return; }
     if (!isRealDate(performedAt)) { setError("Informe uma data de ensaio válida."); return; }
@@ -145,6 +146,7 @@ export default function TestsPage() {
     if (!examiner.trim()) { setError("Informe o responsável técnico."); return; }
     const normalizedReportUrl = reportUrl.trim();
     if (normalizedReportUrl && !isHttpUrl(normalizedReportUrl)) { setError("O link do laudo deve começar com http:// ou https://."); return; }
+    saveLockRef.current = true;
     setSaving(true);
     try {
       const supabase = createClient();
@@ -163,6 +165,7 @@ export default function TestsPage() {
     } catch (caught) {
       setError(friendlyError(caught, "Não foi possível registrar o ensaio."));
     } finally {
+      saveLockRef.current = false;
       setSaving(false);
     }
   }

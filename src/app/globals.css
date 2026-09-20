@@ -3354,3 +3354,50 @@ main.module-shell:not(:has(.module-toolbar)):has(> .module-summary) > .module-ta
   :where(.module-table-card,.history-table-card) th,
   :where(.module-table-card,.history-table-card) td{padding-inline:5px;}
 }
+
+.panel-header > div,
+.module-header > div,
+.recent-delivery-main,
+.recent-delivery-actions,
+.transaction-photo-field > div,
+.required-course-copy{min-width:0;}
+.panel-header h2,
+.module-header h1,
+.module-subtitle,
+.recent-delivery-main strong,
+.recent-delivery-main small,
+.transaction-photo-list span,
+.required-course-copy strong,
+.required-course-copy small{overflow-wrap:anywhere;}
+.recent-delivery-actions .action-button,
+.recent-delivery-actions .upload-term-button{
+  min-width:0;
+  max-width:100%;
+  text-align:center;
+}
+
+@media (max-width:768px){
+  .panel-header{flex-wrap:wrap;}
+  .panel-header > svg{flex:0 0 auto;}
+  .recent-delivery-actions{width:100%;}
+  .recent-delivery-actions .action-button,
+  .recent-delivery-actions .upload-term-button{flex:1 1 150px;white-space:normal;line-height:1.3;}
+  .module-toolbar .module-search{flex-basis:100%;}
+  .module-toolbar > label,
+  .module-toolbar > select{width:100%;}
+}
+
+@media (max-width:480px){
+  .panel-header h2{font-size:13px;line-height:1.35;}
+  .panel-header p{line-height:1.4;}
+  .recent-delivery-actions .action-button,
+  .recent-delivery-actions .upload-term-button{flex-basis:100%;}
+  .required-course-item{align-items:flex-start;}
+  .required-course-item .status-pill{margin-left:auto;}
+}
+
+@media (max-width:380px){
+  .recent-delivery-actions .action-button,
+  .recent-delivery-actions .upload-term-button{font-size:11px;padding-inline:8px;}
+  .feedback-copy{overflow-wrap:anywhere;}
+}

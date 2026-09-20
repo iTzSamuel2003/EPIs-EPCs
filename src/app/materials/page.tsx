@@ -75,6 +75,7 @@ export default function MaterialsPage() {
   const [success, setSuccess] = useState("");
   const loadVersion = useRef(0);
   const mountedRef = useRef(true);
+  const saveLockRef = useRef(false);
 
   useEffect(() => {
     const initialSearch = searchParams.get("search");
@@ -145,7 +146,7 @@ export default function MaterialsPage() {
 
   async function saveMaterial(event: FormEvent) {
     event.preventDefault();
-    if (saving) return;
+    if (saving || saveLockRef.current) return;
     setError(""); setSuccess("");
     if (!form.name.trim()) { setError("Informe o nome do material."); return; }
     if (!form.unit.trim()) { setError("Informe a unidade do material."); return; }
@@ -155,6 +156,7 @@ export default function MaterialsPage() {
       setError("Estoque mínimo, vida útil e troca prevista devem ser números inteiros iguais ou maiores que zero.");
       return;
     }
+    saveLockRef.current = true;
     setSaving(true);
     try {
     const supabase = createClient();
@@ -182,6 +184,7 @@ export default function MaterialsPage() {
     } catch (caught) {
       setError(friendlyError(caught, "Falha ao salvar o material."));
     } finally {
+      saveLockRef.current = false;
       setSaving(false);
     }
   }

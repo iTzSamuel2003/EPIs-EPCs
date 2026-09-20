@@ -24,7 +24,7 @@ const reasons = [["admission", "Admissão"], ["periodic_change", "Troca periódi
 
 export default function DeliveriesPage() {
   const [variants, setVariants] = useState<MaterialVariant[]>([]); const [variantAvailable, setVariantAvailable] = useState<Record<string, number>>({});
-  const [employees, setEmployees] = useState<Employee[]>([]); const [materials, setMaterials] = useState<Material[]>([]); const [templates, setTemplates] = useState<FunctionTemplate[]>([]); const [employeeId, setEmployeeId] = useState(""); const [employeeFunction, setEmployeeFunction] = useState(""); const [employeeQuery, setEmployeeQuery] = useState(""); const [employeeSuggestionsOpen, setEmployeeSuggestionsOpen] = useState(false); const [materialSuggestionsOpen, setMaterialSuggestionsOpen] = useState<number | null>(null); const [reason, setReason] = useState("admission"); const [deliveredAt, setDeliveredAt] = useState(localDateValue()); const [notes, setNotes] = useState(""); const [items, setItems] = useState<DeliveryItem[]>([newDeliveryItem()]); const [photoFiles, setPhotoFiles] = useState<File[]>([]); const [loading, setLoading] = useState(true); const [saving, setSaving] = useState(false); const [error, setError] = useState(""); const [success, setSuccess] = useState(""); const [canRetryLoad, setCanRetryLoad] = useState(true);
+  const [employees, setEmployees] = useState<Employee[]>([]); const [materials, setMaterials] = useState<Material[]>([]); const [templates, setTemplates] = useState<FunctionTemplate[]>([]); const [employeeId, setEmployeeId] = useState(""); const [employeeFunction, setEmployeeFunction] = useState(""); const [employeeQuery, setEmployeeQuery] = useState(""); const [employeeSuggestionsOpen, setEmployeeSuggestionsOpen] = useState(false); const [materialSuggestionsOpen, setMaterialSuggestionsOpen] = useState<number | null>(null); const [reason, setReason] = useState("admission"); const [deliveredAt, setDeliveredAt] = useState(localDateValue()); const [notes, setNotes] = useState(""); const [items, setItems] = useState<DeliveryItem[]>([newDeliveryItem()]); const [photoFiles, setPhotoFiles] = useState<File[]>([]); const [loading, setLoading] = useState(true); const [variantsLoading, setVariantsLoading] = useState(true); const [variantStockLoading, setVariantStockLoading] = useState(true); const [saving, setSaving] = useState(false); const [error, setError] = useState(""); const [success, setSuccess] = useState(""); const [canRetryLoad, setCanRetryLoad] = useState(true);
   const loadOptionsRequestRef = useRef(0);
   const loadVariantStockRequestRef = useRef(0);
   const submitLockRef = useRef(false);
@@ -79,6 +79,7 @@ export default function DeliveriesPage() {
   function retryLoadOptions() { if (!canRetryLoad && !error) return; setLoading(true); setError(""); void loadOptions(); }
   useEffect(() => {
     let active = true;
+    setVariantsLoading(true);
     async function loadVariants() {
       try {
         const { data, error: variantError } = await createClient().from("material_variants").select("id,material_id,name,size,active").eq("active", true).order("name");
@@ -96,6 +97,8 @@ export default function DeliveriesPage() {
           setCanRetryLoad(true);
           setError(friendlyError(unexpectedError, "Não foi possível carregar as variações."));
         }
+      } finally {
+        if (active) setVariantsLoading(false);
       }
     }
     void loadVariants();
@@ -103,6 +106,7 @@ export default function DeliveriesPage() {
   }, []);
   useEffect(() => {
     let active = true;
+    setVariantStockLoading(true);
     async function loadVariantStock() {
       const requestId = ++loadVariantStockRequestRef.current;
       try {
@@ -124,6 +128,8 @@ export default function DeliveriesPage() {
           setError(friendlyError(unexpectedError, "Não foi possível carregar o estoque das variações."));
           setCanRetryLoad(true);
         }
+      } finally {
+        if (active) setVariantStockLoading(false);
       }
     }
     void loadVariantStock();
@@ -149,6 +155,7 @@ export default function DeliveriesPage() {
   function updateDeliveryDate(value: string) { setDeliveredAt(value); setItems((current) => current.map((item) => { const material = materials.find((candidate) => candidate.id === item.material_id); return { ...item, expected_replacement_at: calculateReplacementDate(value, material?.replacement_interval_days ?? null) }; })); }
   function updateItem(index: number, field: keyof DeliveryItem, value: string) { setItems((current) => current.map((item, itemIndex) => { if (itemIndex !== index) return item; const next = { ...item, [field]: value }; if (field === "variant_id" && value) { const variantStock = variantAvailable[value] ?? 0; next.quantity = variantStock > 0 ? String(Math.min(Math.max(Number(item.quantity) || 1, 1), variantStock)) : item.quantity; } return next; })); }
   const requestedByStockKey = items.reduce<Record<string, number>>((sum, item) => { const key = item.variant_id || item.material_id; const quantity = Number(item.quantity); if (key) sum[key] = (sum[key] ?? 0) + (Number.isFinite(quantity) ? quantity : 0); return sum; }, {});
+  const formLoading = loading || variantsLoading || variantStockLoading;
   const hasInsufficientStock = items.some((item) => { const available = availableFor(item); const requested = requestedByStockKey[item.variant_id || item.material_id] ?? Number(item.quantity); return !item.material_id || !Number.isInteger(Number(item.quantity)) || available <= 0 || requested <= 0 || requested > available; });
   const hasMissingRequiredVariant = items.some((item) => variantsFor(item.material_id).length > 0 && !item.variant_id); const hasMissingTestValidity = items.some((item) => { const material = materials.find((candidate) => candidate.id === item.material_id); return Boolean(material?.test_required && (!isValidDateValue(item.test_performed_at) || !isValidDateValue(item.test_expires_at) || item.test_expires_at < item.test_performed_at || item.test_expires_at < deliveredAt)); });
   async function submit(event: FormEvent) {
@@ -157,6 +164,10 @@ export default function DeliveriesPage() {
     setError("");
     setSuccess("");
     setCanRetryLoad(false);
+    if (formLoading) {
+      setError("Aguarde o carregamento completo do catálogo e do estoque.");
+      return;
+    }
     if (!employeeId) {
       setError("Selecione o funcionário que receberá os equipamentos.");
       return;

@@ -94,13 +94,13 @@ export default function EntriesPage() {
       const material = materials.find((candidate) => candidate.id === item.material_id);
       const quantity = Number(item.quantity);
       const unitCost = Number(item.unit_cost);
-      const invalidTestDates = Boolean(material?.test_required && (!isValidDateValue(item.test_performed_at) || !isValidDateValue(item.test_expires_at) || item.test_expires_at < item.test_performed_at));
+      const invalidTestDates = Boolean(material?.test_required && (!isValidDateValue(item.test_performed_at) || !isValidDateValue(item.test_expires_at) || item.test_performed_at > entryDate || item.test_expires_at < item.test_performed_at));
       const invalidMaterialDates = Boolean((item.manufactured_at && !isValidDateValue(item.manufactured_at)) || (item.expires_at && !isValidDateValue(item.expires_at)) || (item.manufactured_at && item.expires_at && item.expires_at < item.manufactured_at));
       return !item.material_id || !Number.isInteger(quantity) || quantity <= 0 || !item.unit_cost.trim() || !Number.isFinite(unitCost) || unitCost < 0
         || (variantsFor(item.material_id).length > 0 && !item.variant_id)
         || invalidTestDates || invalidMaterialDates;
     });
-    if (hasInvalidItem) { setError("Preencha material, tamanho, quantidade inteira e custo. Confira também se as datas e a validade do ensaio estão corretas."); return; }
+    if (hasInvalidItem) { setError("Preencha material, tamanho, quantidade inteira e custo. Confira também se as datas e a validade do ensaio estão corretas e não informe ensaio posterior à entrada."); return; }
     submitLockRef.current = true;
     setSaving(true); const supabase = createClient(); let uploadedPath = ""; try {
     if (invoiceFile) {

@@ -32,6 +32,7 @@ export default function FunctionTemplatesPage() {
   const [success, setSuccess] = useState("");
   const [retryKey, setRetryKey] = useState(0);
   const loadVersion = useRef(0);
+  const saveLockRef = useRef(false);
   const selected = templates.find((template) => template.id === selectedId) ?? templates[0];
 
   async function load(preferredId?: string) {
@@ -96,12 +97,14 @@ export default function FunctionTemplatesPage() {
 
   async function save(event: FormEvent) {
     event.preventDefault();
+    if (saving || saveLockRef.current) return;
     setError(""); setSuccess("");
     let atomicItems = items.map((item) => ({ material_id: item.material_id || null, material_name: item.material_name.trim(), quantity: Number(item.quantity), item_type: item.item_type }))
       .filter((item) => item.material_name && Number.isInteger(item.quantity) && item.quantity > 0);
     if (!name.trim()) { setError("Informe o nome da função."); return; }
     if (!atomicItems.length || atomicItems.length !== items.length) { setError("Informe o material e uma quantidade maior que zero em todos os itens."); return; }
     if (new Set(atomicItems.map((item) => item.material_name.toLocaleLowerCase("pt-BR"))).size !== atomicItems.length) { setError("Não repita o mesmo material na lista."); return; }
+    saveLockRef.current = true;
     setSaving(true);
     try {
       const supabase = createClient();
@@ -138,6 +141,7 @@ export default function FunctionTemplatesPage() {
     } catch (caught) {
       setError(friendlyError(caught, "Não foi possível salvar a lista."));
     } finally {
+      saveLockRef.current = false;
       setSaving(false);
     }
     return;
