@@ -2115,7 +2115,9 @@ body{max-width:100%;overflow-x:hidden;}
   .module-table-card .table-wrap .stock-table tr{
     display:grid!important;
     grid-template-columns:repeat(2,minmax(0,1fr));
-    gap:10px 16px;
+    grid-template-columns:repeat(2,minmax(180px,280px));
+    justify-content:start;
+    gap:12px 28px;
     padding:14px;
     border:1px solid #edf0f5;
     border-radius:10px;
@@ -2136,6 +2138,14 @@ body{max-width:100%;overflow-x:hidden;}
     font-size:9px;
     font-weight:700;
     letter-spacing:.5px;
+  }
+  .module-table-card .table-wrap .stock-table td .type-badge,
+  .module-table-card .table-wrap .stock-table td .status-pill{
+    width:max-content;
+    max-width:100%;
+    overflow-wrap:normal;
+    word-break:normal;
+    white-space:nowrap;
   }
   .module-table-card .table-wrap .stock-table td:nth-child(1),
   .module-table-card .table-wrap .stock-table td:nth-child(11){grid-column:1 / -1!important;}
@@ -4210,8 +4220,10 @@ html,body{max-width:100%;overflow-x:hidden}
   .module-table-card .table-wrap .stock-table tbody{display:grid!important;gap:10px;}
   .module-table-card .table-wrap .stock-table tr{
     display:grid!important;
+    width:min(100%,588px);
     grid-template-columns:repeat(2,minmax(0,1fr));
-    gap:10px 16px;
+    justify-content:start;
+    gap:12px 28px;
     padding:14px;
     border:1px solid #edf0f5;
     border-radius:10px;
@@ -4232,6 +4244,14 @@ html,body{max-width:100%;overflow-x:hidden}
     font-size:9px;
     font-weight:700;
     letter-spacing:.5px;
+  }
+  .module-table-card .table-wrap .stock-table td .type-badge,
+  .module-table-card .table-wrap .stock-table td .status-pill{
+    width:max-content;
+    max-width:100%;
+    overflow-wrap:normal;
+    word-break:normal;
+    white-space:nowrap;
   }
   .module-table-card .table-wrap .stock-table td:nth-child(1),
   .module-table-card .table-wrap .stock-table td:nth-child(11){grid-column:1 / -1!important;}
