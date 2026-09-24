@@ -2102,7 +2102,7 @@ body{max-width:100%;overflow-x:hidden;}
   min-width:0;
   overflow-wrap:anywhere;
 }
-@media (max-width:1500px){
+@media (max-width:1000px){
   .module-table-card .table-wrap:has(.stock-table){overflow:visible;}
   .module-table-card .table-wrap .stock-table{
     display:block!important;
@@ -2194,7 +2194,7 @@ body{max-width:100%;overflow-x:hidden;}
   white-space:normal;
 }
 
-@media (max-width:1500px){
+@media (max-width:1000px){
   /* O estoque tem muitas colunas; em telas menores, cada registro vira um cartão legível. */
   .module-table-card .table-wrap:has(.stock-table){
     overflow:visible;
@@ -4208,7 +4208,7 @@ html,body{max-width:100%;overflow-x:hidden}
   min-width:0;
   overflow-wrap:anywhere;
 }
-@media (max-width:1500px){
+@media (max-width:1000px){
   .module-table-card .table-wrap:has(.stock-table){overflow:visible;}
   .module-table-card .table-wrap .stock-table{
     display:block!important;
