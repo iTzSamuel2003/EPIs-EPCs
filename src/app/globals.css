@@ -2162,6 +2162,44 @@ body{max-width:100%;overflow-x:hidden;}
   .module-table-card .table-wrap .stock-table td:nth-child(11)::before{content:"Localização";}
 }
 
+/* Área inferior do menu lateral mais compacta em telas menores. */
+.sidebar-bottom{
+  margin-top:12px;
+  padding-bottom:2px;
+}
+.sidebar-bottom>a{
+  min-height:36px;
+  padding:7px 10px;
+  gap:10px;
+  font-size:12px;
+}
+.sidebar-bottom>a svg{width:16px;height:16px;}
+.sidebar-bottom .user-mini{
+  margin-top:10px;
+  padding:10px 6px 0;
+  gap:7px;
+}
+.sidebar-bottom .user-mini .avatar{
+  width:27px;
+  height:27px;
+  font-size:9px;
+}
+.sidebar-bottom .user-mini strong{
+  font-size:11px;
+  white-space:nowrap;
+  overflow:hidden;
+  text-overflow:ellipsis;
+  max-width:145px;
+}
+.sidebar-bottom .user-mini small{font-size:9px;}
+.sidebar-bottom .user-mini .icon-button{padding:4px;margin-left:auto;}
+.sidebar-bottom .user-mini>svg{width:14px;height:14px;}
+
+@media (max-width:1024px){
+  .sidebar-bottom>a{min-height:34px;padding:6px 9px;}
+  .sidebar-bottom .user-mini{margin-top:8px;padding-top:8px;}
+}
+
 /* Ajuste de leitura: os dados principais devem caber no painel sem rolagem lateral. */
 .materials-page .module-table-card .table-wrap table{
   width:100%;
