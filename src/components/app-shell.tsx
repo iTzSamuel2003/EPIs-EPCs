@@ -12,7 +12,7 @@ const menuSections: readonly MenuSection[] = [
   { label: "Visão geral", items: [["Dashboard", LayoutDashboard, "/"]] },
   { label: "Cadastros", items: [["Materiais", Boxes, "/materials"], ["Funcionários", Users, "/employees"], ["Equipes", Users, "/teams"], ["Unidades físicas", Boxes, "/units"], ["Variações", Boxes, "/variants"], ["Listas por função", ClipboardList, "/function-templates"]] },
   { label: "Operações", items: [["Entradas", ClipboardList, "/entries"], ["Entregas", ArrowUpRight, "/deliveries"], ["Devoluções", ArrowDownToLine, "/returns"], ["Solicitações", ClipboardList, "/requests"], ["Estoque", PackageCheck, "/stock"], ["Validades", CalendarClock, "/validities"]] },
-  { label: "Conformidade", items: [["Requisitos contratuais", ClipboardCheck, "/contract-requirements"], ["Ensaios", ClipboardCheck, "/tests"], ["Treinamentos", ClipboardCheck, "/training-compliance"], ["Conformidade", ClipboardCheck, "/compliance"]] },
+  { label: "Conformidade", items: [["Consulta CA", ClipboardCheck, "/ca"], ["Requisitos contratuais", ClipboardCheck, "/contract-requirements"], ["Ensaios", ClipboardCheck, "/tests"], ["Treinamentos", ClipboardCheck, "/training-compliance"], ["Conformidade", ClipboardCheck, "/compliance"]] },
   { label: "Gestão e análises", items: [["Custos", Wallet, "/costs"], ["Relatórios", ClipboardList, "/reports"], ["Movimentações", SlidersHorizontal, "/movements"], ["Auditoria", ClipboardList, "/audit"]] },
 ] as const;
 const menu = menuSections.flatMap((section) => section.items);

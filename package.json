@@ -9,7 +9,8 @@
     "start": "next start",
     "lint": "eslint",
     "check:production": "node scripts/smoke-production.mjs",
-    "check:encoding": "node scripts/check-encoding.mjs"
+    "check:encoding": "node scripts/check-encoding.mjs",
+    "import:caepi": "node scripts/import-caepi.mjs"
   },
   "dependencies": {
     "@hookform/resolvers": "^5.9.1",

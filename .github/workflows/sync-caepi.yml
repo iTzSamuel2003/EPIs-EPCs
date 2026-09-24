@@ -1,0 +1,36 @@
+name: Sincronizar base CAEPI
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: "30 3 * * 1"
+
+permissions:
+  contents: read
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - run: npm ci
+
+      - name: Baixar base oficial do CAEPI
+        run: |
+          curl --fail --silent --show-error --ftp-pasv \
+            --user anonymous:anonymous \
+            "ftp://ftp.mtps.gov.br/portal/fiscalizacao/seguranca-e-saude-no-trabalho/caepi/tgg_export_caepi.zip" \
+            --output caepi.zip
+          unzip -p caepi.zip tgg_export_caepi.txt > tgg_export_caepi.txt
+
+      - name: Importar registros no Supabase
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+        run: npm run import:caepi -- tgg_export_caepi.txt
