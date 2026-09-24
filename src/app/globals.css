@@ -2164,36 +2164,41 @@ body{max-width:100%;overflow-x:hidden;}
 
 /* Área inferior do menu lateral mais compacta em telas menores. */
 .sidebar-bottom{
-  margin-top:12px;
-  padding-bottom:2px;
+  margin-top:12px!important;
+  padding-bottom:2px!important;
 }
 .sidebar-bottom>a{
-  min-height:36px;
-  padding:7px 10px;
-  gap:10px;
-  font-size:12px;
+  min-height:36px!important;
+  padding:7px 10px!important;
+  gap:10px!important;
+  font-size:12px!important;
 }
-.sidebar-bottom>a svg{width:16px;height:16px;}
+.sidebar-bottom>a svg{width:16px!important;height:16px!important;}
 .sidebar-bottom .user-mini{
-  margin-top:10px;
-  padding:10px 6px 0;
-  gap:7px;
+  margin-top:10px!important;
+  padding:10px 6px 0!important;
+  gap:7px!important;
 }
 .sidebar-bottom .user-mini .avatar{
-  width:27px;
-  height:27px;
-  font-size:9px;
+  width:27px!important;
+  height:27px!important;
+  font-size:9px!important;
 }
 .sidebar-bottom .user-mini strong{
-  font-size:11px;
+  font-size:11px!important;
   white-space:nowrap;
   overflow:hidden;
   text-overflow:ellipsis;
   max-width:145px;
 }
-.sidebar-bottom .user-mini small{font-size:9px;}
-.sidebar-bottom .user-mini .icon-button{padding:4px;margin-left:auto;}
-.sidebar-bottom .user-mini>svg{width:14px;height:14px;}
+.sidebar-bottom .user-mini small{font-size:9px!important;}
+.sidebar-bottom .user-mini .icon-button{padding:4px!important;margin-left:auto!important;}
+.sidebar-bottom .user-mini>svg{width:14px!important;height:14px!important;}
+
+@media (min-width:1025px){
+  .sidebar{width:224px!important;}
+  .main-content{margin-left:224px!important;width:calc(100% - 224px)!important;}
+}
 
 @media (max-width:1024px){
   .sidebar-bottom>a{min-height:34px;padding:6px 9px;}
