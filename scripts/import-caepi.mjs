@@ -8,8 +8,9 @@ const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
 const dryRun = process.argv.includes("--dry-run");
 const functionUrl = process.env.CA_IMPORT_FUNCTION_URL;
 const functionToken = process.env.CA_IMPORT_FUNCTION_TOKEN;
+const functionAuthToken = process.env.CA_IMPORT_AUTH_TOKEN;
 
-if (!filePath || (!dryRun && ((!url || !serviceKey) && (!functionUrl || !functionToken)))) {
+if (!filePath || (!dryRun && ((!url || !serviceKey) && (!functionUrl || (!functionToken && !functionAuthToken))))) {
   console.error("Uso: SUPABASE_URL=... SUPABASE_SERVICE_ROLE_KEY=... node scripts/import-caepi.mjs caminho/para/base-caepi.csv");
   process.exit(1);
 }
@@ -90,7 +91,10 @@ const batchSize = 500;
 for (let index = 0; index < rows.length; index += batchSize) {
   const batch = rows.slice(index, index + batchSize);
   if (functionUrl) {
-    const response = await fetch(functionUrl, { method: "POST", headers: { "content-type": "application/json", "x-ca-import-token": functionToken }, body: JSON.stringify({ rows: batch }) });
+    const headers = { "content-type": "application/json" };
+    if (functionAuthToken) headers.authorization = `Bearer ${functionAuthToken}`;
+    else headers["x-ca-import-token"] = functionToken;
+    const response = await fetch(functionUrl, { method: "POST", headers, body: JSON.stringify({ rows: batch }) });
     if (!response.ok) throw new Error(`Falha no importador remoto (${response.status}): ${await response.text()}`);
   } else {
     const { error } = await supabase.from("ca_certificates").upsert(batch, { onConflict: "ca_number" });

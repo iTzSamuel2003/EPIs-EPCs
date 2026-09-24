@@ -7,6 +7,7 @@ on:
 
 permissions:
   contents: read
+  id-token: write
 
 jobs:
   sync:
@@ -29,8 +30,16 @@ jobs:
             --output caepi.zip
           unzip -p caepi.zip tgg_export_caepi.txt > tgg_export_caepi.txt
 
+      - name: Obter token OIDC do GitHub
+        id: oidc
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const token = await core.getIDToken('supabase-caepi-import')
+            core.setOutput('token', token)
+
       - name: Importar registros no Supabase
         env:
-          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
-          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+          CA_IMPORT_FUNCTION_URL: https://uedqxkzprueezjarhzql.supabase.co/functions/v1/caepi-import
+          CA_IMPORT_AUTH_TOKEN: ${{ steps.oidc.outputs.token }}
         run: npm run import:caepi -- tgg_export_caepi.txt
