@@ -12,6 +12,7 @@ import { FeedbackMessage } from "@/components/feedback-message";
 type Employee = { id: string; full_name: string; registration: string; department: string | null; job_title?: string | null; function_name?: string | null };
 type Material = { id: string; name: string; internal_code: string; unit: string; available_quantity: number; replacement_interval_days: number | null; test_required: boolean; ca_required: boolean; ca_number: string | null; ca_expires_at: string | null };
 type MaterialVariant = { id: string; material_id: string; name: string; size: string | null; active: boolean };
+type TestLot = { material_id: string; variant_id: string | null; available_quantity: number; test_performed_at: string | null; test_expires_at: string | null; test_report_number: string | null };
 type DeliveryItem = { material_id: string; materialQuery: string; variant_id: string; quantity: string; expected_replacement_at: string; test_performed_at: string; test_expires_at: string };
 type FunctionTemplate = { id: string; name: string; items: Array<{ material_name: string; material_id: string | null; quantity: number }> };
 const newDeliveryItem = (): DeliveryItem => ({ material_id: "", materialQuery: "", variant_id: "", quantity: "1", expected_replacement_at: "", test_performed_at: "", test_expires_at: "" });
@@ -23,7 +24,7 @@ function functionKey(value: string) { return normalize(value).replace(/\s+(vi|v|
 const reasons = [["admission", "Admissão"], ["periodic_change", "Troca periódica"], ["damaged", "Equipamento danificado"], ["lost", "Equipamento perdido"], ["role_change", "Alteração de função"], ["replacement", "Substituição"], ["other", "Outro"]];
 
 export default function DeliveriesPage() {
-  const [variants, setVariants] = useState<MaterialVariant[]>([]); const [variantAvailable, setVariantAvailable] = useState<Record<string, number>>({});
+  const [variants, setVariants] = useState<MaterialVariant[]>([]); const [testLots, setTestLots] = useState<TestLot[]>([]); const [variantAvailable, setVariantAvailable] = useState<Record<string, number>>({});
   const [employees, setEmployees] = useState<Employee[]>([]); const [materials, setMaterials] = useState<Material[]>([]); const [templates, setTemplates] = useState<FunctionTemplate[]>([]); const [employeeId, setEmployeeId] = useState(""); const [employeeFunction, setEmployeeFunction] = useState(""); const [employeeQuery, setEmployeeQuery] = useState(""); const [employeeSuggestionsOpen, setEmployeeSuggestionsOpen] = useState(false); const [materialSuggestionsOpen, setMaterialSuggestionsOpen] = useState<number | null>(null); const [reason, setReason] = useState("admission"); const [deliveredAt, setDeliveredAt] = useState(localDateValue()); const [notes, setNotes] = useState(""); const [items, setItems] = useState<DeliveryItem[]>([newDeliveryItem()]); const [photoFiles, setPhotoFiles] = useState<File[]>([]); const [loading, setLoading] = useState(true); const [variantsLoading, setVariantsLoading] = useState(true); const [variantStockLoading, setVariantStockLoading] = useState(true); const [saving, setSaving] = useState(false); const [error, setError] = useState(""); const [success, setSuccess] = useState(""); const [canRetryLoad, setCanRetryLoad] = useState(true);
   const loadOptionsRequestRef = useRef(0);
   const loadVariantStockRequestRef = useRef(0);
@@ -33,7 +34,7 @@ export default function DeliveriesPage() {
     setEmployees([]);
     setMaterials([]);
     setTemplates([]);
-    setVariants([]);
+    setVariants([]); setTestLots([]);
     setVariantAvailable({});
   }
   function selectPhotos(event: ChangeEvent<HTMLInputElement>) { setCanRetryLoad(false); const files = Array.from(event.target.files ?? []); event.target.value = ""; const invalid = files.find((file) => !["image/jpeg", "image/png", "image/webp"].includes(file.type) || file.size > 10 * 1024 * 1024); if (invalid) { setError(invalid.size > 10 * 1024 * 1024 ? "Cada foto deve ter no máximo 10 MB." : "As fotos devem estar em formato JPG, PNG ou WEBP."); return; } setPhotoFiles((current) => [...current, ...files].slice(0, 5)); }
@@ -46,7 +47,7 @@ export default function DeliveriesPage() {
       const [{ data: employeeData, error: employeeError }, { data: materialData, error: materialError }, { data: lotData, error: lotError }, { data: templateData, error: templateError }] = await Promise.all([
         supabase.from("employees").select("id, full_name, registration, department, job_title, function_name").eq("status", "active").order("full_name"),
         supabase.from("materials").select("id, name, internal_code, unit, replacement_interval_days, test_required, ca_required, ca_number, ca_expires_at").eq("status", "active").order("name"),
-        supabase.from("material_lots").select("material_id, available_quantity"),
+        supabase.from("material_lots").select("material_id, variant_id, available_quantity, test_performed_at, test_expires_at, test_report_number"),
         supabase.from("function_templates").select("id, name, function_template_items(material_name, material_id, quantity)").order("name"),
       ]);
       if (!mountedRef.current || requestId !== loadOptionsRequestRef.current) return;
@@ -62,6 +63,7 @@ export default function DeliveriesPage() {
         return sum;
       }, {});
       setEmployees((employeeData ?? []) as Employee[]);
+      setTestLots((lotData ?? []) as TestLot[]);
       setMaterials(((materialData ?? []) as Array<Omit<Material, "available_quantity">>).map((material) => ({ ...material, available_quantity: availableByMaterial[material.id] ?? 0 })));
       setTemplates(((templateData ?? []) as Array<{ id: string; name: string; function_template_items: Array<{ material_name: string; material_id: string | null; quantity: number }> }>).map((template) => ({ id: template.id, name: template.name, items: template.function_template_items })));
     } catch (unexpectedError) {
@@ -148,6 +150,9 @@ export default function DeliveriesPage() {
   function isRubberBoot(material: Material | undefined) { return Boolean(material && normalize(material.name).includes("bota de borracha")); }
   function variantsFor(materialId: string) { return variants.filter((variant) => variant.material_id === materialId && variant.active); }
   function availableFor(item: DeliveryItem) { return item.variant_id ? variantAvailable[item.variant_id] ?? 0 : materials.find((material) => material.id === item.material_id)?.available_quantity ?? 0; }
+  const testLotFor = useCallback((materialId: string, variantId: string) => testLots.filter((lot) => lot.material_id === materialId && (lot.variant_id === variantId || (!variantId && lot.variant_id === null)) && Number(lot.available_quantity) > 0 && lot.test_expires_at).sort((a, b) => String(a.test_expires_at).localeCompare(String(b.test_expires_at)))[0], [testLots]);
+  const testSelectionKey = items.map((item) => `${item.material_id}:${item.variant_id}`).join("|");
+  useEffect(() => { setItems((current) => { let changed = false; const next = current.map((item) => { const lot = item.material_id ? testLotFor(item.material_id, item.variant_id) : undefined; if (!lot || (!lot.test_performed_at && !lot.test_expires_at)) return item; const test_performed_at = lot.test_performed_at || item.test_performed_at; const test_expires_at = lot.test_expires_at || item.test_expires_at; if (item.test_performed_at === test_performed_at && item.test_expires_at === test_expires_at) return item; changed = true; return { ...item, test_performed_at, test_expires_at }; }); return changed ? next : current; }); }, [testLotFor, testSelectionKey]);
   function selectEmployee(employee: Employee) {
     const employeeChanged = employee.id !== employeeId;
     setEmployeeId(employee.id);
