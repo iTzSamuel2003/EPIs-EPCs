@@ -7,7 +7,7 @@ import { createClient } from "@/lib/supabase/client";
 import { FeedbackMessage } from "@/components/feedback-message";
 import { friendlyError } from "@/lib/ui-feedback";
 
-type Form = { name: string; cnpj: string; phone: string; validity_alert_days: string; replacement_alert_days: string; default_minimum_stock: string };
+type Form = { name: string; cnpj: string; phone: string; logo_url: string; validity_alert_days: string; replacement_alert_days: string; default_minimum_stock: string };
 
 function nonNegativeInteger(value: string, fallback: number) {
   const parsed = Number(value);
@@ -15,7 +15,7 @@ function nonNegativeInteger(value: string, fallback: number) {
 }
 
 export default function SettingsPage() {
-  const [form, setForm] = useState<Form>({ name: "", cnpj: "", phone: "", validity_alert_days: "30", replacement_alert_days: "7", default_minimum_stock: "10" });
+  const [form, setForm] = useState<Form>({ name: "", cnpj: "", phone: "", logo_url: "", validity_alert_days: "30", replacement_alert_days: "7", default_minimum_stock: "10" });
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
@@ -30,9 +30,9 @@ export default function SettingsPage() {
       const { data: profile, error: profileError } = auth.user ? await supabase.from("profiles").select("organization_id").eq("id", auth.user.id).maybeSingle() : { data: null, error: authError };
       if (profileError || !profile) setError(friendlyError(profileError ?? authError, "Não foi possível identificar a organização."));
       else if (profile?.organization_id) {
-        const { data, error: loadError } = await supabase.from("organizations").select("name,cnpj,phone,validity_alert_days,replacement_alert_days,default_minimum_stock").eq("id", profile.organization_id).single();
+        const { data, error: loadError } = await supabase.from("organizations").select("name,cnpj,phone,logo_url,validity_alert_days,replacement_alert_days,default_minimum_stock").eq("id", profile.organization_id).single();
         if (loadError) setError(friendlyError(loadError, "Não foi possível carregar as configurações."));
-        else if (data) setForm({ name: data.name ?? "", cnpj: data.cnpj ?? "", phone: data.phone ?? "", validity_alert_days: String(data.validity_alert_days), replacement_alert_days: String(data.replacement_alert_days), default_minimum_stock: String(data.default_minimum_stock) });
+        else if (data) setForm({ name: data.name ?? "", cnpj: data.cnpj ?? "", phone: data.phone ?? "", logo_url: data.logo_url ?? "", validity_alert_days: String(data.validity_alert_days), replacement_alert_days: String(data.replacement_alert_days), default_minimum_stock: String(data.default_minimum_stock) });
       }
       setLoading(false);
     }
@@ -58,6 +58,7 @@ export default function SettingsPage() {
       name: form.name.trim(),
       cnpj: form.cnpj.trim() || null,
       phone: form.phone.trim() || null,
+      logo_url: form.logo_url.trim() || null,
       validity_alert_days: nonNegativeInteger(form.validity_alert_days, 30),
       replacement_alert_days: nonNegativeInteger(form.replacement_alert_days, 7),
       default_minimum_stock: nonNegativeInteger(form.default_minimum_stock, 0),
@@ -72,5 +73,5 @@ export default function SettingsPage() {
 
   if (loading) return <main className="module-shell"><div className="module-loading" role="status" aria-live="polite">Carregando configurações...</div></main>;
 
-  return <main className="module-shell"><header className="module-header"><div><p className="eyebrow">ADMINISTRAÇÃO</p><h1>Configurações</h1><p className="module-subtitle">Defina dados da organização e parâmetros usados nos alertas.</p></div><Link className="secondary-button" href="/portal-qr"><QrCode size={16} aria-hidden="true" /> QR Code do Portal</Link></header>{success && <FeedbackMessage kind="success">{success}</FeedbackMessage>}{error && <FeedbackMessage>{error}</FeedbackMessage>}<section className="panel edit-employee-card" aria-labelledby="organization-settings-title"><form className="material-form" onSubmit={save} aria-busy={saving}><div className="form-section-title"><h2 id="organization-settings-title"><Settings size={17} aria-hidden="true" /> Organização</h2><p>Esses dados aparecem nas operações e relatórios.</p></div><div className="form-grid three"><label>Nome da organização<input value={form.name} onChange={(event) => setForm({ ...form, name: event.target.value })} autoComplete="organization" required /></label><label>CNPJ<input value={form.cnpj} onChange={(event) => setForm({ ...form, cnpj: event.target.value })} inputMode="numeric" autoComplete="off" /></label><label>Telefone<input value={form.phone} onChange={(event) => setForm({ ...form, phone: event.target.value })} type="tel" autoComplete="tel" /></label></div><div className="form-section-title"><h2 id="alert-settings-title">Parâmetros de alerta</h2><p>O Dashboard usará estes limites para destacar riscos.</p></div><div className="form-grid three" aria-labelledby="alert-settings-title"><label>Alertar validade com antecedência (dias)<input type="number" min="0" step="1" value={form.validity_alert_days} onChange={(event) => setForm({ ...form, validity_alert_days: event.target.value })} /></label><label>Alertar troca com antecedência (dias)<input type="number" min="0" step="1" value={form.replacement_alert_days} onChange={(event) => setForm({ ...form, replacement_alert_days: event.target.value })} /></label><label>Estoque mínimo padrão<input type="number" min="0" step="1" value={form.default_minimum_stock} onChange={(event) => setForm({ ...form, default_minimum_stock: event.target.value })} /></label></div><div className="modal-actions"><button type="submit" className="primary-button" disabled={saving} aria-busy={saving}>{saving ? "Salvando..." : "Salvar configurações"}<Save size={16} aria-hidden="true" /></button></div></form></section></main>;
+  return <main className="module-shell"><header className="module-header"><div><p className="eyebrow">ADMINISTRAÇÃO</p><h1>Configurações</h1><p className="module-subtitle">Defina dados da organização e parâmetros usados nos alertas.</p></div><Link className="secondary-button" href="/portal-qr"><QrCode size={16} aria-hidden="true" /> QR Code do Portal</Link></header>{success && <FeedbackMessage kind="success">{success}</FeedbackMessage>}{error && <FeedbackMessage>{error}</FeedbackMessage>}<section className="panel edit-employee-card" aria-labelledby="organization-settings-title"><form className="material-form" onSubmit={save} aria-busy={saving}><div className="form-section-title"><h2 id="organization-settings-title"><Settings size={17} aria-hidden="true" /> Organização</h2><p>Esses dados aparecem nas operações e relatórios.</p></div><div className="form-grid three"><label>Nome da organização<input value={form.name} onChange={(event) => setForm({ ...form, name: event.target.value })} autoComplete="organization" required /></label><label>CNPJ<input value={form.cnpj} onChange={(event) => setForm({ ...form, cnpj: event.target.value })} inputMode="numeric" autoComplete="off" /></label><label>Telefone<input value={form.phone} onChange={(event) => setForm({ ...form, phone: event.target.value })} type="tel" autoComplete="tel" /></label><label>Logo da organização (URL)<input value={form.logo_url} onChange={(event) => setForm({ ...form, logo_url: event.target.value })} type="url" placeholder="https://..." /></label></div><div className="form-section-title"><h2 id="alert-settings-title">Parâmetros de alerta</h2><p>O Dashboard usará estes limites para destacar riscos.</p></div><div className="form-grid three" aria-labelledby="alert-settings-title"><label>Alertar validade com antecedência (dias)<input type="number" min="0" step="1" value={form.validity_alert_days} onChange={(event) => setForm({ ...form, validity_alert_days: event.target.value })} /></label><label>Alertar troca com antecedência (dias)<input type="number" min="0" step="1" value={form.replacement_alert_days} onChange={(event) => setForm({ ...form, replacement_alert_days: event.target.value })} /></label><label>Estoque mínimo padrão<input type="number" min="0" step="1" value={form.default_minimum_stock} onChange={(event) => setForm({ ...form, default_minimum_stock: event.target.value })} /></label></div><div className="modal-actions"><button type="submit" className="primary-button" disabled={saving} aria-busy={saving}>{saving ? "Salvando..." : "Salvar configurações"}<Save size={16} aria-hidden="true" /></button></div></form></section></main>;
 }
