@@ -1,4 +1,4 @@
-export type UserRole = "admin" | "user";
+export type UserRole = "admin" | "rh" | "tst" | "user";
 export type MaterialType = "EPI" | "EPC" | "FERRAMENTAL";
 export type ContractCategory = MaterialType | "EQUIPAMENTO" | "ACESSORIO" | "TI";
 export type UsageScope = "individual" | "coletivo";
