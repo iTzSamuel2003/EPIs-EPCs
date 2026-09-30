@@ -8,10 +8,10 @@ import { FeedbackMessage } from "@/components/feedback-message";
 import { createClient } from "@/lib/supabase/client";
 import { friendlyError } from "@/lib/ui-feedback";
 
-type MaterialOption = { id: string; name: string; internal_code: string; unit: string; test_required: boolean };
+type MaterialOption = { id: string; name: string; internal_code: string; unit: string; test_required: boolean; report_required: boolean };
 type MaterialVariant = { id: string; material_id: string; name: string; size: string | null; active: boolean };
-type EntryItem = { material_id: string; materialQuery: string; variant_id: string; quantity: string; unit_cost: string; manufactured_at: string; expires_at: string; test_performed_at: string; test_expires_at: string };
-const newItem = (): EntryItem => ({ material_id: "", materialQuery: "", variant_id: "", quantity: "1", unit_cost: "0", manufactured_at: "", expires_at: "", test_performed_at: "", test_expires_at: "" });
+type EntryItem = { material_id: string; materialQuery: string; variant_id: string; quantity: string; unit_cost: string; manufactured_at: string; expires_at: string; test_performed_at: string; test_expires_at: string; test_report_number: string };
+const newItem = (): EntryItem => ({ material_id: "", materialQuery: "", variant_id: "", quantity: "1", unit_cost: "0", manufactured_at: "", expires_at: "", test_performed_at: "", test_expires_at: "", test_report_number: "" });
 const localDateValue = (value = new Date()) => `${value.getFullYear()}-${String(value.getMonth() + 1).padStart(2, "0")}-${String(value.getDate()).padStart(2, "0")}`;
 function isValidDateValue(value: string) { if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) return false; const [year, month, day] = value.split("-").map(Number); const date = new Date(year, month - 1, day); return date.getFullYear() === year && date.getMonth() === month - 1 && date.getDate() === day; }
 
@@ -42,7 +42,7 @@ export default function EntriesPage() {
     try {
       const supabase = createClient();
       const [{ data, error: loadError }, { data: variantData, error: variantError }] = await Promise.all([
-        supabase.from("materials").select("id, name, internal_code, unit, test_required").eq("status", "active").order("name"),
+        supabase.from("materials").select("id, name, internal_code, unit, test_required, report_required").eq("status", "active").order("name"),
         supabase.from("material_variants").select("id, material_id, name, size, active").eq("active", true).order("size"),
       ]);
       if (requestId !== loadRequestRef.current) return;
@@ -82,7 +82,7 @@ export default function EntriesPage() {
   }
 
   function selectMaterial(index: number, material: MaterialOption) {
-    setItems((current) => current.map((item, itemIndex) => itemIndex === index ? { ...item, material_id: material.id, materialQuery: material.name, variant_id: "", manufactured_at: "", expires_at: "", test_performed_at: "", test_expires_at: "" } : item));
+    setItems((current) => current.map((item, itemIndex) => itemIndex === index ? { ...item, material_id: material.id, materialQuery: material.name, variant_id: "", manufactured_at: "", expires_at: "", test_performed_at: "", test_expires_at: "", test_report_number: "" } : item));
     setMaterialSuggestionsOpen(null);
   }
 
@@ -105,10 +105,11 @@ export default function EntriesPage() {
       const quantity = Number(item.quantity);
       const unitCost = Number(item.unit_cost);
       const invalidTestDates = Boolean(material?.test_required && (!isValidDateValue(item.test_performed_at) || !isValidDateValue(item.test_expires_at) || item.test_performed_at > entryDate || item.test_expires_at < item.test_performed_at));
+      const missingTestReport = Boolean(material?.test_required && material.report_required && !item.test_report_number.trim());
       const invalidMaterialDates = Boolean((item.manufactured_at && !isValidDateValue(item.manufactured_at)) || (item.expires_at && !isValidDateValue(item.expires_at)) || (item.manufactured_at && item.expires_at && item.expires_at < item.manufactured_at));
       return !item.material_id || !Number.isInteger(quantity) || quantity <= 0 || !item.unit_cost.trim() || !Number.isFinite(unitCost) || unitCost < 0
         || (variantsFor(item.material_id).length > 0 && !item.variant_id)
-        || invalidTestDates || invalidMaterialDates;
+        || invalidTestDates || missingTestReport || invalidMaterialDates;
     });
     if (hasInvalidItem) { setError("Preencha material, tamanho, quantidade inteira e custo. Confira também se as datas e a validade do ensaio estão corretas e não informe ensaio posterior à entrada."); return; }
     submitLockRef.current = true;
@@ -123,7 +124,7 @@ export default function EntriesPage() {
       const { error: uploadError } = await supabase.storage.from("invoice-attachments").upload(uploadedPath, invoiceFile, { contentType: invoiceFile.type, upsert: false });
 if (uploadError) { setError(friendlyError(uploadError, "Não foi possível anexar a nota fiscal.")); if (uploadedPath) { try { await supabase.storage.from("invoice-attachments").remove([uploadedPath]); } catch {} } uploadedPath = ""; return; }
     }
-    const { error: entryError } = await supabase.rpc("register_stock_entry_batch", { p_invoice_number: invoiceNumber || null, p_entry_date: entryDate || null, p_items: items.map((item) => ({ material_id: item.material_id, variant_id: item.variant_id || null, quantity: Number(item.quantity), unit_cost: Number(item.unit_cost) || 0, manufactured_at: item.manufactured_at || null, expires_at: item.expires_at || null, test_performed_at: item.test_performed_at || null, test_expires_at: item.test_expires_at || null })), p_invoice_file_path: uploadedPath || null, p_notes: notes || null });
+    const { error: entryError } = await supabase.rpc("register_stock_entry_batch", { p_invoice_number: invoiceNumber || null, p_entry_date: entryDate || null, p_items: items.map((item) => ({ material_id: item.material_id, variant_id: item.variant_id || null, quantity: Number(item.quantity), unit_cost: Number(item.unit_cost) || 0, manufactured_at: item.manufactured_at || null, expires_at: item.expires_at || null, test_performed_at: item.test_performed_at || null, test_expires_at: item.test_expires_at || null, test_report_number: item.test_report_number.trim() || null })), p_invoice_file_path: uploadedPath || null, p_notes: notes || null });
     if (entryError) {
       if (uploadedPath) { try { await supabase.storage.from("invoice-attachments").remove([uploadedPath]); } catch {} }
       uploadedPath = "";
@@ -156,6 +157,7 @@ if (uploadError) { setError(friendlyError(uploadError, "Não foi possível anexa
           <label>Quantidade<input type="number" min="1" value={item.quantity} onChange={(event) => updateItem(index, "quantity", event.target.value)} required /></label><label>Custo unitário (R$)<input type="number" min="0" step="0.01" value={item.unit_cost} onChange={(event) => updateItem(index, "unit_cost", event.target.value)} required /></label>
           {selectedMaterial?.test_required ? <><label>Data do ensaio<input type="date" value={item.test_performed_at} onChange={(event) => updateItem(index, "test_performed_at", event.target.value)} required /></label><label>Validade do ensaio<input type="date" value={item.test_expires_at} onChange={(event) => updateItem(index, "test_expires_at", event.target.value)} required /></label></> : <><label>Fabricação<input type="date" value={item.manufactured_at} onChange={(event) => updateItem(index, "manufactured_at", event.target.value)} /></label><label>Validade<input type="date" value={item.expires_at} onChange={(event) => updateItem(index, "expires_at", event.target.value)} /></label></>}{items.length > 1 && <button type="button" className="remove-item" aria-label={`Remover produto ${index + 1}`} onClick={() => setItems((current) => current.filter((_, itemIndex) => itemIndex !== index))}><Trash2 size={17} /></button>}
         </div>; })}</div>
+        {items.some((item) => materials.find((material) => material.id === item.material_id)?.test_required) && <div className="entry-test-report-fields">{items.map((item, index) => { const selectedMaterial = materials.find((material) => material.id === item.material_id); return selectedMaterial?.test_required ? <label key={index}>Numero do laudo/ensaio{selectedMaterial.report_required && <em> obrigatorio</em>}<input value={item.test_report_number} onChange={(event) => updateItem(index, "test_report_number", event.target.value)} placeholder="Ex.: LAUDO-2026-001" required={selectedMaterial.report_required} /></label> : null; })}</div>}
         <label>Observações da nota<textarea value={notes} onChange={(event) => setNotes(event.target.value)} placeholder="Fornecedor, conferência ou outras observações" rows={3} /></label>
         <div className="modal-actions"><button type="reset" className="secondary-button" onClick={() => { setItems([newItem()]); setMaterialSuggestionsOpen(null); setInvoiceNumber(""); setEntryDate(localDateValue()); setInvoiceFile(null); setNotes(""); setError(""); setSuccess(""); setCanRetryMaterials(false); }}>Limpar</button><button className="primary-button" disabled={saving || loading || !materials.length}>{saving ? "Registrando..." : "Registrar entrada"}<Plus size={16} /></button></div>
       </form>
