@@ -14,7 +14,7 @@ type Delivery = { id: string; delivered_at: string; reason: string; notes: strin
 type DeliveryItem = { id: string; delivery_id: string; quantity: number; material: { name: string; internal_code: string | null; unit: string } | null; lot: { lot_number: string } | null };
 type ReturnRecord = { id: string; returned_at: string; reason: string; notes: string | null; responsible_id: string };
 type ReturnItem = { return_id: string; delivery_item_id: string; quantity: number; equipment_condition: string; destination: string };
-type Accountability = { return_id: string; incident_type: string; incident_description: string | null; employee_signature_name: string | null; deduction_requested: boolean; deduction_amount: number | null };
+type Accountability = { return_id: string; incident_type: string; incident_description: string | null; employee_signature_name: string | null; deduction_requested: boolean; deduction_amount: number | null; deduction_approval_status: "pending" | "approved" | "rejected" | null };
 type Profile = { id: string; full_name: string };
 type HistoryEvent = { id: string; date: string; kind: "delivery" | "return"; material: string; code: string; unit: string; quantity: number; lot: string; reason: string; notes: string; responsible: string; condition?: string; destination?: string; accountability?: Accountability };
 
@@ -34,7 +34,7 @@ function formatDate(value: string) {
   const parsed = new Date(`${key}T00:00:00`);
   return Number.isNaN(parsed.getTime()) ? "Data inválida" : parsed.toLocaleDateString("pt-BR");
 }
-function accountabilityDetails(value?: Accountability) { if (!value || value.incident_type === "normal") return ""; const parts = [incidentLabels[value.incident_type] ?? value.incident_type, value.employee_signature_name ? `Assinado por ${value.employee_signature_name}` : "Sem assinatura", value.deduction_requested ? `Desconto solicitado${value.deduction_amount ? `: R$ ${Number(value.deduction_amount).toFixed(2)}` : ""}` : ""]; return ` · ${parts.filter(Boolean).join(" · ")}`; }
+function accountabilityDetails(value?: Accountability) { if (!value || value.incident_type === "normal") return ""; const approval = value.deduction_requested ? `Desconto solicitado${value.deduction_amount ? `: R$ ${Number(value.deduction_amount).toFixed(2)}` : ""} · ${value.deduction_approval_status === "approved" ? "Aprovado" : value.deduction_approval_status === "rejected" ? "Rejeitado" : "Pendente de aprovação"}` : ""; const parts = [incidentLabels[value.incident_type] ?? value.incident_type, value.employee_signature_name ? `Assinado por ${value.employee_signature_name}` : "Sem assinatura", approval]; return ` · ${parts.filter(Boolean).join(" · ")}`; }
 
 export default function EmployeeHistoryPage() {
   const { id } = useParams<{ id: string }>();
@@ -72,7 +72,7 @@ export default function EmployeeHistoryPage() {
       const [{ data: deliveryItems, error: itemError }, { data: returnItems, error: returnItemError }, { data: accountabilityData, error: accountabilityError }] = await Promise.all([
         deliveryIds.length ? supabase.from("delivery_items").select("id,delivery_id,quantity,material:materials(name,internal_code,unit),lot:material_lots(lot_number)").in("delivery_id", deliveryIds) : Promise.resolve({ data: [], error: null }),
         returnIds.length ? supabase.from("return_items").select("return_id,delivery_item_id,quantity,equipment_condition,destination").in("return_id", returnIds) : Promise.resolve({ data: [], error: null }),
-        returnIds.length ? supabase.from("return_accountability").select("return_id,incident_type,incident_description,employee_signature_name,deduction_requested,deduction_amount").in("return_id", returnIds) : Promise.resolve({ data: [], error: null }),
+        returnIds.length ? supabase.from("return_accountability").select("return_id,incident_type,incident_description,employee_signature_name,deduction_requested,deduction_amount,deduction_approval_status").in("return_id", returnIds) : Promise.resolve({ data: [], error: null }),
       ]);
       if (cancelled) return;
       if (itemError || returnItemError || accountabilityError) { setError(friendlyError(itemError ?? returnItemError ?? accountabilityError, "Não foi possível carregar os itens do histórico.")); setLoading(false); return; }

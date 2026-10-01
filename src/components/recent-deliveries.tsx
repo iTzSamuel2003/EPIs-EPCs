@@ -7,7 +7,7 @@ import { friendlyError } from "@/lib/ui-feedback";
 import { DeliverySignatureModal } from "@/components/delivery-signature-modal";
 import { FeedbackMessage } from "@/components/feedback-message";
 
-type DeliveryUnit = { unit_identifier: string; employee_id: string | null; delivered_at: string | null; valid_until: string | null; test_performed_at: string | null; test_report_number: string | null; ca_number: string | null; ca_expires_at: string | null };
+type DeliveryUnit = { unit_identifier: string; employee_id: string | null; delivered_at: string | null; valid_until: string | null; test_performed_at: string | null; test_number: string | null; test_report_number: string | null; ca_number: string | null; ca_expires_at: string | null };
 type Delivery = { id: string; delivered_at: string; reason: string; notes: string | null; term_file_path: string | null; term_uploaded_at: string | null; term_signature_method: string | null; employee: { full_name: string; registration: string | null; cpf: string } | null; delivery_items: Array<{ quantity: number; expected_replacement_at: string | null; material: { name: string; unit: string; internal_code: string | null } | null; material_units?: DeliveryUnit[] }> };
 const reasons: Record<string, string> = { admission: "Admissão", periodic_change: "Troca periódica", damaged: "Equipamento danificado", lost: "Equipamento perdido", role_change: "Alteração de função", replacement: "Substituição", other: "Outro" };
 const date = (value: string) => new Date(`${value}T00:00:00`).toLocaleDateString("pt-BR");
@@ -38,12 +38,12 @@ export function RecentDeliveries() {
       const supabase = createClient(); const { data: auth, error: authError } = await supabase.auth.getUser();
       if (authError || !auth.user) { if (active && requestId === requestRef.current) { setError(friendlyError(authError, "Sua sessão expirou. Entre novamente.")); setLoading(false); } return; }
       const [{ data, error: loadError }, { data: profileData, error: profileError }] = await Promise.all([
-        supabase.from("deliveries").select("id,delivered_at,reason,notes,term_file_path,term_uploaded_at,term_signature_method,employee:employees(full_name,registration,cpf),delivery_items(quantity,expected_replacement_at,material:materials(name,unit,internal_code),material_units(unit_identifier,employee_id,delivered_at,valid_until,test_performed_at,test_report_number,ca_number,ca_expires_at))").order("delivered_at", { ascending: false }).order("created_at", { ascending: false }).limit(10),
+        supabase.from("deliveries").select("id,delivered_at,reason,notes,term_file_path,term_uploaded_at,term_signature_method,employee:employees(full_name,registration,cpf),delivery_items(quantity,expected_replacement_at,material:materials(name,unit,internal_code),material_units(unit_identifier,employee_id,delivered_at,valid_until,test_performed_at,test_number,test_report_number,ca_number,ca_expires_at))").order("delivered_at", { ascending: false }).order("created_at", { ascending: false }).limit(10),
         supabase.from("profiles").select("organization_id").eq("id", auth.user.id).maybeSingle(),
       ]);
       if (!active || requestId !== requestRef.current) return;
       if (loadError || profileError) { setError(friendlyError(loadError ?? profileError, "Não foi possível carregar as entregas.")); setLoading(false); return; }
-      const enrichedDeliveries = (data ?? []).map((delivery) => ({ ...delivery, delivery_items: delivery.delivery_items?.map((item) => ({ ...item, material_units: item.material_units?.map((unit) => ({ ...unit, unit_identifier: `${unit.unit_identifier}${unit.test_report_number ? ` · laudo/ensaio ${unit.test_report_number}` : ""}${unit.ca_number ? ` · CA ${unit.ca_number}` : ""}` })) })) }));
+      const enrichedDeliveries = (data ?? []).map((delivery) => ({ ...delivery, delivery_items: delivery.delivery_items?.map((item) => ({ ...item, material_units: item.material_units?.map((unit) => ({ ...unit, unit_identifier: `${unit.unit_identifier}${unit.test_number ? ` · ensaio ${unit.test_number}` : ""}${unit.test_report_number ? ` · laudo ${unit.test_report_number}` : ""}${unit.ca_number ? ` · CA ${unit.ca_number}` : ""}` })) })) }));
       setDeliveries(enrichedDeliveries as unknown as Delivery[]);
       if (profileData?.organization_id) { const { data: organization, error: organizationError } = await supabase.from("organizations").select("name").eq("id", profileData.organization_id).maybeSingle(); if (!active || requestId !== requestRef.current) return; if (organizationError) setError(friendlyError(organizationError, "Não foi possível carregar os dados da organização.")); else setCompanyName(organization?.name ?? ""); }
       setLoading(false);
