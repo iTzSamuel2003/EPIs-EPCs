@@ -5,6 +5,7 @@ import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 import { createClient } from "@/lib/supabase/client";
+import { rolePageDefaults } from "@/lib/access-control";
 
 type MenuItem = readonly [string, typeof LayoutDashboard, string];
 type MenuSection = { label: string; items: readonly MenuItem[] };
@@ -20,8 +21,8 @@ const restrictedRolePaths: Record<string, string[]> = { rh: ["/", "/employees", 
 type SearchResult = { id: string; label: string; detail: string | null; href: string; kind: "Material" | "Funcionário" };
 
 export function AppShell({ children }: { children: React.ReactNode }) {
-  const pathname = usePathname(); const router = useRouter(); const [mobileMenu, setMobileMenu] = useState(false); const [query, setQuery] = useState(""); const [results, setResults] = useState<SearchResult[]>([]); const [searchError, setSearchError] = useState<string | null>(null); const [sessionError, setSessionError] = useState<string | null>(null); const [selectedSearchIndex, setSelectedSearchIndex] = useState(-1); const [validityCount, setValidityCount] = useState(0); const [userRole, setUserRole] = useState("user"); const [organizationLogo, setOrganizationLogo] = useState(""); const [signingOut, setSigningOut] = useState(false); const menuToggleRef = useRef<HTMLButtonElement>(null); const closeMenuRef = useRef<HTMLButtonElement>(null); const menuWasOpen = useRef(false); const searchRequestRef = useRef(0);
-  const publicRoute = pathname === "/login" || pathname === "/reset-password" || pathname.startsWith("/medidas/") || pathname === "/portal";
+  const pathname = usePathname(); const router = useRouter(); const [mobileMenu, setMobileMenu] = useState(false); const [query, setQuery] = useState(""); const [results, setResults] = useState<SearchResult[]>([]); const [searchError, setSearchError] = useState<string | null>(null); const [sessionError, setSessionError] = useState<string | null>(null); const [selectedSearchIndex, setSelectedSearchIndex] = useState(-1); const [validityCount, setValidityCount] = useState(0); const [userRole, setUserRole] = useState("user"); const [allowedPaths, setAllowedPaths] = useState<string[] | null>(null); const [organizationLogo, setOrganizationLogo] = useState(""); const [signingOut, setSigningOut] = useState(false); const menuToggleRef = useRef<HTMLButtonElement>(null); const closeMenuRef = useRef<HTMLButtonElement>(null); const menuWasOpen = useRef(false); const searchRequestRef = useRef(0);
+  const publicRoute = pathname === "/login" || pathname === "/reset-password" || pathname.startsWith("/medidas/") || pathname === "/portal" || pathname.startsWith("/invite/");
   useEffect(() => {
     if (!mobileMenu) return;
     function closeOnOutsidePointer(event: PointerEvent) {
@@ -45,6 +46,11 @@ export function AppShell({ children }: { children: React.ReactNode }) {
     setMobileMenu(false);
   }, [pathname]);
   useEffect(() => {
+    if (publicRoute || !allowedPaths || pathname === "/settings/users" || pathname === "/login") return;
+    const permitted = allowedPaths.some((path) => pathname === path || (path !== "/" && pathname.startsWith(`${path}/`)));
+    if (!permitted) router.replace("/");
+  }, [allowedPaths, pathname, publicRoute, router]);
+  useEffect(() => {
     if (publicRoute) return;
     const supabase = createClient();
     const { data: { subscription } } = supabase.auth.onAuthStateChange((event) => {
@@ -57,11 +63,17 @@ export function AppShell({ children }: { children: React.ReactNode }) {
     let cancelled = false;
     void createClient().auth.getUser().then(async ({ data }) => {
       if (!data.user) return;
-      const { data: profile } = await createClient().from("profiles").select("role,organization_id").eq("id", data.user.id).maybeSingle();
+      const supabase = createClient();
+      const { data: profile } = await supabase.from("profiles").select("role,organization_id").eq("id", data.user.id).maybeSingle();
       if (!cancelled) {
-        setUserRole(profile?.role || "user");
+        const role = profile?.role || "user";
+        setUserRole(role);
+        const { data: permissions } = profile?.organization_id ? await supabase.from("profile_page_permissions").select("page_path").eq("profile_id", data.user.id).eq("organization_id", profile.organization_id) : { data: [] };
+        const paths = permissions?.length ? permissions.map((item) => item.page_path) : rolePageDefaults[role] ?? rolePageDefaults.user;
+        if (role !== "admin") restrictedRolePaths[role] = paths;
+        setAllowedPaths(paths);
         if (profile?.organization_id) {
-          const { data: organization } = await createClient().from("organizations").select("logo_url").eq("id", profile.organization_id).maybeSingle();
+          const { data: organization } = await supabase.from("organizations").select("logo_url").eq("id", profile.organization_id).maybeSingle();
           if (!cancelled) setOrganizationLogo(organization?.logo_url || "");
         }
       }
