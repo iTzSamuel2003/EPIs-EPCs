@@ -14,6 +14,7 @@ type EmployeeForm = { registration: string; full_name: string; cpf: string; carg
 const emptyForm: EmployeeForm = { registration: "", full_name: "", cpf: "", cargo_funcao: "", function_classification: "", department: "", unit: "", admission_date: "", phone: "", email: "", status: "active", notes: "" };
 const classificationOptions = ["I", "II", "III", "IV", "V", "VI"];
 const functionLabel = (value: string) => value.replace(/\s+(VI|V|IV|III|II|I)$/i, "");
+
 function isValidCpf(value: string) {
   const digits = value.replace(/\D/g, "");
   if (digits.length !== 11 || /^([0-9])\1+$/.test(digits)) return false;
@@ -24,6 +25,7 @@ function isValidCpf(value: string) {
   };
   return calculate(9) === Number(digits[9]) && calculate(10) === Number(digits[10]);
 }
+
 function isValidDateValue(value: string) {
   if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) return false;
   const [year, month, day] = value.split("-").map(Number);
@@ -32,7 +34,17 @@ function isValidDateValue(value: string) {
 }
 
 export default function EditEmployeePage() {
-  const params = useParams<{ id: string }>(); const router = useRouter(); const [form, setForm] = useState<EmployeeForm>(emptyForm); const [functionTemplates, setFunctionTemplates] = useState<FunctionTemplate[]>([]); const [loading, setLoading] = useState(true); const [saving, setSaving] = useState(false); const [error, setError] = useState(""); const [success, setSuccess] = useState(""); const [retryKey, setRetryKey] = useState(0); const loadVersion = useRef(0);
+  const params = useParams<{ id: string }>();
+  const router = useRouter();
+  const [form, setForm] = useState<EmployeeForm>(emptyForm);
+  const [functionTemplates, setFunctionTemplates] = useState<FunctionTemplate[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState("");
+  const [success, setSuccess] = useState("");
+  const [retryKey, setRetryKey] = useState(0);
+  const loadVersion = useRef(0);
+
   useEffect(() => {
     let active = true;
     const version = ++loadVersion.current;
@@ -40,13 +52,17 @@ export default function EditEmployeePage() {
       setLoading(true); setError("");
       try {
         const supabase = createClient();
-        const [{ data, error: employeeError }, { data: templateData, error: templateError }] = await Promise.all([supabase.from("employees").select("registration,full_name,cpf,job_title,function_name,function_classification,department,unit,admission_date,phone,email,status,notes").eq("id", params.id).single(), supabase.from("function_templates").select("id,name").order("name")]);
+        const [{ data, error: employeeError }, { data: templateData, error: templateError }] = await Promise.all([
+          supabase.from("employees").select("registration,full_name,cpf,job_title,function_name,function_classification,department,unit,admission_date,phone,email,status,notes").eq("id", params.id).single(),
+          supabase.from("function_templates").select("id,name").order("name"),
+        ]);
         if (!active || version !== loadVersion.current) return;
-        if (employeeError || templateError) { setError(friendlyError(employeeError ?? templateError, "Não foi possível carregar os dados.")); return; }
-        setFunctionTemplates((templateData ?? []) as FunctionTemplate[]);
+        if (employeeError || !data) { setError(friendlyError(employeeError, "Não foi possível carregar os dados do funcionário.")); return; }
+        // A lista de funções é auxiliar; uma falha nela não bloqueia a edição.
+        setFunctionTemplates(templateError ? [] : (templateData ?? []) as FunctionTemplate[]);
         setForm({ ...emptyForm, registration: data.registration ?? "", full_name: data.full_name, cpf: data.cpf, cargo_funcao: data.job_title || data.function_name || "", function_classification: data.function_classification ?? "", department: data.department ?? "", unit: data.unit ?? "", admission_date: data.admission_date ?? "", phone: data.phone ?? "", email: data.email ?? "", status: data.status, notes: data.notes ?? "" });
       } catch (caught) {
-        if (active && version === loadVersion.current) setError(friendlyError(caught, "Não foi possível carregar os dados."));
+        if (active && version === loadVersion.current) setError(friendlyError(caught, "Não foi possível carregar os dados do funcionário."));
       } finally {
         if (active && version === loadVersion.current) setLoading(false);
       }
@@ -54,7 +70,9 @@ export default function EditEmployeePage() {
     void load();
     return () => { active = false; };
   }, [params.id, retryKey]);
+
   function update(field: keyof EmployeeForm, value: string) { setForm((current) => ({ ...current, [field]: value })); }
+
   async function save(event: FormEvent) {
     event.preventDefault();
     if (saving) return;
@@ -73,8 +91,10 @@ export default function EditEmployeePage() {
       setSaving(false);
     }
   }
+
   if (loading) return <main className="module-shell"><div className="module-loading"><LoaderCircle className="spin" size={22} /> Carregando funcionário...</div></main>;
   if (error && !form.full_name) return <main className="module-shell"><section className="panel runtime-error-card"><FeedbackMessage onRetry={() => { setError(""); setRetryKey((current) => current + 1); }}>{error}</FeedbackMessage></section><Link className="secondary-button" href="/employees"><ArrowLeft size={16} /> Funcionários</Link></main>;
   const functionOptions = functionTemplates.some((template) => template.name === form.cargo_funcao) ? functionTemplates : form.cargo_funcao ? [...functionTemplates, { id: "current", name: form.cargo_funcao }] : functionTemplates;
+
   return <main className="module-shell"><header className="module-header"><div><Link className="employee-back-link" href="/employees"><ArrowLeft size={14} /> Funcionários</Link><p className="eyebrow">CADASTRO DE PESSOAS</p><h1>Editar funcionário</h1><p className="module-subtitle">Atualize as informações cadastrais do colaborador.</p></div><div className="employee-header-tools"><EmployeeNavigation id={params.id} current="edit" /></div></header>{success && <div className="feedback success-feedback"><Check size={17} /> {success}</div>}{error && <div className="feedback error-feedback"><X size={17} /> {error}</div>}<section className="panel edit-employee-card"><form className="material-form" onSubmit={save}><div className="form-section-title"><h2>Dados principais</h2><p>Informações de identificação e vínculo.</p></div><div className="form-grid three"><label>Matrícula<input value={form.registration} onChange={(event) => update("registration", event.target.value)} /></label><label>Nome completo<input value={form.full_name} onChange={(event) => update("full_name", event.target.value)} required /></label><label>CPF<input value={form.cpf} onChange={(event) => update("cpf", event.target.value)} required /></label></div><div className="form-grid three"><label>Função<select value={form.cargo_funcao} onChange={(event) => update("cargo_funcao", event.target.value)}><option value="">Selecione a função</option>{functionOptions.map((template) => <option key={template.id} value={template.name}>{functionLabel(template.name)}</option>)}</select></label><label>Classificação<select value={form.function_classification} onChange={(event) => update("function_classification", event.target.value)}><option value="">Sem classificação</option>{classificationOptions.map((classification) => <option key={classification} value={classification}>{classification}</option>)}</select></label><label>Setor<input value={form.department} onChange={(event) => update("department", event.target.value)} /></label></div><div className="form-section-title"><h2>Localização e contato</h2><p>Unidade e dados complementares do colaborador.</p></div><div className="form-grid three"><label>Unidade<select value={form.unit} onChange={(event) => update("unit", event.target.value)}><option value="">Selecione a unidade</option><option value="Campo Grande">Campo Grande</option><option value="Dourados">Dourados</option><option value="Naviraí">Naviraí</option></select></label><label>Data de admissão<input type="date" value={form.admission_date} onChange={(event) => update("admission_date", event.target.value)} /></label><label>Telefone<input value={form.phone} onChange={(event) => update("phone", event.target.value)} /></label></div><div className="form-grid two"><label>E-mail<input type="email" value={form.email} onChange={(event) => update("email", event.target.value)} /></label><label>Status<select value={form.status} onChange={(event) => update("status", event.target.value as EmployeeForm["status"])}><option value="active">Ativo</option><option value="away">Afastado</option><option value="terminated">Desligado</option></select></label></div><label>Observações<textarea value={form.notes} onChange={(event) => update("notes", event.target.value)} rows={4} /></label><div className="modal-actions"><Link className="secondary-button" href="/employees">Cancelar</Link><button className="primary-button" disabled={saving}>{saving ? "Salvando..." : "Salvar alterações"}<Save size={16} /></button></div></form></section></main>;
 }

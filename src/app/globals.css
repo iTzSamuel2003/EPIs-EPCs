@@ -4043,6 +4043,9 @@ body{overflow-x:hidden;}
   :where(.primary-button,.secondary-button,.action-button,.status-pill){border:1px solid currentColor;}
 }
 
+/* Em telas estreitas, deixe o conteúdo principal ocupar logo o espaço após o menu. */
+@media (max-width:760px){.sidebar{width:min(78vw,280px)!important;}}
+
 /* Ajustes finais de contenção para tablets e desktops estreitos. */
 html,body{max-width:100%;overflow-x:hidden}
 .module-shell,.page-content{min-width:0;overflow-x:clip}
