@@ -2,7 +2,7 @@
 
 import { FormEvent, useCallback, useEffect, useState } from "react";
 import Link from "next/link";
-import { ArrowLeft, Building2, Check, Copy, Link2, Plus, Users } from "lucide-react";
+import { ArrowLeft, Building2, Check, ChevronDown, Copy, Link2, Plus, Users } from "lucide-react";
 import { FeedbackMessage } from "@/components/feedback-message";
 import { createClient } from "@/lib/supabase/client";
 import { PAGE_PERMISSIONS } from "@/lib/access-control";
@@ -21,6 +21,20 @@ type CreatedInvitation = {
   expires_at: string;
 };
 
+type OrganizationMember = {
+  user_id: string;
+  full_name: string;
+  email: string | null;
+  role: "admin" | "rh" | "tst" | "user";
+};
+
+const organizationRoleLabel: Record<OrganizationMember["role"], string> = {
+  admin: "Administrador",
+  rh: "RH",
+  tst: "TST",
+  user: "Usuário",
+};
+
 export default function OrganizationsSettingsPage() {
   const [organizations, setOrganizations] = useState<Organization[]>([]);
   const [name, setName] = useState("");
@@ -32,6 +46,10 @@ export default function OrganizationsSettingsPage() {
   const [copied, setCopied] = useState(false);
   const [error, setError] = useState("");
   const [success, setSuccess] = useState("");
+  const [expandedOrganizationId, setExpandedOrganizationId] = useState<string | null>(null);
+  const [organizationMembers, setOrganizationMembers] = useState<Record<string, OrganizationMember[]>>({});
+  const [loadingMembersByOrganization, setLoadingMembersByOrganization] = useState<Record<string, boolean>>({});
+  const [memberErrorsByOrganization, setMemberErrorsByOrganization] = useState<Record<string, string>>({});
 
   const loadOrganizations = useCallback(async () => {
     setLoading(true);
@@ -47,6 +65,33 @@ export default function OrganizationsSettingsPage() {
   }, []);
 
   useEffect(() => { void loadOrganizations(); }, [loadOrganizations]);
+
+  async function loadOrganizationMembers(organizationId: string) {
+    setLoadingMembersByOrganization((current) => ({ ...current, [organizationId]: true }));
+    setMemberErrorsByOrganization((current) => ({ ...current, [organizationId]: "" }));
+    try {
+      const { data, error: membersError } = await createClient().rpc("list_platform_organization_members", {
+        p_organization_id: organizationId,
+      });
+      if (membersError) {
+        setMemberErrorsByOrganization((current) => ({ ...current, [organizationId]: "Não foi possível carregar os usuários. Tente novamente." }));
+      } else {
+        setOrganizationMembers((current) => ({ ...current, [organizationId]: (data ?? []) as OrganizationMember[] }));
+      }
+    } catch {
+      setMemberErrorsByOrganization((current) => ({ ...current, [organizationId]: "Não foi possível carregar os usuários. Tente novamente." }));
+    } finally {
+      setLoadingMembersByOrganization((current) => ({ ...current, [organizationId]: false }));
+    }
+  }
+
+  function toggleOrganization(organizationId: string) {
+    const isOpening = expandedOrganizationId !== organizationId;
+    setExpandedOrganizationId(isOpening ? organizationId : null);
+    if (isOpening && !(organizationId in organizationMembers)) {
+      void loadOrganizationMembers(organizationId);
+    }
+  }
 
   async function createOrganization(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -94,8 +139,8 @@ export default function OrganizationsSettingsPage() {
   }
 
   return (
-    <main className="module-shell access-management-page">
-      <header className="module-header">
+    <main className="module-shell access-management-page organization-settings-page">
+      <header className="module-header organization-settings-header">
         <div>
           <Link className="employee-back-link" href="/settings"><ArrowLeft size={14} aria-hidden="true" /> Configurações</Link>
           <p className="eyebrow">ADMINISTRAÇÃO DA PLATAFORMA</p>
@@ -134,13 +179,31 @@ export default function OrganizationsSettingsPage() {
           <span className="access-count">{organizations.length} organizações</span>
         </div>
         {loading ? <p className="access-empty" role="status">Carregando organizações...</p> : organizations.length === 0 ? <p className="access-empty">Nenhuma organização disponível.</p> : <div className="access-role-list">
-          {organizations.map((organization) => <article className="access-role-card" key={organization.id}>
-            <div className="access-role-summary">
-              <span className="access-role-icon"><Building2 size={18} aria-hidden="true" /></span>
-              <span className="access-role-copy"><strong>{organization.name}</strong><small>{organization.cnpj ? `CNPJ ${organization.cnpj}` : "CNPJ não informado"} · Criada em {new Date(organization.created_at).toLocaleDateString("pt-BR")}</small></span>
-              <span className="access-count"><Users size={14} aria-hidden="true" /> {organization.member_count} usuários</span>
-            </div>
-          </article>)}
+          {organizations.map((organization) => {
+            const isOpen = expandedOrganizationId === organization.id;
+            const membersPanelId = `organization-members-${organization.id}`;
+            const members = organizationMembers[organization.id] ?? [];
+
+            return <article className={`access-role-card organization-card ${isOpen ? "is-open" : ""}`} key={organization.id}>
+              <button className="access-role-summary organization-summary" type="button" onClick={() => toggleOrganization(organization.id)} aria-expanded={isOpen} aria-controls={isOpen ? membersPanelId : undefined}>
+                <span className="access-role-icon"><Building2 size={18} aria-hidden="true" /></span>
+                <span className="access-role-copy"><strong>{organization.name}</strong><small>{organization.cnpj ? `CNPJ ${organization.cnpj}` : "CNPJ não informado"} · Criada em {new Date(organization.created_at).toLocaleDateString("pt-BR")}</small></span>
+                <span className="access-count"><Users size={14} aria-hidden="true" /> {organization.member_count} {organization.member_count === 1 ? "usuário" : "usuários"}</span>
+                <span className="organization-expand-label">{isOpen ? "Ocultar usuários" : "Ver usuários"}<ChevronDown size={16} className="access-chevron" aria-hidden="true" /></span>
+              </button>
+              {isOpen && <div className="organization-members-panel" id={membersPanelId}>
+                <div className="organization-members-heading"><div><h3>Usuários desta organização</h3><p>Confira quem tem acesso e qual perfil está atribuído.</p></div><span>{organization.member_count} {organization.member_count === 1 ? "pessoa" : "pessoas"}</span></div>
+                {loadingMembersByOrganization[organization.id] ? <p className="organization-members-feedback" role="status">Carregando usuários...</p>
+                  : memberErrorsByOrganization[organization.id] ? <div className="organization-members-feedback" role="alert"><span>{memberErrorsByOrganization[organization.id]}</span><button type="button" className="secondary-button" onClick={() => void loadOrganizationMembers(organization.id)}>Tentar novamente</button></div>
+                    : members.length === 0 ? <p className="organization-members-feedback">Ainda não há usuários ativos nesta organização.</p>
+                      : <ul className="organization-members-list">{members.map((member) => <li className="organization-member-row" key={member.user_id}>
+                        <span className="access-member-avatar" aria-hidden="true">{member.full_name.trim().slice(0, 1).toLocaleUpperCase("pt-BR") || "?"}</span>
+                        <span className="organization-member-copy"><strong>{member.full_name}</strong><span>{member.email || "E-mail não informado"}</span></span>
+                        <span className={`organization-user-role role-${member.role}`}>{organizationRoleLabel[member.role]}</span>
+                      </li>)}</ul>}
+              </div>}
+            </article>;
+          })}
         </div>}
       </section>
 

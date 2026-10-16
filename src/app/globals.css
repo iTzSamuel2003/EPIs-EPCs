@@ -2228,6 +2228,45 @@ body{max-width:100%;overflow-x:hidden;}
   margin-top:12px!important;
   padding-bottom:2px!important;
 }
+
+/* Expansão de empresas na administração da plataforma. */
+.organization-settings-page>.organization-settings-header{max-width:none;width:100%;margin:0 0 4px;align-items:flex-start}
+.organization-settings-page>.access-panel{width:100%;box-shadow:0 8px 28px #172b4d08}
+.organization-summary{min-height:82px;color:inherit;font:inherit;transition:background .18s ease}
+.organization-summary:hover{background:#fbfaff}
+.organization-summary:focus-visible{outline:3px solid #b9abf4;outline-offset:-4px}
+.organization-expand-label{display:inline-flex;align-items:center;gap:7px;color:#6b55ca;font-size:13px;font-weight:700;white-space:nowrap}
+.organization-card.is-open>.organization-summary .access-chevron{transform:rotate(180deg)}
+.organization-members-panel{margin:0 16px 16px;padding:18px;border:1px solid #e9edf5;border-radius:12px;background:#fbfcff}
+.organization-members-heading{display:flex;align-items:center;justify-content:space-between;gap:16px;padding-bottom:13px;border-bottom:1px solid #e9edf5}
+.organization-members-heading h3{margin:0 0 4px;color:#263954;font-size:15px}
+.organization-members-heading p{margin:0;color:#8290a8;font-size:13px;line-height:1.5}
+.organization-members-heading>span{flex:none;color:#8290a8;font-size:12px;font-weight:600}
+.organization-members-list{display:grid;margin:0;padding:0;list-style:none}
+.organization-member-row{display:grid;grid-template-columns:40px minmax(0,1fr) auto;align-items:center;gap:12px;padding:13px 2px;border-bottom:1px solid #edf0f5}
+.organization-member-row:last-child{border-bottom:0;padding-bottom:2px}
+.organization-member-copy{display:grid;gap:4px;min-width:0}
+.organization-member-copy strong{overflow-wrap:anywhere;color:#263954;font-size:14px}
+.organization-member-copy>span{overflow-wrap:anywhere;color:#8290a8;font-size:13px}
+.organization-user-role{padding:6px 10px;border-radius:20px;background:#f1effb;color:#6754bd;font-size:12px;font-weight:700;white-space:nowrap}
+.organization-user-role.role-admin{background:#eeeaff;color:#654ec6}
+.organization-user-role.role-rh{background:#eaf4ff;color:#347bb5}
+.organization-user-role.role-tst{background:#eaf7f1;color:#318763}
+.organization-user-role.role-user{background:#f1f3f7;color:#68768d}
+.organization-members-feedback{display:flex;align-items:center;justify-content:center;gap:12px;flex-wrap:wrap;margin:0;padding:20px 8px;color:#8290a8;font-size:13px;text-align:center}
+@media(max-width:760px){
+  .organization-summary{flex-wrap:wrap}
+  .organization-summary .access-role-copy{flex:1 1 calc(100% - 60px)}
+  .organization-summary>.access-count{margin-left:54px}
+  .organization-expand-label{margin-left:auto}
+  .organization-members-panel{margin:0 10px 10px;padding:14px}
+  .organization-members-heading{align-items:flex-start}
+  .organization-member-row{gap:9px;padding:11px 0}
+}
+@media(max-width:480px){
+  .organization-member-row{grid-template-columns:36px minmax(0,1fr)}
+  .organization-member-row .organization-user-role{grid-column:2;justify-self:start;margin-top:-2px}
+}
 .sidebar-bottom>a{
   min-height:36px!important;
   padding:7px 10px!important;
