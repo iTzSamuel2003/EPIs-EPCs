@@ -2164,6 +2164,65 @@ body{max-width:100%;overflow-x:hidden;}
   .module-table-card .table-wrap .stock-table td:nth-child(11)::before{content:"Localização";}
 }
 
+.settings-header-actions{display:flex;align-items:center;justify-content:flex-end;gap:12px;flex-wrap:wrap}
+.access-management-page{display:grid;gap:20px}
+.access-panel{padding:24px}
+.access-panel-heading{display:flex;align-items:center;gap:14px;margin-bottom:20px}
+.access-panel-heading>div:nth-child(2){flex:1;min-width:0}
+.access-panel-heading h2{margin:0 0 5px;font-size:19px;color:#172b4d}
+.access-panel-heading p{margin:0;color:#8290a8;font-size:14px;line-height:1.5}
+.access-heading-icon,.access-role-icon,.access-member-avatar{display:grid;place-items:center;flex:none;width:44px;height:44px;border-radius:14px;background:#f0edff;color:#765ddd}
+.access-role-list,.access-member-list{display:grid;gap:12px}
+.access-role-card,.access-member-card{overflow:hidden;border:1px solid #e4e9f1;border-radius:14px;background:#fff}
+.access-role-card.is-open,.access-member-card.is-open{border-color:#b9abf4;box-shadow:0 8px 24px #463b7110}
+.access-role-summary,.access-member-summary{display:flex;align-items:center;gap:14px;padding:16px;width:100%;border:0;background:transparent;text-align:left}
+.access-role-summary{cursor:pointer}
+.access-role-copy,.access-member-copy{display:grid;gap:5px;flex:1;min-width:0}
+.access-role-copy strong,.access-member-copy strong{color:#263954;font-size:15px}
+.access-role-copy small,.access-member-copy span{color:#7d8ba4;font-size:13px;line-height:1.45}
+.access-count{flex:none;padding:7px 10px;border-radius:20px;background:#f4f2fc;color:#6b55ca;font-size:12px;font-weight:700;white-space:nowrap}
+.access-chevron{flex:none;color:#8290a8;transition:transform .2s}
+.is-open>.access-role-summary .access-chevron{transform:rotate(180deg)}
+.access-role-editor,.access-member-editor{display:grid;gap:18px;padding:0 18px 18px}
+.access-permission-groups{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px}
+.access-permission-group{min-width:0;margin:0;padding:12px;border:1px solid #edf0f5;border-radius:12px}
+.access-permission-group legend{padding:0 5px;color:#596a84;font-size:12px;font-weight:700}
+.access-permission-group legend span{margin-left:8px;color:#95a1b4;font-weight:500}
+.access-permission-options{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:5px}
+.access-permission-option{display:flex;align-items:center;gap:8px;min-height:36px;padding:6px 8px;border-radius:8px;color:#3d4e69;font-size:13px;cursor:pointer}
+.access-permission-option:hover{background:#f7f6fc}
+.access-permission-option input{width:16px;height:16px;margin:0;accent-color:#7660dc;flex:none}
+.access-editor-footer{display:flex;align-items:center;justify-content:space-between;gap:14px;padding-top:14px;border-top:1px solid #edf0f5;color:#8190a8;font-size:13px}
+.access-editor-footer .primary-button{flex:none}
+.access-admin-note{display:flex;align-items:center;gap:12px;padding:13px 15px;border-radius:12px;background:#f8f7ff;color:#6e59ca}
+.access-admin-note span{display:grid;gap:3px}
+.access-admin-note strong{color:#394968;font-size:13px}
+.access-admin-note small{color:#8290a8;font-size:12px;line-height:1.45}
+.access-search{display:grid;gap:7px;max-width:420px;margin-bottom:16px;color:#53647f;font-size:13px;font-weight:600}
+.access-member-avatar{width:40px;height:40px;border-radius:50%;font-weight:700}
+.access-edit-button{display:flex;align-items:center;gap:8px;flex:none}
+.access-member-controls,.access-invite-fields{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));align-items:end;gap:14px}
+.access-member-controls label,.access-invite-fields label{display:grid;gap:7px;color:#53647f;font-size:13px;font-weight:600}
+.text-action{display:flex;align-items:center;gap:7px;justify-self:start;padding:10px 0;border:0;background:none;color:#705bd0;font-weight:600;cursor:pointer}
+.access-helper{margin:0;color:#77869e;font-size:13px;line-height:1.5}
+.access-empty{padding:20px;color:#8290a8;text-align:center}
+.access-invite-count{display:flex;align-items:center;gap:10px;min-height:48px;color:#6f5acb}
+.access-invite-count span{display:grid;gap:3px}
+.access-invite-count strong{font-size:13px}
+.access-invite-count small{color:#8290a8;font-size:12px}
+.access-invite-details{padding-top:15px;border-top:1px solid #edf0f5}
+.access-invite-details summary{width:max-content;max-width:100%;color:#705bd0;font-size:13px;font-weight:700;cursor:pointer}
+.access-invite-details[open] .access-permission-groups{margin-top:16px}
+.access-invite-actions{display:grid;justify-items:start;gap:12px}
+.invite-link-box{display:flex;align-items:center;gap:10px;width:min(100%,760px)}
+.invite-link-box input{flex:1;min-width:0}
+.no-access-page{display:grid;min-height:100vh;place-items:center;padding:24px;background:#f6f7fb}
+.no-access-card{display:grid;justify-items:center;gap:14px;width:min(100%,520px);padding:40px 32px;border:1px solid #e4e9f1;border-radius:20px;background:#fff;text-align:center;box-shadow:0 16px 48px #172b4d0b}
+.no-access-card h1{margin:0;color:#172b4d;font-size:28px}
+.no-access-card>p:not(.eyebrow){margin:0 0 8px;color:#77869e;line-height:1.65}
+.no-access-icon{display:grid;place-items:center;width:56px;height:56px;border-radius:17px;background:#f0edff;color:#765ddd}
+@media(max-width:760px){.settings-header-actions{justify-content:flex-start;width:100%}.settings-header-actions>*{flex:1;justify-content:center}.access-panel{padding:17px}.access-panel-heading{align-items:flex-start;flex-wrap:wrap}.access-panel-heading>.access-count{margin-left:58px}.access-role-summary,.access-member-summary{gap:10px;padding:13px}.access-role-copy small{max-width:38ch}.access-role-summary>.access-count,.access-member-summary>.access-count{font-size:11px;padding:6px 8px}.access-permission-groups{grid-template-columns:1fr}.access-permission-options{grid-template-columns:repeat(2,minmax(0,1fr))}.access-member-summary{flex-wrap:wrap}.access-member-copy{flex-basis:calc(100% - 55px)}.access-member-summary>.access-count{margin-left:50px}.access-edit-button{margin-left:auto}.access-editor-footer{align-items:stretch;flex-direction:column}.access-editor-footer .primary-button{justify-content:center}.access-member-controls,.access-invite-fields{grid-template-columns:1fr}.invite-link-box{align-items:stretch;flex-direction:column}.invite-link-box .secondary-button{justify-content:center}}
+
 /* Área inferior do menu lateral mais compacta em telas menores. */
 .sidebar-bottom{
   margin-top:12px!important;
