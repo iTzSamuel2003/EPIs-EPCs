@@ -55,7 +55,8 @@ export function RecentReturns() {
     runLoad();
     const refresh = runLoad;
     window.addEventListener("return-created", refresh);
-    return () => { active = false; requestRef.current += 1; window.removeEventListener("return-created", refresh); };
+    window.addEventListener("focus", refresh);
+    return () => { active = false; requestRef.current += 1; window.removeEventListener("return-created", refresh); window.removeEventListener("focus", refresh); };
   }, [retryKey]);
 
   async function downloadTerm(item: ReturnRecord) {

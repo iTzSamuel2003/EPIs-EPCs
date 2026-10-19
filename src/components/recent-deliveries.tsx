@@ -8,7 +8,7 @@ import { DeliverySignatureModal } from "@/components/delivery-signature-modal";
 import { FeedbackMessage } from "@/components/feedback-message";
 
 type DeliveryUnit = { unit_identifier: string; employee_id: string | null; delivered_at: string | null; valid_until: string | null; test_performed_at: string | null; test_number: string | null; test_report_number: string | null; ca_number: string | null; ca_expires_at: string | null };
-type Delivery = { id: string; delivered_at: string; reason: string; notes: string | null; term_file_path: string | null; term_uploaded_at: string | null; term_signature_method: string | null; employee: { full_name: string; registration: string | null; cpf: string } | null; delivery_items: Array<{ quantity: number; expected_replacement_at: string | null; material: { name: string; unit: string; internal_code: string | null } | null; material_units?: DeliveryUnit[] }> };
+type Delivery = { id: string; delivered_at: string; reason: string; notes: string | null; term_file_path: string | null; term_uploaded_at: string | null; term_signature_method: string | null; term_signed_at: string | null; employee: { full_name: string; registration: string | null; cpf: string; phone: string | null } | null; delivery_items: Array<{ quantity: number; expected_replacement_at: string | null; material: { name: string; unit: string; internal_code: string | null } | null; material_units?: DeliveryUnit[] }> };
 const reasons: Record<string, string> = { admission: "Admissão", periodic_change: "Troca periódica", damaged: "Equipamento danificado", lost: "Equipamento perdido", role_change: "Alteração de função", replacement: "Substituição", other: "Outro" };
 const date = (value: string) => new Date(`${value}T00:00:00`).toLocaleDateString("pt-BR");
 const safeFileName = (value: string) => value.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "");
@@ -38,7 +38,7 @@ export function RecentDeliveries() {
       const supabase = createClient(); const { data: auth, error: authError } = await supabase.auth.getUser();
       if (authError || !auth.user) { if (active && requestId === requestRef.current) { setError(friendlyError(authError, "Sua sessão expirou. Entre novamente.")); setLoading(false); } return; }
       const [{ data, error: loadError }, { data: profileData, error: profileError }] = await Promise.all([
-        supabase.from("deliveries").select("id,delivered_at,reason,notes,term_file_path,term_uploaded_at,term_signature_method,employee:employees(full_name,registration,cpf),delivery_items(quantity,expected_replacement_at,material:materials(name,unit,internal_code),material_units(unit_identifier,employee_id,delivered_at,valid_until,test_performed_at,test_number,test_report_number,ca_number,ca_expires_at))").order("delivered_at", { ascending: false }).order("created_at", { ascending: false }).limit(10),
+        supabase.from("deliveries").select("id,delivered_at,reason,notes,term_file_path,term_uploaded_at,term_signature_method,term_signed_at,employee:employees(full_name,registration,cpf,phone),delivery_items(quantity,expected_replacement_at,material:materials(name,unit,internal_code),material_units(unit_identifier,employee_id,delivered_at,valid_until,test_performed_at,test_number,test_report_number,ca_number,ca_expires_at))").order("delivered_at", { ascending: false }).order("created_at", { ascending: false }).limit(10),
         supabase.from("profiles").select("organization_id").eq("id", auth.user.id).maybeSingle(),
       ]);
       if (!active || requestId !== requestRef.current) return;
@@ -49,7 +49,7 @@ export function RecentDeliveries() {
       setLoading(false);
     }
     runLoad();
-    const refresh = runLoad; window.addEventListener("delivery-created", refresh); return () => { active = false; requestRef.current += 1; window.removeEventListener("delivery-created", refresh); };
+    const refresh = runLoad; window.addEventListener("delivery-created", refresh); window.addEventListener("focus", refresh); return () => { active = false; requestRef.current += 1; window.removeEventListener("delivery-created", refresh); window.removeEventListener("focus", refresh); };
   }, [retryKey]);
 
   async function uploadTerm(delivery: Delivery, event: ChangeEvent<HTMLInputElement>) {

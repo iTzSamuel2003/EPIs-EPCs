@@ -21,7 +21,7 @@ type SearchResult = { id: string; label: string; detail: string | null; href: st
 
 export function AppShell({ children }: { children: React.ReactNode }) {
   const pathname = usePathname(); const router = useRouter(); const [mobileMenu, setMobileMenu] = useState(false); const [query, setQuery] = useState(""); const [results, setResults] = useState<SearchResult[]>([]); const [searchError, setSearchError] = useState<string | null>(null); const [sessionError, setSessionError] = useState<string | null>(null); const [selectedSearchIndex, setSelectedSearchIndex] = useState(-1); const [validityCount, setValidityCount] = useState(0); const [allowedPaths, setAllowedPaths] = useState<string[] | null>(null); const [organizationLogo, setOrganizationLogo] = useState(""); const [signingOut, setSigningOut] = useState(false); const menuToggleRef = useRef<HTMLButtonElement>(null); const closeMenuRef = useRef<HTMLButtonElement>(null); const menuWasOpen = useRef(false); const searchRequestRef = useRef(0);
-  const publicRoute = pathname === "/login" || pathname === "/reset-password" || pathname === "/no-access" || pathname.startsWith("/medidas/") || pathname === "/portal" || pathname.startsWith("/invite/");
+  const publicRoute = pathname === "/login" || pathname === "/reset-password" || pathname === "/no-access" || pathname.startsWith("/medidas/") || pathname.startsWith("/assinar/") || pathname === "/portal" || pathname.startsWith("/invite/");
   useEffect(() => {
     if (!mobileMenu) return;
     function closeOnOutsidePointer(event: PointerEvent) {

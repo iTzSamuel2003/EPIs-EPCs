@@ -429,3 +429,15 @@ enabled = true
 verify_jwt = false
 import_map = "./functions/submit-employee-portal-course/deno.json"
 entrypoint = "./functions/submit-employee-portal-course/index.ts"
+
+[functions.create-term-signature-link]
+enabled = true
+verify_jwt = true
+import_map = "./functions/create-term-signature-link/deno.json"
+entrypoint = "./functions/create-term-signature-link/index.ts"
+
+[functions.employee-term-signature]
+enabled = true
+verify_jwt = false
+import_map = "./functions/employee-term-signature/deno.json"
+entrypoint = "./functions/employee-term-signature/index.ts"
