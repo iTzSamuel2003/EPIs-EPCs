@@ -3,7 +3,7 @@
 import { ArrowDownToLine, ArrowUpRight, Bell, Boxes, CalendarClock, ChevronDown, CircleHelp, ClipboardCheck, ClipboardList, LayoutDashboard, LogOut, Menu, PackageCheck, Search, Settings, SlidersHorizontal, ShieldCheck, Users, Wallet, X } from "lucide-react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
-import { useEffect, useRef, useState } from "react";
+import { createContext, useContext, useEffect, useRef, useState } from "react";
 import { createClient } from "@/lib/supabase/client";
 import { rolePageDefaults } from "@/lib/access-control";
 
@@ -18,8 +18,22 @@ const menuSections: readonly MenuSection[] = [
 ] as const;
 const menu = menuSections.flatMap((section) => section.items);
 type SearchResult = { id: string; label: string; detail: string | null; href: string; kind: "Material" | "Funcionário" };
+type CurrentUser = { name: string; role: string };
+
+const CurrentUserContext = createContext<CurrentUser>({ name: "Usuário", role: "user" });
+const roleLabels: Record<string, string> = { admin: "Administrador", rh: "RH", tst: "TST", user: "Usuário" };
+
+export function useCurrentUser() {
+  return useContext(CurrentUserContext);
+}
+
+function getInitials(name: string) {
+  return name.trim().split(/\s+/).filter(Boolean).slice(0, 2).map((part) => part[0]).join("").toLocaleUpperCase("pt-BR") || "U";
+}
 
 export function AppShell({ children }: { children: React.ReactNode }) {
+  const [currentUserName, setCurrentUserName] = useState("Usuário");
+  const [currentUserRole, setCurrentUserRole] = useState("user");
   const pathname = usePathname(); const router = useRouter(); const [mobileMenu, setMobileMenu] = useState(false); const [query, setQuery] = useState(""); const [results, setResults] = useState<SearchResult[]>([]); const [searchError, setSearchError] = useState<string | null>(null); const [sessionError, setSessionError] = useState<string | null>(null); const [selectedSearchIndex, setSelectedSearchIndex] = useState(-1); const [validityCount, setValidityCount] = useState(0); const [allowedPaths, setAllowedPaths] = useState<string[] | null>(null); const [organizationLogo, setOrganizationLogo] = useState(""); const [signingOut, setSigningOut] = useState(false); const menuToggleRef = useRef<HTMLButtonElement>(null); const closeMenuRef = useRef<HTMLButtonElement>(null); const menuWasOpen = useRef(false); const searchRequestRef = useRef(0);
   const publicRoute = pathname === "/login" || pathname === "/reset-password" || pathname === "/no-access" || pathname.startsWith("/medidas/") || pathname.startsWith("/assinar/") || pathname === "/portal" || pathname.startsWith("/invite/");
   useEffect(() => {
@@ -64,9 +78,11 @@ export function AppShell({ children }: { children: React.ReactNode }) {
     void createClient().auth.getUser().then(async ({ data }) => {
       if (!data.user) return;
       const supabase = createClient();
-      const { data: profile } = await supabase.from("profiles").select("role,organization_id").eq("id", data.user.id).maybeSingle();
+      const { data: profile } = await supabase.from("profiles").select("full_name,role,organization_id").eq("id", data.user.id).maybeSingle();
       if (!cancelled) {
         const role = profile?.role || "user";
+        setCurrentUserName(profile?.full_name?.trim() || data.user.email?.split("@")[0] || "Usuário");
+        setCurrentUserRole(role);
         const [{ data: override }, { data: roleAccess }] = profile?.organization_id && role !== "admin" ? await Promise.all([
           supabase.from("profile_access_overrides").select("page_paths").eq("profile_id", data.user.id).eq("organization_id", profile.organization_id).maybeSingle(),
           supabase.from("organization_role_access").select("page_paths").eq("organization_id", profile.organization_id).eq("role", role).maybeSingle(),
@@ -206,5 +222,68 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   }
   function handleMenuKeyDown(event: React.KeyboardEvent<HTMLElement>) { if (event.key !== "Tab" || !mobileMenu) return; const focusable = Array.from(event.currentTarget.querySelectorAll<HTMLElement>('a[href],button:not([disabled]),input:not([disabled]),select:not([disabled]),textarea:not([disabled])')).filter((element) => element.offsetParent !== null); if (!focusable.length) return; const first = focusable[0]; const last = focusable[focusable.length - 1]; if (event.shiftKey && document.activeElement === first) { event.preventDefault(); last.focus(); } else if (!event.shiftKey && document.activeElement === last) { event.preventDefault(); first.focus(); } }
   function closeSearch() { setQuery(""); setResults([]); setSelectedSearchIndex(-1); } function handleSearchKeyDown(event: React.KeyboardEvent<HTMLInputElement>) { if (event.key === "Escape") { closeSearch(); return; } if (!results.length) return; if (event.key === "ArrowDown") { event.preventDefault(); setSelectedSearchIndex((current) => (current + 1) % results.length); } else if (event.key === "ArrowUp") { event.preventDefault(); setSelectedSearchIndex((current) => (current - 1 + results.length) % results.length); } else if (event.key === "Enter" && selectedSearchIndex >= 0) { event.preventDefault(); router.push(results[selectedSearchIndex].href); closeSearch(); } }
- return <div className="app-shell">{mobileMenu && <button type="button" className="sidebar-backdrop" onClick={() => setMobileMenu(false)} aria-label="Fechar menu" />}<aside id="main-navigation" className={`sidebar ${mobileMenu ? "open" : ""}`} aria-label="Navegação principal" onKeyDown={handleMenuKeyDown}><div className="brand"><div className="brand-mark">{organizationLogo ? <img src={organizationLogo} alt="" /> : <ShieldCheck size={22} />}</div><div><strong>EPIS<span>+</span></strong><small>Gestão inteligente</small></div><button ref={closeMenuRef} className="close-menu" type="button" onClick={() => setMobileMenu(false)} aria-label="Fechar menu"><X size={20} /></button></div><div className="workspace-label">MENU PRINCIPAL</div><div className="sidebar-sections">{menuSections.map((section) => { const visibleItems = section.items.filter(([, , href]) => !allowedPaths || allowedPaths.includes(href)); return visibleItems.length ? <section className="sidebar-section" key={section.label}><h2>{section.label}</h2><nav aria-label={section.label}>{visibleItems.map(([label, Icon, href]) => { const active = pathname === href || (href !== "/" && pathname.startsWith(`${href}/`)); return <Link className={active ? "active" : ""} href={href} key={label} onClick={() => setMobileMenu(false)} aria-current={active ? "page" : undefined}><Icon size={18} aria-hidden="true" /><span>{label}</span>{label === "Validades" && validityCount > 0 && <b className="nav-count" aria-label={`${validityCount} alertas`}>{validityCount}</b>}</Link>; })}</nav></section> : null; })}</div><div className="sidebar-bottom">{(!allowedPaths || allowedPaths.includes("/settings")) && <Link href="/settings"><Settings size={18} aria-hidden="true" /><span>Configurações</span></Link>}{(!allowedPaths || allowedPaths.includes("/help")) && <Link href="/help"><CircleHelp size={18} aria-hidden="true" /><span>Central de ajuda</span></Link>}{sessionError && <span className="login-error" role="alert">{sessionError}</span>}<div className="user-mini"><div className="avatar avatar-dark">SA</div><div><strong>Samuel Albuquerque</strong><small>Administrador</small></div><button type="button" className="icon-button" onClick={handleSignOut} aria-label="Sair da conta" title="Sair" disabled={signingOut} aria-busy={signingOut}><LogOut size={16} aria-hidden="true" /></button><ChevronDown size={15} aria-hidden="true" /></div></div></aside><main className="main-content"><header className="topbar"><button ref={menuToggleRef} type="button" className="menu-toggle" onClick={() => setMobileMenu(true)} aria-label="Abrir menu" aria-controls="main-navigation" aria-expanded={mobileMenu}><Menu size={22} aria-hidden="true" /></button><div className="breadcrumb"><span>Visão geral</span><span>/</span><strong>{pathname === "/" ? "Dashboard" : menu.find((item) => item[2] === pathname || (item[2] !== "/" && pathname.startsWith(`${item[2]}/`)))?.[0] ?? "EPIS+"}</strong></div><div className="top-actions"><div className="global-search"><div className="search"><Search size={18} aria-hidden="true" /><input value={query} onChange={(event) => setQuery(event.target.value)} onKeyDown={handleSearchKeyDown} placeholder="Buscar materiais, funcionários..." aria-label="Buscar materiais ou funcionários" aria-controls="global-search-results" aria-expanded={query.trim().length >= 2} aria-haspopup="listbox" role="combobox" aria-autocomplete="list" aria-activedescendant={selectedSearchIndex >= 0 ? `search-result-${results[selectedSearchIndex]?.id}` : undefined} /></div>{query.trim().length >= 2 && <div className="search-results" id="global-search-results" role="listbox" aria-label="Sugestões de busca">{searchError ? <span className="search-empty" role="alert">{searchError}</span> : results.length ? results.map((item, index) => <Link id={`search-result-${item.id}`} href={item.href} key={`${item.kind}-${item.id}`} className={selectedSearchIndex === index ? "search-result-active" : ""} onMouseEnter={() => setSelectedSearchIndex(index)} onClick={closeSearch} role="option" aria-selected={selectedSearchIndex === index}><strong>{item.label}</strong><span>{item.kind} · {item.detail || "Sem detalhe"}</span></Link>) : <span className="search-empty" role="status">Nenhum resultado encontrado.</span>}</div>}</div><Link className="icon-button notification" href="/validities" aria-label="Ver alertas de validade"><Bell size={19} aria-hidden="true" /><i /></Link><div className="profile"><div className="avatar avatar-blue">SA</div><div><strong>Samuel Albuquerque</strong><small>Administrador</small></div><ChevronDown size={15} aria-hidden="true" /></div></div></header>{children}</main></div>;
+  const userInitials = getInitials(currentUserName);
+  const userRoleLabel = roleLabels[currentUserRole] ?? "Usuário";
+
+  return (
+    <CurrentUserContext.Provider value={{ name: currentUserName, role: currentUserRole }}>
+      <div className="app-shell">
+        {mobileMenu && <button type="button" className="sidebar-backdrop" onClick={() => setMobileMenu(false)} aria-label="Fechar menu" />}
+        <aside id="main-navigation" className={`sidebar ${mobileMenu ? "open" : ""}`} aria-label="Navegação principal" onKeyDown={handleMenuKeyDown}>
+          <div className="brand">
+            <div className="brand-mark">{organizationLogo ? <img src={organizationLogo} alt="" /> : <ShieldCheck size={22} />}</div>
+            <div><strong>EPIS<span>+</span></strong><small>Gestão inteligente</small></div>
+            <button ref={closeMenuRef} className="close-menu" type="button" onClick={() => setMobileMenu(false)} aria-label="Fechar menu"><X size={20} /></button>
+          </div>
+          <div className="workspace-label">MENU PRINCIPAL</div>
+          <div className="sidebar-sections">
+            {menuSections.map((section) => {
+              const visibleItems = section.items.filter(([, , href]) => !allowedPaths || allowedPaths.includes(href));
+              return visibleItems.length ? (
+                <section className="sidebar-section" key={section.label}>
+                  <h2>{section.label}</h2>
+                  <nav aria-label={section.label}>
+                    {visibleItems.map(([label, Icon, href]) => {
+                      const active = pathname === href || (href !== "/" && pathname.startsWith(`${href}/`));
+                      return <Link className={active ? "active" : ""} href={href} key={label} onClick={() => setMobileMenu(false)} aria-current={active ? "page" : undefined}><Icon size={18} aria-hidden="true" /><span>{label}</span>{label === "Validades" && validityCount > 0 && <b className="nav-count" aria-label={`${validityCount} alertas`}>{validityCount}</b>}</Link>;
+                    })}
+                  </nav>
+                </section>
+              ) : null;
+            })}
+          </div>
+          <div className="sidebar-bottom">
+            {(!allowedPaths || allowedPaths.includes("/settings")) && <Link href="/settings"><Settings size={18} aria-hidden="true" /><span>Configurações</span></Link>}
+            {(!allowedPaths || allowedPaths.includes("/help")) && <Link href="/help"><CircleHelp size={18} aria-hidden="true" /><span>Central de ajuda</span></Link>}
+            {sessionError && <span className="login-error" role="alert">{sessionError}</span>}
+            <div className="user-mini">
+              <div className="avatar avatar-dark">{userInitials}</div>
+              <div><strong>{currentUserName}</strong><small>{userRoleLabel}</small></div>
+              <button type="button" className="icon-button" onClick={handleSignOut} aria-label="Sair da conta" title="Sair" disabled={signingOut} aria-busy={signingOut}><LogOut size={16} aria-hidden="true" /></button>
+              <ChevronDown size={15} aria-hidden="true" />
+            </div>
+          </div>
+        </aside>
+        <main className="main-content">
+          <header className="topbar">
+            <button ref={menuToggleRef} type="button" className="menu-toggle" onClick={() => setMobileMenu(true)} aria-label="Abrir menu" aria-controls="main-navigation" aria-expanded={mobileMenu}><Menu size={22} aria-hidden="true" /></button>
+            <div className="breadcrumb"><span>Visão geral</span><span>/</span><strong>{pathname === "/" ? "Dashboard" : menu.find((item) => item[2] === pathname || (item[2] !== "/" && pathname.startsWith(`${item[2]}/`)))?.[0] ?? "EPIS+"}</strong></div>
+            <div className="top-actions">
+              <div className="global-search">
+                <div className="search"><Search size={18} aria-hidden="true" /><input value={query} onChange={(event) => setQuery(event.target.value)} onKeyDown={handleSearchKeyDown} placeholder="Buscar materiais, funcionários..." aria-label="Buscar materiais ou funcionários" aria-controls="global-search-results" aria-expanded={query.trim().length >= 2} aria-haspopup="listbox" role="combobox" aria-autocomplete="list" aria-activedescendant={selectedSearchIndex >= 0 ? `search-result-${results[selectedSearchIndex]?.id}` : undefined} /></div>
+                {query.trim().length >= 2 && <div className="search-results" id="global-search-results" role="listbox" aria-label="Sugestões de busca">{searchError ? <span className="search-empty" role="alert">{searchError}</span> : results.length ? results.map((item, index) => <Link id={`search-result-${item.id}`} href={item.href} key={`${item.kind}-${item.id}`} className={selectedSearchIndex === index ? "search-result-active" : ""} onMouseEnter={() => setSelectedSearchIndex(index)} onClick={closeSearch} role="option" aria-selected={selectedSearchIndex === index}><strong>{item.label}</strong><span>{item.kind} · {item.detail || "Sem detalhe"}</span></Link>) : <span className="search-empty" role="status">Nenhum resultado encontrado.</span>}</div>}
+              </div>
+              <Link className="icon-button notification" href="/validities" aria-label="Ver alertas de validade"><Bell size={19} aria-hidden="true" /><i /></Link>
+              <div className="profile">
+                <div className="avatar avatar-blue">{userInitials}</div>
+                <div><strong>{currentUserName}</strong><small>{userRoleLabel}</small></div>
+                <ChevronDown size={15} aria-hidden="true" />
+              </div>
+            </div>
+          </header>
+          {children}
+        </main>
+      </div>
+    </CurrentUserContext.Provider>
+  );
 }
