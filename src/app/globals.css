@@ -3561,6 +3561,51 @@ main.module-shell:not(:has(.module-toolbar)):has(> .module-summary) > .module-ta
 .teams-page .team-member-actions{padding:16px 20px 20px;border-top:1px solid #edf0f5;margin-top:14px;}
 .teams-page .team-member-form{padding:16px;border:1px solid #e5e9f1;border-radius:12px;background:#fafbfe;}
 .teams-page .team-member-actions-buttons{display:flex;justify-content:flex-end;gap:10px;flex-wrap:wrap;}
+.teams-page .template-detail .panel-header{gap:16px;}
+.teams-page .template-detail .panel-header>div{min-width:0;}
+.teams-page .template-detail .panel-header>button{flex:0 0 auto;}
+.teams-page .team-members-table{width:100%;table-layout:fixed;}
+.teams-page .team-members-table th:nth-child(1),.teams-page .team-members-table td:nth-child(1){width:32%;}
+.teams-page .team-members-table th:nth-child(2),.teams-page .team-members-table td:nth-child(2){width:14%;}
+.teams-page .team-members-table th:nth-child(3),.teams-page .team-members-table td:nth-child(3){width:30%;}
+.teams-page .team-members-table th:nth-child(4),.teams-page .team-members-table td:nth-child(4){width:24%;}
+.teams-page .team-member-manage-button{min-height:36px;padding:8px 11px;font-size:11px;white-space:nowrap;}
+.teams-page .team-members-empty{text-align:center;color:#8793a8;padding:22px 14px;}
+.teams-page .member-management-modal{width:min(100%,520px);}
+.teams-page .team-editor-modal{width:min(100%,680px);}
+.teams-page .member-management-summary{display:grid;gap:5px;padding:14px 15px;border:1px solid #e6e9f1;border-radius:11px;background:#f8f9fc;color:#73809a;font-size:12px;}
+.teams-page .member-management-summary strong{color:#20365c;font-size:15px;}
+.teams-page .member-destination-field{display:grid;gap:7px;margin:16px 0;color:#536078;font-size:12px;font-weight:700;}
+.teams-page .member-destination-field input,.teams-page .member-destination-field select{width:100%;min-width:0;min-height:42px;padding:10px 11px;border:1px solid #e2e6ee;border-radius:8px;background:#fff;color:var(--ink);font:inherit;font-weight:500;}
+.teams-page .member-save-role{display:flex;width:100%;min-height:40px;align-items:center;justify-content:center;gap:8px;}
+.teams-page .member-management-actions{display:grid;gap:11px;margin-top:18px;}
+.teams-page .member-management-actions>.primary-button,.teams-page .member-management-actions>.danger-outline-button{width:100%;min-height:42px;justify-content:center;}
+.teams-page .danger-outline-button{display:inline-flex;align-items:center;gap:8px;padding:10px 14px;border:1px solid #f0d4d1;border-radius:8px;background:#fff;color:#c35a4f;font-weight:600;cursor:pointer;}
+.teams-page .danger-outline-button:hover{background:#fff4f2;}
+.teams-page .danger-button{display:inline-flex;align-items:center;justify-content:center;gap:8px;}
+.teams-page .member-remove-confirmation{padding:14px;border:1px solid #f1d6d2;border-radius:10px;background:#fff8f7;color:#a64843;font-size:12px;line-height:1.5;}
+.teams-page .member-remove-confirmation p{margin:0 0 12px;}
+.teams-page .member-remove-confirmation .team-member-actions-buttons{justify-content:flex-end;}
+
+@media(max-width:760px){
+  .teams-page .template-detail .table-wrap{overflow:visible;}
+  .teams-page .team-members-table{display:block;min-width:0;width:100%;}
+  .teams-page .team-members-table thead{display:none;}
+  .teams-page .team-members-table tbody{display:grid;gap:10px;}
+  .teams-page .team-members-table tbody tr{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px 14px;padding:13px;border:1px solid #edf0f5;border-radius:11px;background:#fafbfe;}
+  .teams-page .team-members-table tbody td{display:grid;gap:4px;min-width:0;width:auto!important;padding:0;border:0;overflow-wrap:anywhere;}
+  .teams-page .team-members-table tbody td::before{color:#a1aaba;font-size:9px;font-weight:700;letter-spacing:.5px;}
+  .teams-page .team-members-table tbody td:nth-child(1){grid-column:1/-1;}
+  .teams-page .team-members-table tbody td:nth-child(1)::before{content:"Colaborador";}
+  .teams-page .team-members-table tbody td:nth-child(2)::before{content:"Matrícula";}
+  .teams-page .team-members-table tbody td:nth-child(3)::before{content:"Função na equipe";}
+  .teams-page .team-members-table tbody td:nth-child(4){grid-column:1/-1;}
+  .teams-page .team-members-table tbody td:nth-child(4)::before{content:"Ações";}
+  .teams-page .team-member-manage-button{width:100%;justify-content:center;white-space:normal;}
+  .teams-page .team-member-actions{padding:12px;}
+  .teams-page .team-member-actions-buttons{display:grid;grid-template-columns:1fr;}
+  .teams-page .member-remove-confirmation .team-member-actions-buttons{grid-template-columns:1fr;}
+}
 
 @media (max-width:1024px){
   .module-shell .module-header{gap:14px;}
