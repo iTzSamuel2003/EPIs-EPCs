@@ -65,6 +65,14 @@ function materialOriginLabel(material: Pick<MaterialRow, "contract_source" | "co
   return origin ? `${origin}${code ? ` · ${code}` : ""}` : "Cadastro manual";
 }
 
+function materialAnnexNumber(material: Pick<MaterialRow, "contract_source" | "contract_item_code">) {
+  const itemCodeAnnex = material.contract_item_code?.trim().match(/^A(\d{1,2})\s*[-.]/i)?.[1];
+  if (itemCodeAnnex) return itemCodeAnnex.padStart(2, "0");
+
+  const sourceAnnex = material.contract_source?.match(/\banexo\s*(?:n[º°.]?\s*)?(\d{1,2})\b/i)?.[1];
+  return sourceAnnex?.padStart(2, "0") ?? null;
+}
+
 function formatCaImportDate(value: string | null) {
   return value ? new Date(value).toLocaleString("pt-BR") : "Não informada";
 }
@@ -158,6 +166,7 @@ export default function MaterialsPage() {
   const [query, setQuery] = useState("");
   const [typeFilter, setTypeFilter] = useState("all");
   const [statusFilter, setStatusFilter] = useState("active");
+  const [annexFilter, setAnnexFilter] = useState("all");
   const [ascending, setAscending] = useState(true);
   const [page, setPage] = useState(1);
   const [editingId, setEditingId] = useState<string | null>(null);
@@ -286,19 +295,24 @@ export default function MaterialsPage() {
     return () => { mountedRef.current = false; loadVersion.current += 1; };
   }, []);
 
+  const annexOptions = useMemo(() => [...new Set(materials
+    .map(materialAnnexNumber)
+    .filter((annex): annex is string => Boolean(annex)))].sort((a, b) => Number(a) - Number(b)), [materials]);
+
   const filtered = useMemo(() => materials
     .filter((material) => {
       return `${material.name} ${material.internal_code} ${material.ca_number ?? ""}`.toLowerCase().includes(query.toLowerCase())
         && (typeFilter === "all" || (typeFilter === "EPI_EPC" ? material.type === "EPI" || material.type === "EPC" : material.type === typeFilter))
-        && (statusFilter === "all" || material.status === statusFilter);
+        && (statusFilter === "all" || material.status === statusFilter)
+        && (annexFilter === "all" || materialAnnexNumber(material) === annexFilter);
     })
-    .sort((a, b) => ascending ? a.name.localeCompare(b.name, "pt-BR") : b.name.localeCompare(a.name, "pt-BR")), [materials, query, typeFilter, statusFilter, ascending]);
+    .sort((a, b) => ascending ? a.name.localeCompare(b.name, "pt-BR") : b.name.localeCompare(a.name, "pt-BR")), [materials, query, typeFilter, statusFilter, annexFilter, ascending]);
 
   const pageSize = 40;
   const pageCount = Math.max(1, Math.ceil(filtered.length / pageSize));
   const paginatedMaterials = filtered.slice((page - 1) * pageSize, page * pageSize);
 
-  useEffect(() => { setPage(1); }, [query, typeFilter, statusFilter, ascending]);
+  useEffect(() => { setPage(1); }, [query, typeFilter, statusFilter, annexFilter, ascending]);
   useEffect(() => { if (page > pageCount) setPage(pageCount); }, [page, pageCount]);
 
   const sizeOptions = useMemo(() => form.variationType === "custom"
@@ -465,7 +479,7 @@ export default function MaterialsPage() {
     <header className="module-header"><div><p className="eyebrow">CADASTRO E CONTROLE</p><h1>Materiais</h1><p className="module-subtitle">Cadastre EPIs, EPCs e ferramentais. Quantidade, localização e situação atual ficam em Estoque.</p></div><button type="button" className="primary-button" onClick={openNew}><Plus size={17} /> Novo material</button></header>
     {success && <div className="feedback success-feedback" role="status"><Check size={17} /> {success}</div>}
     {error && !showForm && <FeedbackMessage onRetry={() => void loadMaterials()}>{error}</FeedbackMessage>}
-    <section className="module-toolbar"><div className="module-search"><Search size={17} /><input aria-label="Buscar por nome ou CA" value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Buscar por nome ou CA" /></div><select aria-label="Filtrar por grupo de materiais" value={typeFilter} onChange={(event) => setTypeFilter(event.target.value)}><option value="all">Todos os tipos</option><option value="EPI_EPC">EPIs e EPCs</option><option value="FERRAMENTAL">Ferramentais</option></select><select aria-label="Filtrar situação do cadastro" value={statusFilter} onChange={(event) => setStatusFilter(event.target.value)}><option value="all">Todos os cadastros</option><option value="active">Ativos</option><option value="inactive">Inativos</option></select></section>
+    <section className="module-toolbar"><div className="module-search"><Search size={17} /><input aria-label="Buscar por nome ou CA" value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Buscar por nome ou CA" /></div><select aria-label="Filtrar por grupo de materiais" value={typeFilter} onChange={(event) => setTypeFilter(event.target.value)}><option value="all">Todos os tipos</option><option value="EPI_EPC">EPIs e EPCs</option><option value="FERRAMENTAL">Ferramentais</option></select><select aria-label="Filtrar situação do cadastro" value={statusFilter} onChange={(event) => setStatusFilter(event.target.value)}><option value="all">Todos os cadastros</option><option value="active">Ativos</option><option value="inactive">Inativos</option></select><select aria-label="Filtrar materiais por anexo" value={annexFilter} onChange={(event) => setAnnexFilter(event.target.value)}><option value="all">Todos os anexos</option>{annexOptions.map((annex) => <option key={annex} value={annex}>Anexo {annex}</option>)}</select></section>
     <section className="module-summary"><div><strong>{materials.filter((item) => item.status === "active").length}</strong><span>materiais ativos</span></div><div><strong>{materials.filter((item) => item.status === "active" && item.type === "EPI").length}</strong><span>EPIs ativos</span></div><div><strong>{materials.filter((item) => item.status === "active" && item.type === "EPC").length}</strong><span>EPCs ativos</span></div><div><strong>{materials.filter((item) => item.status === "active" && item.type === "FERRAMENTAL").length}</strong><span>ferramentais ativos</span></div></section>
     {!showForm && <>
       <section className="panel module-table-card"><div className="panel-header"><div><h2>Catálogo de materiais</h2><p>{filtered.length} resultado(s) encontrados</p></div><button className="select-button" onClick={() => setAscending((current) => !current)}>{ascending ? "Nome: A–Z" : "Nome: Z–A"} {ascending ? <ArrowUpAZ size={15} /> : <ArrowDownAZ size={15} />}</button></div>{loading ? <div className="module-loading"><LoaderCircle className="spin" size={22} /> Carregando materiais...</div> : <div className="table-wrap"><table className="materials-catalog-table" aria-label="Catálogo de materiais"><thead><tr><th>MATERIAL</th><th>TIPO</th><th>CA</th><th>SITUAÇÃO DO CA</th><th>AÇÕES</th></tr></thead><tbody>{paginatedMaterials.map((material) => {
