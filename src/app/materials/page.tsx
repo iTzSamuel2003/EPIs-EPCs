@@ -10,6 +10,7 @@ import { FeedbackMessage } from "@/components/feedback-message";
 
 type MaterialRow = {
   id: string; internal_code: string | null; name: string; type: MaterialType; unit: string; size: string | null;
+  contract_item_code: string | null; contract_source: string | null;
   description: string | null; brand: string | null; manufacturer: string | null; model: string | null;
   ca_number: string | null; ca_expires_at: string | null; useful_life_months: number | null; replacement_interval_days: number | null;
   ca_required: boolean; test_required: boolean; test_type: string | null; test_interval_months: number | null; report_required: boolean; art_required: boolean;
@@ -54,6 +55,14 @@ function caSituation(certificate: Pick<CaCertificate, "status" | "valid_until">)
 function materialCaSituation(caNumber: string | null, savedExpiry: string | null, certificate?: CaCatalogEntry) {
   if (!caNumber?.trim()) return { label: "—", tone: "not-applicable" };
   return caSituation(certificate ?? { status: null, valid_until: savedExpiry });
+}
+
+function materialOriginLabel(material: Pick<MaterialRow, "contract_source" | "contract_item_code">) {
+  const source = material.contract_source?.replace(/^Contrato WS 93000\s*-\s*/i, "").trim();
+  const code = material.contract_item_code?.trim();
+  const annexNumber = code?.match(/^A(\d{2})-/i)?.[1];
+  const origin = source || (annexNumber ? `Anexo ${annexNumber}` : null);
+  return origin ? `${origin}${code ? ` · ${code}` : ""}` : "Cadastro manual";
 }
 
 function formatCaImportDate(value: string | null) {
@@ -237,7 +246,7 @@ export default function MaterialsPage() {
     try {
     const supabase = createClient();
     const [{ data, error: materialsError }, { data: variants, error: variantsError }] = await Promise.all([
-      supabase.from("materials").select("id,internal_code,name,type,unit,size,description,brand,manufacturer,model,ca_number,ca_expires_at,useful_life_months,replacement_interval_days,minimum_stock,location,notes,status,ca_required,test_required,test_type,test_interval_months,report_required,art_required").order("name"),
+      supabase.from("materials").select("id,internal_code,name,type,unit,size,contract_item_code,contract_source,description,brand,manufacturer,model,ca_number,ca_expires_at,useful_life_months,replacement_interval_days,minimum_stock,location,notes,status,ca_required,test_required,test_type,test_interval_months,report_required,art_required").order("name"),
       supabase.from("material_variants").select("id,material_id,name,size,active"),
     ]);
     if (!mountedRef.current || version !== loadVersion.current) return;
@@ -463,7 +472,7 @@ export default function MaterialsPage() {
         const caNumber = material.ca_number?.trim() ?? "";
         const materialStatus = materialCaSituation(caNumber, material.ca_expires_at, caCatalogEntries[caNumber]);
         return <tr key={material.id}>
-          <td><div className="material-cell material-catalog-cell"><div><strong>{material.name}</strong><small>{material.unit}</small></div></div></td>
+          <td><div className="material-cell material-catalog-cell"><div><strong>{material.name}</strong><small>{material.unit}</small><small>Origem: {materialOriginLabel(material)}</small></div></div></td>
           <td><span className={`type-badge ${material.type.toLowerCase()}`}>{material.type}</span></td>
           <td>{material.ca_number || <span className="muted-cell">Não se aplica</span>}</td>
           <td><span className={`ca-status-badge ${materialStatus.tone}`} title={materialStatus.tone === "unknown" ? "Não há validade ou situação oficial disponível para este CA" : undefined}>{materialStatus.label}</span></td>
