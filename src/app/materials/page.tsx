@@ -15,8 +15,11 @@ type MaterialRow = {
   ca_required: boolean; test_required: boolean; test_type: string | null; test_interval_months: number | null; report_required: boolean; art_required: boolean;
   minimum_stock: number; location: string | null; notes: string | null; status: "active" | "inactive";
 };
+type VariationType = "none" | "size" | "number" | "custom";
+type MaterialVariant = { id: string; material_id: string; name: string; size: string | null; active: boolean };
 type MaterialForm = {
-  name: string; type: MaterialType; unit: string; size: string; description: string;
+  name: string; type: MaterialType; unit: string; size: string; legacySize: string; description: string;
+  variationType: VariationType; selectedVariations: string[];
   brand: string; manufacturer: string; model: string; ca_number: string; ca_expires_at: string;
   ca_required: boolean; test_required: boolean; test_type: string; test_interval_months: string; report_required: boolean; art_required: boolean;
   useful_life_months: string; replacement_interval_days: string; minimum_stock: string; location: string; notes: string; status: "active" | "inactive";
@@ -37,24 +40,58 @@ const STANDARD_UNITS = [
   { value: "m", label: "Metro (m)" },
 ];
 
-function getMaterialSizeOptions(materialName: string) {
-  const normalized = materialName.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLocaleLowerCase("pt-BR");
-  if (/\b(bota|botina|calcado|sapato)\b/.test(normalized)) return ["", ...Array.from({ length: 9 }, (_, index) => String(index + 37))];
-  if (/\b(conjunto|uniforme|vestimenta)\b/.test(normalized) && /anti.?chamas?|retardante.?a.?chamas?/.test(normalized)) {
-    return ["", "P", "M", "G", "GG", "XGG"];
-  }
-  return [""];
+const SIZE_VARIATION_OPTIONS = ["P", "M", "G", "GG", "XGG"];
+const NUMBER_VARIATION_OPTIONS = ["36", "37", "38", "39", "40", "41", "42"];
+const VARIATION_TYPE_LABELS: Record<VariationType, string> = {
+  none: "N/A — não se aplica",
+  size: "Tamanho — P, M, G, GG, XGG",
+  number: "Numeração — 36, 37, 38, 39, 40, 41, 42",
+  custom: "Personalizada",
+};
+
+function getMaterialSizeOptions(_materialName?: string) {
+  void _materialName;
+  return [VARIATION_TYPE_LABELS.none, VARIATION_TYPE_LABELS.size, VARIATION_TYPE_LABELS.number];
+}
+
+function variationTypeFromLabel(label: string): VariationType {
+  return (Object.entries(VARIATION_TYPE_LABELS).find(([, value]) => value === label)?.[0] as VariationType | undefined) ?? "none";
+}
+
+function variationValue(variant: Pick<MaterialVariant, "name" | "size">) {
+  return (variant.size || variant.name).trim();
+}
+
+function variationTypeFor(values: string[]): VariationType {
+  if (!values.length) return "none";
+  if (values.every((value) => SIZE_VARIATION_OPTIONS.includes(value.toUpperCase()))) return "size";
+  if (values.every((value) => /^\d+$/.test(value))) return "number";
+  return "custom";
+}
+
+function variationTypeForMaterial(material: MaterialRow, variants: MaterialVariant[]): VariationType {
+  const activeValues = variants.filter((variant) => variant.active).map(variationValue).filter(Boolean);
+  return variationTypeFor(activeValues.length ? activeValues : material.size ? [material.size.trim()] : []);
 }
 
 const emptyForm: MaterialForm = {
-  name: "", type: "EPI", unit: "un.", size: "", description: "", brand: "", manufacturer: "",
+  name: "", type: "EPI", unit: "un.", size: VARIATION_TYPE_LABELS.none, legacySize: "", description: "", brand: "", manufacturer: "",
+  variationType: "none", selectedVariations: [],
   model: "", ca_number: "", ca_expires_at: "", useful_life_months: "", replacement_interval_days: "", minimum_stock: "0",
   location: "", notes: "", status: "active", ca_required: true, test_required: false, test_type: "inspection", test_interval_months: "12", report_required: false, art_required: false,
 };
 
-function formFromMaterial(material: MaterialRow): MaterialForm {
+function formFromMaterial(material: MaterialRow, variants: MaterialVariant[]): MaterialForm {
+  const activeVariants = variants.filter((variant) => variant.active);
+  const variationType = variationTypeForMaterial(material, variants);
+  const selectedVariations = variationType === "size" ? [...SIZE_VARIATION_OPTIONS]
+    : variationType === "number" ? [...NUMBER_VARIATION_OPTIONS]
+    : variationType === "custom" ? activeVariants.map(variationValue)
+    : [];
   return {
-    name: material.name, type: material.type, unit: material.unit, size: material.size ?? "",
+    name: material.name, type: material.type, unit: material.unit, size: VARIATION_TYPE_LABELS[variationType], legacySize: material.size ?? "",
+    variationType,
+    selectedVariations,
     description: material.description ?? "", brand: material.brand ?? "", manufacturer: material.manufacturer ?? "",
     model: material.model ?? "", ca_number: material.ca_number ?? "", ca_expires_at: material.ca_expires_at ?? "",
     ca_required: material.ca_required, test_required: material.test_required, test_type: material.test_type ?? "inspection", test_interval_months: material.test_interval_months?.toString() ?? "12", report_required: material.report_required, art_required: material.art_required,
@@ -79,6 +116,7 @@ function isNonNegativeNumber(value: string, integer = false) {
 export default function MaterialsPage() {
   const searchParams = useSearchParams();
   const [materials, setMaterials] = useState<MaterialRow[]>([]);
+  const [materialVariants, setMaterialVariants] = useState<MaterialVariant[]>([]);
   const [form, setForm] = useState<MaterialForm>(emptyForm);
   const [query, setQuery] = useState("");
   const [typeFilter, setTypeFilter] = useState("all");
@@ -166,12 +204,19 @@ export default function MaterialsPage() {
     setLoading(true);
     setError("");
     setMaterials([]);
+    setMaterialVariants([]);
     try {
     const supabase = createClient();
-    const { data, error: materialsError } = await supabase.from("materials").select("id,internal_code,name,type,unit,size,description,brand,manufacturer,model,ca_number,ca_expires_at,useful_life_months,replacement_interval_days,minimum_stock,location,notes,status,ca_required,test_required,test_type,test_interval_months,report_required,art_required").order("name");
+    const [{ data, error: materialsError }, { data: variants, error: variantsError }] = await Promise.all([
+      supabase.from("materials").select("id,internal_code,name,type,unit,size,description,brand,manufacturer,model,ca_number,ca_expires_at,useful_life_months,replacement_interval_days,minimum_stock,location,notes,status,ca_required,test_required,test_type,test_interval_months,report_required,art_required").order("name"),
+      supabase.from("material_variants").select("id,material_id,name,size,active"),
+    ]);
     if (!mountedRef.current || version !== loadVersion.current) return;
-    if (materialsError) setError(friendlyError(materialsError, "Não foi possível carregar materiais."));
-    else setMaterials((data ?? []) as MaterialRow[]);
+    if (materialsError || variantsError) setError(friendlyError(materialsError ?? variantsError, "Falha ao carregar materiais e variações."));
+    else {
+      setMaterials((data ?? []) as MaterialRow[]);
+      setMaterialVariants((variants ?? []) as MaterialVariant[]);
+    }
     } catch (caught) {
       if (mountedRef.current && version === loadVersion.current) setError(friendlyError(caught, "Falha ao carregar materiais."));
     } finally {
@@ -200,18 +245,22 @@ export default function MaterialsPage() {
   useEffect(() => { setPage(1); }, [query, typeFilter, statusFilter, ascending]);
   useEffect(() => { if (page > pageCount) setPage(pageCount); }, [page, pageCount]);
 
-  const sizeOptions = useMemo(() => {
-    const options = getMaterialSizeOptions(form.name);
-    return form.size && !options.includes(form.size) ? [...options, form.size] : options;
-  }, [form.name, form.size]);
+  const sizeOptions = useMemo(() => form.variationType === "custom"
+    ? [...getMaterialSizeOptions(), VARIATION_TYPE_LABELS.custom]
+    : getMaterialSizeOptions(), [form.variationType]);
 
-  function updateField(field: keyof MaterialForm, value: string | boolean) { setForm((current) => ({ ...current, [field]: value })); }
-  function updateMaterialName(value: string) {
-    setForm((current) => {
-      const options = getMaterialSizeOptions(value);
-      return { ...current, name: value, size: options.includes(current.size) ? current.size : "" };
-    });
+  function updateField(field: keyof MaterialForm, value: string | boolean) {
+    if (field === "size" && typeof value === "string") {
+      const variationType = variationTypeFromLabel(value);
+      const selectedVariations = variationType === "size" ? [...SIZE_VARIATION_OPTIONS]
+        : variationType === "number" ? [...NUMBER_VARIATION_OPTIONS]
+        : variationType === "custom" ? form.selectedVariations : [];
+      setForm((current) => ({ ...current, size: value, variationType, selectedVariations }));
+      return;
+    }
+    setForm((current) => ({ ...current, [field]: value }));
   }
+  function updateMaterialName(value: string) { updateField("name", value); }
   function updateCaNumber(value: string) {
     const previous = autoFilledCaRef.current;
     if (!previous || previous.caNumber === value.trim()) {
@@ -237,7 +286,7 @@ export default function MaterialsPage() {
   function openEdit(material: MaterialRow) {
     autoFilledCaRef.current = null;
     setCaLookup({ status: "idle" });
-    setForm(formFromMaterial(material)); setEditingId(material.id); setError(""); setSuccess(""); setShowForm(true);
+    setForm(formFromMaterial(material, materialVariants.filter((variant) => variant.material_id === material.id))); setEditingId(material.id); setError(""); setSuccess(""); setShowForm(true);
   }
 
   async function saveMaterial(event: FormEvent) {
@@ -252,6 +301,10 @@ export default function MaterialsPage() {
       setError("Estoque mínimo, vida útil e troca prevista devem ser números inteiros iguais ou maiores que zero.");
       return;
     }
+    if (form.variationType !== "none" && form.selectedVariations.length === 0) {
+      setError("Selecione ao menos uma opção de tamanho ou numeração, ou escolha N/A.");
+      return;
+    }
     saveLockRef.current = true;
     setSaving(true);
     try {
@@ -262,9 +315,32 @@ export default function MaterialsPage() {
     const { data: profile, error: profileError } = await supabase.from("profiles").select("organization_id").eq("id", auth.user.id).single();
     if (profileError) { setError(friendlyError(profileError, "Não foi possível concluir a operação.")); setSaving(false); return; }
     if (!profile?.organization_id) { setError("Não foi possível identificar a organização do usuário."); setSaving(false); return; }
+    let currentVariants: MaterialVariant[] = [];
+    if (editingId) {
+      const { data: existingVariants, error: variantsError } = await supabase.from("material_variants").select("id,material_id,name,size,active").eq("material_id", editingId);
+      if (variantsError) { setError(friendlyError(variantsError, "Não foi possível conferir as variações atuais.")); return; }
+      currentVariants = (existingVariants ?? []) as MaterialVariant[];
+      const desiredValues = new Set(form.variationType === "none" ? [] : form.selectedVariations);
+      const variantsToDeactivate = currentVariants.filter((variant) => variant.active && !desiredValues.has(variationValue(variant)));
+      if (variantsToDeactivate.length) {
+        const variantIds = variantsToDeactivate.map((variant) => variant.id);
+        const [{ data: lotReferences, error: lotReferenceError }, { data: deliveryReferences, error: deliveryReferenceError }] = await Promise.all([
+          supabase.from("material_lots").select("variant_id").in("variant_id", variantIds).limit(1),
+          supabase.from("delivery_items").select("variant_id").in("variant_id", variantIds).limit(1),
+        ]);
+        if (lotReferenceError || deliveryReferenceError) {
+          setError(friendlyError(lotReferenceError ?? deliveryReferenceError, "Não foi possível verificar o histórico das variações."));
+          return;
+        }
+        if (lotReferences?.length || deliveryReferences?.length) {
+          setError("Não é possível remover opções de tamanho já vinculadas ao estoque ou a entregas. Mantenha essas opções selecionadas para preservar o histórico.");
+          return;
+        }
+      }
+    }
     const existingInternalCode = editingId ? materials.find((material) => material.id === editingId)?.internal_code ?? null : null;
     const payload = {
-      internal_code: existingInternalCode, name: form.name.trim().toLocaleUpperCase("pt-BR"), type: form.type, unit: form.unit, size: form.size.trim() || null,
+      internal_code: existingInternalCode, name: form.name.trim().toLocaleUpperCase("pt-BR"), type: form.type, unit: form.unit, size: form.variationType === "none" ? null : form.legacySize.trim() || null,
       description: form.description.trim() || null, brand: form.brand.trim() || null, manufacturer: form.manufacturer.trim() || null,
       model: form.model.trim() || null, ca_number: form.type === "EPI" ? form.ca_number.trim() : null,
       ca_expires_at: form.type === "EPI" ? form.ca_expires_at || null : null,
@@ -288,7 +364,37 @@ export default function MaterialsPage() {
       savedId = result.data?.id ?? null;
     }
     if (saveError || !savedId) setError(saveError?.code === "23505" ? "Já existe um cadastro conflitante para este material." : friendlyError(saveError, "Não foi possível salvar as alterações. Verifique suas permissões."));
-    else { setSuccess(editingId ? "Material atualizado com sucesso." : "Material cadastrado com sucesso."); setShowForm(false); await loadMaterials(); }
+    else {
+      try {
+        const desiredValues = form.variationType === "none" ? [] : form.selectedVariations;
+        for (const value of desiredValues) {
+          const existingVariant = currentVariants.find((variant) => variationValue(variant) === value);
+          if (existingVariant) {
+            if (!existingVariant.active) {
+              const { error: activateError } = await supabase.from("material_variants").update({ active: true }).eq("id", existingVariant.id);
+              if (activateError) throw activateError;
+            }
+          } else {
+            const { error: insertVariantError } = await supabase.from("material_variants").insert({ organization_id: profile.organization_id, material_id: savedId, name: value, size: value, active: true });
+            if (insertVariantError) throw insertVariantError;
+          }
+        }
+        const desiredSet = new Set(desiredValues);
+        const variantsToDeactivate = currentVariants.filter((variant) => variant.active && !desiredSet.has(variationValue(variant)));
+        if (variantsToDeactivate.length) {
+          const { error: deactivateError } = await supabase.from("material_variants").update({ active: false }).in("id", variantsToDeactivate.map((variant) => variant.id));
+          if (deactivateError) throw deactivateError;
+        }
+      } catch (variantSaveError) {
+        setEditingId(savedId);
+        setError(`Material salvo, mas não foi possível atualizar as opções de tamanho. Reabra o cadastro e tente novamente. ${friendlyError(variantSaveError, "Falha ao salvar as variações.")}`);
+        await loadMaterials();
+        return;
+      }
+      setSuccess(editingId ? "Material atualizado com sucesso." : "Material cadastrado com sucesso.");
+      setShowForm(false);
+      await loadMaterials();
+    }
     } catch (caught) {
       setError(friendlyError(caught, "Falha ao salvar o material."));
     } finally {
