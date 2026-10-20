@@ -31,19 +31,29 @@ type CaCertificate = {
   equipment_description: string | null; brand: string | null; reference: string | null; standard: string | null;
   synced_at: string | null;
 };
+type CaCatalogEntry = Pick<CaCertificate, "ca_number" | "status" | "valid_until">;
 
 type CaLookupState = { status: "idle" | "loading" | "found" | "not-found" | "error"; certificate?: CaCertificate };
 type AutoFilledCaFields = { caNumber: string; values: Partial<Pick<MaterialForm, "ca_expires_at" | "manufacturer" | "brand" | "model" | "description">> };
 
-function caSituation(certificate: CaCertificate) {
+function caSituation(certificate: Pick<CaCertificate, "status" | "valid_until">) {
   const now = new Date();
   const today = new Date(now.getTime() - now.getTimezoneOffset() * 60_000).toISOString().slice(0, 10);
   const normalized = (certificate.status ?? "").normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLocaleLowerCase("pt-BR");
 
   if (certificate.valid_until && certificate.valid_until < today) return { label: "VENCIDO", tone: "expired" };
   if (normalized.includes("cancel") || normalized.includes("suspens")) return { label: certificate.status ?? "RESTRITO", tone: "expired" };
+  if (normalized.includes("revog")) return { label: "REVOGADO", tone: "expired" };
+  if (normalized.includes("inativ")) return { label: "INATIVO", tone: "expired" };
+  if (normalized.includes("vencid") || normalized.includes("expir")) return { label: "VENCIDO", tone: "expired" };
   if (normalized.includes("valid") || normalized.includes("ativo")) return { label: "VÁLIDO", tone: "valid" };
-  return { label: certificate.status || "SITUAÇÃO NÃO INFORMADA", tone: "unknown" };
+  if (certificate.valid_until) return { label: "VÁLIDO", tone: "valid" };
+  return { label: certificate.status || "NÃO VERIFICADO", tone: "unknown" };
+}
+
+function materialCaSituation(caNumber: string | null, savedExpiry: string | null, certificate?: CaCatalogEntry) {
+  if (!caNumber?.trim()) return { label: "—", tone: "not-applicable" };
+  return caSituation(certificate ?? { status: null, valid_until: savedExpiry });
 }
 
 function formatCaImportDate(value: string | null) {
@@ -133,6 +143,7 @@ export default function MaterialsPage() {
   const searchParams = useSearchParams();
   const [materials, setMaterials] = useState<MaterialRow[]>([]);
   const [materialVariants, setMaterialVariants] = useState<MaterialVariant[]>([]);
+  const [caCatalogEntries, setCaCatalogEntries] = useState<Record<string, CaCatalogEntry>>({});
   const [form, setForm] = useState<MaterialForm>(emptyForm);
   const [query, setQuery] = useState("");
   const [typeFilter, setTypeFilter] = useState("all");
@@ -221,6 +232,7 @@ export default function MaterialsPage() {
     setError("");
     setMaterials([]);
     setMaterialVariants([]);
+    setCaCatalogEntries({});
     try {
     const supabase = createClient();
     const [{ data, error: materialsError }, { data: variants, error: variantsError }] = await Promise.all([
@@ -230,8 +242,26 @@ export default function MaterialsPage() {
     if (!mountedRef.current || version !== loadVersion.current) return;
     if (materialsError || variantsError) setError(friendlyError(materialsError ?? variantsError, "Falha ao carregar materiais e variações."));
     else {
-      setMaterials((data ?? []) as MaterialRow[]);
+      const loadedMaterials = (data ?? []) as MaterialRow[];
+      setMaterials(loadedMaterials);
       setMaterialVariants((variants ?? []) as MaterialVariant[]);
+      const caNumbers = [...new Set(loadedMaterials.map((material) => material.ca_number?.trim()).filter((number): number is string => Boolean(number)))];
+      if (caNumbers.length) {
+        void (async () => {
+          try {
+            const { data: caEntries, error: caEntriesError } = await supabase
+              .from("ca_certificates")
+              .select("ca_number,status,valid_until")
+              .in("ca_number", caNumbers);
+            if (caEntriesError || !caEntries || !mountedRef.current || version !== loadVersion.current) return;
+            const entriesByNumber: Record<string, CaCatalogEntry> = {};
+            for (const entry of caEntries) entriesByNumber[entry.ca_number] = entry as CaCatalogEntry;
+            setCaCatalogEntries(entriesByNumber);
+          } catch {
+            // A lista continua utilizável; a validade salva no material serve como alternativa.
+          }
+        })();
+      }
     }
     } catch (caught) {
       if (mountedRef.current && version === loadVersion.current) setError(friendlyError(caught, "Falha ao carregar materiais."));
@@ -428,7 +458,17 @@ export default function MaterialsPage() {
     <section className="module-toolbar"><div className="module-search"><Search size={17} /><input aria-label="Buscar por nome ou CA" value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Buscar por nome ou CA" /></div><select aria-label="Filtrar por grupo de materiais" value={typeFilter} onChange={(event) => setTypeFilter(event.target.value)}><option value="all">Todos os tipos</option><option value="EPI_EPC">EPIs e EPCs</option><option value="FERRAMENTAL">Ferramentais</option></select><select aria-label="Filtrar situação do cadastro" value={statusFilter} onChange={(event) => setStatusFilter(event.target.value)}><option value="all">Todos os cadastros</option><option value="active">Ativos</option><option value="inactive">Inativos</option></select></section>
     <section className="module-summary"><div><strong>{materials.filter((item) => item.status === "active").length}</strong><span>materiais ativos</span></div><div><strong>{materials.filter((item) => item.status === "active" && item.type === "EPI").length}</strong><span>EPIs ativos</span></div><div><strong>{materials.filter((item) => item.status === "active" && item.type === "EPC").length}</strong><span>EPCs ativos</span></div><div><strong>{materials.filter((item) => item.status === "active" && item.type === "FERRAMENTAL").length}</strong><span>ferramentais ativos</span></div></section>
     {!showForm && <>
-      <section className="panel module-table-card"><div className="panel-header"><div><h2>Catálogo de materiais</h2><p>{filtered.length} resultado(s) encontrados</p></div><button className="select-button" onClick={() => setAscending((current) => !current)}>{ascending ? "Nome: A–Z" : "Nome: Z–A"} {ascending ? <ArrowUpAZ size={15} /> : <ArrowDownAZ size={15} />}</button></div>{loading ? <div className="module-loading"><LoaderCircle className="spin" size={22} /> Carregando materiais...</div> : <div className="table-wrap"><table className="materials-catalog-table" aria-label="Catálogo de materiais"><thead><tr><th>MATERIAL</th><th>TIPO</th><th>CA</th><th>AÇÕES</th></tr></thead><tbody>{paginatedMaterials.map((material) => <tr key={material.id}><td><div className="material-cell material-catalog-cell"><div><strong>{material.name}</strong><small>{material.unit}</small></div></div></td><td><span className={`type-badge ${material.type.toLowerCase()}`}>{material.type}</span></td><td>{material.ca_number || <span className="muted-cell">Não se aplica</span>}</td><td><button className="action-button" onClick={() => openEdit(material)}><Pencil size={14} /> Editar</button></td></tr>)}</tbody></table>{!filtered.length && <div className="empty-state"><ShieldCheck size={27} /><strong>Nenhum material encontrado</strong><span>Ajuste os filtros ou cadastre o primeiro material.</span></div>}</div>}</section>
+      <section className="panel module-table-card"><div className="panel-header"><div><h2>Catálogo de materiais</h2><p>{filtered.length} resultado(s) encontrados</p></div><button className="select-button" onClick={() => setAscending((current) => !current)}>{ascending ? "Nome: A–Z" : "Nome: Z–A"} {ascending ? <ArrowUpAZ size={15} /> : <ArrowDownAZ size={15} />}</button></div>{loading ? <div className="module-loading"><LoaderCircle className="spin" size={22} /> Carregando materiais...</div> : <div className="table-wrap"><table className="materials-catalog-table" aria-label="Catálogo de materiais"><thead><tr><th>MATERIAL</th><th>TIPO</th><th>CA</th><th>SITUAÇÃO DO CA</th><th>AÇÕES</th></tr></thead><tbody>{paginatedMaterials.map((material) => {
+        const caNumber = material.ca_number?.trim() ?? "";
+        const materialStatus = materialCaSituation(caNumber, material.ca_expires_at, caCatalogEntries[caNumber]);
+        return <tr key={material.id}>
+          <td><div className="material-cell material-catalog-cell"><div><strong>{material.name}</strong><small>{material.unit}</small></div></div></td>
+          <td><span className={`type-badge ${material.type.toLowerCase()}`}>{material.type}</span></td>
+          <td>{material.ca_number || <span className="muted-cell">Não se aplica</span>}</td>
+          <td><span className={`ca-status-badge ${materialStatus.tone}`} title={materialStatus.tone === "unknown" ? "Não há validade ou situação oficial disponível para este CA" : undefined}>{materialStatus.label}</span></td>
+          <td><button className="action-button" onClick={() => openEdit(material)}><Pencil size={14} /> Editar</button></td>
+        </tr>;
+      })}</tbody></table>{!filtered.length && <div className="empty-state"><ShieldCheck size={27} /><strong>Nenhum material encontrado</strong><span>Ajuste os filtros ou cadastre o primeiro material.</span></div>}</div>}</section>
       {filtered.length > pageSize && <nav className="pagination-controls" aria-label="Paginação"><button className="secondary-button" onClick={() => setPage((current) => Math.max(1, current - 1))} disabled={page === 1}>Anterior</button><span>Mostrando {(page - 1) * pageSize + 1}–{Math.min(page * pageSize, filtered.length)} de {filtered.length} · Página {page} de {pageCount}</span><button className="secondary-button" onClick={() => setPage((current) => Math.min(pageCount, current + 1))} disabled={page === pageCount}>Próxima</button></nav>}
     </>}
     {showForm && <div className="modal-backdrop"><section className="modal-card material-edit-modal" role="dialog" aria-modal="true" aria-label="Cadastro de material"><div className="modal-header"><div><p className="eyebrow">{editingId ? "ATUALIZAR CADASTRO" : "NOVO CADASTRO"}</p><h2>{editingId ? "Editar material" : "Cadastrar material"}</h2></div><button type="button" className="close-modal" onClick={() => setShowForm(false)} aria-label="Fechar"><X size={19} /></button></div><form className="material-form" onSubmit={saveMaterial}><div className="form-grid"><label>Nome do material<input value={form.name} onChange={(event) => updateMaterialName(event.target.value)} placeholder="Ex.: Capacete Classe B" required /></label></div><div className="form-grid three"><label>Tipo<select value={form.type} onChange={(event) => updateField("type", event.target.value)}><option value="EPI">EPI</option><option value="EPC">EPC</option><option value="FERRAMENTAL">Ferramental</option></select></label><label>Unidade<select value={form.unit} onChange={(event) => updateField("unit", event.target.value)} required>{form.unit && !STANDARD_UNITS.some((unit) => unit.value === form.unit) && <option value={form.unit}>{form.unit} (cadastro atual)</option>}{STANDARD_UNITS.map((unit) => <option key={unit.value} value={unit.value}>{unit.label}</option>)}</select></label><label>Tamanho / numeração<select value={form.size} onChange={(event) => updateField("size", event.target.value)}>{sizeOptions.map((size) => <option key={size || "not-applicable"} value={size}>{size || "N/A"}{size && !getMaterialSizeOptions(form.name).includes(size) ? " (cadastro atual)" : ""}</option>)}</select></label><label>Estoque mínimo<input type="number" min="0" value={form.minimum_stock} onChange={(event) => updateField("minimum_stock", event.target.value)} required /></label></div><div className="form-grid three"><label>Número do CA {form.type === "EPI" && <em>obrigatório</em>}<input value={form.ca_number} onChange={(event) => updateCaNumber(event.target.value)} disabled={form.type !== "EPI"} required={form.type === "EPI"} /></label><label>Validade do CA<input type="date" value={form.ca_expires_at} onChange={(event) => updateField("ca_expires_at", event.target.value)} disabled={form.type !== "EPI"} /></label><label>Vida útil (meses)<input type="number" min="0" value={form.useful_life_months} onChange={(event) => updateField("useful_life_months", event.target.value)} /></label><label>Troca prevista<select value={form.replacement_interval_days} onChange={(event) => updateField("replacement_interval_days", event.target.value)}><option value="">Não definida</option><option value="30">30 dias</option><option value="60">60 dias</option><option value="90">90 dias</option></select></label></div>
