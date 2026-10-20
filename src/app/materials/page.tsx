@@ -1,7 +1,7 @@
 "use client";
 
 import { FormEvent, useEffect, useMemo, useRef, useState } from "react";
-import { ArrowDownAZ, ArrowUpAZ, Check, LoaderCircle, Pencil, Plus, Search, ShieldCheck, X } from "lucide-react";
+import { ArrowDownAZ, ArrowUpAZ, Check, ExternalLink, LoaderCircle, Pencil, Plus, Search, ShieldCheck, X } from "lucide-react";
 import { useSearchParams } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import { friendlyError } from "@/lib/ui-feedback";
@@ -16,21 +16,45 @@ type MaterialRow = {
   minimum_stock: number; location: string | null; notes: string | null; status: "active" | "inactive";
 };
 type MaterialForm = {
-  internal_code: string; name: string; type: MaterialType; unit: string; size: string; description: string;
+  name: string; type: MaterialType; unit: string; size: string; description: string;
   brand: string; manufacturer: string; model: string; ca_number: string; ca_expires_at: string;
   ca_required: boolean; test_required: boolean; test_type: string; test_interval_months: string; report_required: boolean; art_required: boolean;
   useful_life_months: string; replacement_interval_days: string; minimum_stock: string; location: string; notes: string; status: "active" | "inactive";
 };
 
+type CaCertificate = {
+  ca_number: string; status: string | null; valid_until: string | null; process_number: string | null;
+  manufacturer_name: string | null; manufacturer_document: string | null; equipment_name: string | null;
+  equipment_description: string | null; brand: string | null; reference: string | null; standard: string | null;
+};
+
+type CaLookupState = { status: "idle" | "loading" | "found" | "not-found" | "error"; certificate?: CaCertificate };
+type AutoFilledCaFields = { caNumber: string; values: Partial<Pick<MaterialForm, "ca_expires_at" | "manufacturer" | "brand" | "model" | "description">> };
+
+const STANDARD_UNITS = [
+  { value: "un.", label: "Unidade (un.)" },
+  { value: "PAR", label: "Par" },
+  { value: "m", label: "Metro (m)" },
+];
+
+function getMaterialSizeOptions(materialName: string) {
+  const normalized = materialName.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLocaleLowerCase("pt-BR");
+  if (/\b(bota|botina|calcado|sapato)\b/.test(normalized)) return ["", ...Array.from({ length: 9 }, (_, index) => String(index + 37))];
+  if (/\b(conjunto|uniforme|vestimenta)\b/.test(normalized) && /anti.?chamas?|retardante.?a.?chamas?/.test(normalized)) {
+    return ["", "P", "M", "G", "GG", "XGG"];
+  }
+  return [""];
+}
+
 const emptyForm: MaterialForm = {
-  internal_code: "", name: "", type: "EPI", unit: "un.", size: "", description: "", brand: "", manufacturer: "",
+  name: "", type: "EPI", unit: "un.", size: "", description: "", brand: "", manufacturer: "",
   model: "", ca_number: "", ca_expires_at: "", useful_life_months: "", replacement_interval_days: "", minimum_stock: "0",
   location: "", notes: "", status: "active", ca_required: true, test_required: false, test_type: "inspection", test_interval_months: "12", report_required: false, art_required: false,
 };
 
 function formFromMaterial(material: MaterialRow): MaterialForm {
   return {
-    internal_code: material.internal_code ?? "", name: material.name, type: material.type, unit: material.unit, size: material.size ?? "",
+    name: material.name, type: material.type, unit: material.unit, size: material.size ?? "",
     description: material.description ?? "", brand: material.brand ?? "", manufacturer: material.manufacturer ?? "",
     model: material.model ?? "", ca_number: material.ca_number ?? "", ca_expires_at: material.ca_expires_at ?? "",
     ca_required: material.ca_required, test_required: material.test_required, test_type: material.test_type ?? "inspection", test_interval_months: material.test_interval_months?.toString() ?? "12", report_required: material.report_required, art_required: material.art_required,
@@ -67,7 +91,10 @@ export default function MaterialsPage() {
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
   const [success, setSuccess] = useState("");
+  const [caLookup, setCaLookup] = useState<CaLookupState>({ status: "idle" });
   const loadVersion = useRef(0);
+  const caLookupVersion = useRef(0);
+  const autoFilledCaRef = useRef<AutoFilledCaFields | null>(null);
   const mountedRef = useRef(true);
   const saveLockRef = useRef(false);
 
@@ -75,6 +102,64 @@ export default function MaterialsPage() {
     const initialSearch = searchParams.get("search");
     if (initialSearch) setQuery(initialSearch);
   }, [searchParams]);
+
+  useEffect(() => {
+    const caNumber = showForm && form.type === "EPI" ? form.ca_number.trim() : "";
+    const version = ++caLookupVersion.current;
+    if (!caNumber) {
+      setCaLookup({ status: "idle" });
+      return;
+    }
+
+    setCaLookup({ status: "loading" });
+    const timer = window.setTimeout(async () => {
+      try {
+        const supabase = createClient();
+        const { data, error: lookupError } = await supabase.from("ca_certificates")
+          .select("ca_number,status,valid_until,process_number,manufacturer_name,manufacturer_document,equipment_name,equipment_description,brand,reference,standard")
+          .eq("ca_number", caNumber)
+          .maybeSingle();
+        if (version !== caLookupVersion.current) return;
+        if (lookupError) throw lookupError;
+        if (!data) {
+          setCaLookup({ status: "not-found" });
+          return;
+        }
+
+        const certificate = data as CaCertificate;
+        const values: AutoFilledCaFields["values"] = {
+          ca_expires_at: certificate.valid_until ?? "",
+          manufacturer: certificate.manufacturer_name ?? "",
+          brand: certificate.brand ?? "",
+          model: certificate.reference ?? "",
+          description: certificate.equipment_description ?? "",
+        };
+        const previousAutoFill = autoFilledCaRef.current;
+        autoFilledCaRef.current = { caNumber, values };
+        setForm((current) => {
+          if (current.type !== "EPI" || current.ca_number.trim() !== caNumber) return current;
+          const canReplace = (field: keyof AutoFilledCaFields["values"]) =>
+            !current[field].trim() || Boolean(previousAutoFill?.values[field] && current[field] === previousAutoFill.values[field]);
+          return {
+            ...current,
+            ca_expires_at: values.ca_expires_at || current.ca_expires_at,
+            manufacturer: values.manufacturer && canReplace("manufacturer") ? values.manufacturer : current.manufacturer,
+            brand: values.brand && canReplace("brand") ? values.brand : current.brand,
+            model: values.model && canReplace("model") ? values.model : current.model,
+            description: values.description && canReplace("description") ? values.description : current.description,
+          };
+        });
+        setCaLookup({ status: "found", certificate });
+      } catch {
+        if (version === caLookupVersion.current) setCaLookup({ status: "error" });
+      }
+    }, 400);
+
+    return () => {
+      window.clearTimeout(timer);
+      if (caLookupVersion.current === version) caLookupVersion.current += 1;
+    };
+  }, [form.ca_number, form.type, showForm, editingId]);
 
   async function loadMaterials() {
     const version = ++loadVersion.current;
@@ -115,9 +200,45 @@ export default function MaterialsPage() {
   useEffect(() => { setPage(1); }, [query, typeFilter, statusFilter, ascending]);
   useEffect(() => { if (page > pageCount) setPage(pageCount); }, [page, pageCount]);
 
+  const sizeOptions = useMemo(() => {
+    const options = getMaterialSizeOptions(form.name);
+    return form.size && !options.includes(form.size) ? [...options, form.size] : options;
+  }, [form.name, form.size]);
+
   function updateField(field: keyof MaterialForm, value: string | boolean) { setForm((current) => ({ ...current, [field]: value })); }
-  function openNew() { setForm(emptyForm); setEditingId(null); setError(""); setSuccess(""); setShowForm(true); }
-  function openEdit(material: MaterialRow) { setForm(formFromMaterial(material)); setEditingId(material.id); setError(""); setSuccess(""); setShowForm(true); }
+  function updateMaterialName(value: string) {
+    setForm((current) => {
+      const options = getMaterialSizeOptions(value);
+      return { ...current, name: value, size: options.includes(current.size) ? current.size : "" };
+    });
+  }
+  function updateCaNumber(value: string) {
+    const previous = autoFilledCaRef.current;
+    if (!previous || previous.caNumber === value.trim()) {
+      updateField("ca_number", value);
+      return;
+    }
+    autoFilledCaRef.current = null;
+    setForm((current) => ({
+      ...current,
+      ca_number: value,
+      ca_expires_at: previous.values.ca_expires_at && current.ca_expires_at === previous.values.ca_expires_at ? "" : current.ca_expires_at,
+      manufacturer: previous.values.manufacturer && current.manufacturer === previous.values.manufacturer ? "" : current.manufacturer,
+      brand: previous.values.brand && current.brand === previous.values.brand ? "" : current.brand,
+      model: previous.values.model && current.model === previous.values.model ? "" : current.model,
+      description: previous.values.description && current.description === previous.values.description ? "" : current.description,
+    }));
+  }
+  function openNew() {
+    autoFilledCaRef.current = null;
+    setCaLookup({ status: "idle" });
+    setForm(emptyForm); setEditingId(null); setError(""); setSuccess(""); setShowForm(true);
+  }
+  function openEdit(material: MaterialRow) {
+    autoFilledCaRef.current = null;
+    setCaLookup({ status: "idle" });
+    setForm(formFromMaterial(material)); setEditingId(material.id); setError(""); setSuccess(""); setShowForm(true);
+  }
 
   async function saveMaterial(event: FormEvent) {
     event.preventDefault();
@@ -141,8 +262,9 @@ export default function MaterialsPage() {
     const { data: profile, error: profileError } = await supabase.from("profiles").select("organization_id").eq("id", auth.user.id).single();
     if (profileError) { setError(friendlyError(profileError, "Não foi possível concluir a operação.")); setSaving(false); return; }
     if (!profile?.organization_id) { setError("Não foi possível identificar a organização do usuário."); setSaving(false); return; }
+    const existingInternalCode = editingId ? materials.find((material) => material.id === editingId)?.internal_code ?? null : null;
     const payload = {
-      internal_code: form.internal_code.trim() || null, name: form.name.trim().toLocaleUpperCase("pt-BR"), type: form.type, unit: form.unit.trim() || "un.", size: form.size.trim() || null,
+      internal_code: existingInternalCode, name: form.name.trim().toLocaleUpperCase("pt-BR"), type: form.type, unit: form.unit, size: form.size.trim() || null,
       description: form.description.trim() || null, brand: form.brand.trim() || null, manufacturer: form.manufacturer.trim() || null,
       model: form.model.trim() || null, ca_number: form.type === "EPI" ? form.ca_number.trim() : null,
       ca_expires_at: form.type === "EPI" ? form.ca_expires_at || null : null,
@@ -165,7 +287,7 @@ export default function MaterialsPage() {
       saveError = result.error;
       savedId = result.data?.id ?? null;
     }
-    if (saveError || !savedId) setError(saveError?.code === "23505" ? "Já existe um material com este código interno." : friendlyError(saveError, "Não foi possível salvar as alterações. Verifique suas permissões."));
+    if (saveError || !savedId) setError(saveError?.code === "23505" ? "Já existe um cadastro conflitante para este material." : friendlyError(saveError, "Não foi possível salvar as alterações. Verifique suas permissões."));
     else { setSuccess(editingId ? "Material atualizado com sucesso." : "Material cadastrado com sucesso."); setShowForm(false); await loadMaterials(); }
     } catch (caught) {
       setError(friendlyError(caught, "Falha ao salvar o material."));
@@ -185,6 +307,26 @@ export default function MaterialsPage() {
       <section className="panel module-table-card"><div className="panel-header"><div><h2>Catálogo de materiais</h2><p>{filtered.length} resultado(s) encontrados</p></div><button className="select-button" onClick={() => setAscending((current) => !current)}>{ascending ? "Nome: A–Z" : "Nome: Z–A"} {ascending ? <ArrowUpAZ size={15} /> : <ArrowDownAZ size={15} />}</button></div>{loading ? <div className="module-loading"><LoaderCircle className="spin" size={22} /> Carregando materiais...</div> : <div className="table-wrap"><table className="materials-catalog-table" aria-label="Catálogo de materiais"><thead><tr><th>MATERIAL</th><th>TIPO</th><th>CA</th><th>AÇÕES</th></tr></thead><tbody>{paginatedMaterials.map((material) => <tr key={material.id}><td><div className="material-cell material-catalog-cell"><div><strong>{material.name}</strong><small>{material.unit}</small></div></div></td><td><span className={`type-badge ${material.type.toLowerCase()}`}>{material.type}</span></td><td>{material.ca_number || <span className="muted-cell">Não se aplica</span>}</td><td><button className="action-button" onClick={() => openEdit(material)}><Pencil size={14} /> Editar</button></td></tr>)}</tbody></table>{!filtered.length && <div className="empty-state"><ShieldCheck size={27} /><strong>Nenhum material encontrado</strong><span>Ajuste os filtros ou cadastre o primeiro material.</span></div>}</div>}</section>
       {filtered.length > pageSize && <nav className="pagination-controls" aria-label="Paginação"><button className="secondary-button" onClick={() => setPage((current) => Math.max(1, current - 1))} disabled={page === 1}>Anterior</button><span>Mostrando {(page - 1) * pageSize + 1}–{Math.min(page * pageSize, filtered.length)} de {filtered.length} · Página {page} de {pageCount}</span><button className="secondary-button" onClick={() => setPage((current) => Math.min(pageCount, current + 1))} disabled={page === pageCount}>Próxima</button></nav>}
     </>}
-    {showForm && <div className="modal-backdrop"><section className="modal-card material-edit-modal" role="dialog" aria-modal="true" aria-label="Cadastro de material"><div className="modal-header"><div><p className="eyebrow">{editingId ? "ATUALIZAR CADASTRO" : "NOVO CADASTRO"}</p><h2>{editingId ? "Editar material" : "Cadastrar material"}</h2></div><button type="button" className="close-modal" onClick={() => setShowForm(false)} aria-label="Fechar"><X size={19} /></button></div><form className="material-form" onSubmit={saveMaterial}><div className="form-grid two"><label>Código interno<input value={form.internal_code} onChange={(event) => updateField("internal_code", event.target.value)} placeholder="EPI-00001" required /></label><label>Nome do material<input value={form.name} onChange={(event) => updateField("name", event.target.value)} placeholder="Ex.: Capacete Classe B" required /></label></div><div className="form-grid three"><label>Tipo<select value={form.type} onChange={(event) => updateField("type", event.target.value)}><option value="EPI">EPI</option><option value="EPC">EPC</option><option value="FERRAMENTAL">Ferramental</option></select></label><label>Unidade<input value={form.unit} onChange={(event) => updateField("unit", event.target.value)} required /></label><label>Tamanho / numeração<input value={form.size} onChange={(event) => updateField("size", event.target.value)} placeholder="Ex.: G, 40 ou aba total" /></label><label>Estoque mínimo<input type="number" min="0" value={form.minimum_stock} onChange={(event) => updateField("minimum_stock", event.target.value)} required /></label></div><div className="form-grid three"><label>Número do CA {form.type === "EPI" && <em>obrigatório</em>}<input value={form.ca_number} onChange={(event) => updateField("ca_number", event.target.value)} disabled={form.type !== "EPI"} required={form.type === "EPI"} /></label><label>Validade do CA<input type="date" value={form.ca_expires_at} onChange={(event) => updateField("ca_expires_at", event.target.value)} disabled={form.type !== "EPI"} /></label><label>Vida útil (meses)<input type="number" min="0" value={form.useful_life_months} onChange={(event) => updateField("useful_life_months", event.target.value)} /></label><label>Troca prevista<select value={form.replacement_interval_days} onChange={(event) => updateField("replacement_interval_days", event.target.value)}><option value="">Não definida</option><option value="30">30 dias</option><option value="60">60 dias</option><option value="90">90 dias</option></select></label></div><div className="material-compliance-fields"><label className="checkbox-field"><input type="checkbox" checked={form.ca_required} onChange={(event) => updateField("ca_required", event.target.checked)} disabled={form.type !== "EPI"} /> Controle de CA obrigatório</label><label className="checkbox-field"><input type="checkbox" checked={form.test_required} onChange={(event) => updateField("test_required", event.target.checked)} /> Material ensaiável</label>{form.test_required && <><label>Tipo de ensaio<select value={form.test_type} onChange={(event) => updateField("test_type", event.target.value)}><option value="dielectric">Elétrico/dielétrico</option><option value="calibration">Calibração</option><option value="operational">Operacional</option><option value="inspection">Inspeção</option><option value="other">Outro</option></select></label><label>Periodicidade<select value={form.test_interval_months} onChange={(event) => updateField("test_interval_months", event.target.value)}><option value="6">A cada 6 meses</option><option value="12">A cada 12 meses</option></select></label><label className="checkbox-field"><input type="checkbox" checked={form.report_required} onChange={(event) => updateField("report_required", event.target.checked)} /> Exigir número do laudo</label><label className="checkbox-field"><input type="checkbox" checked={form.art_required} onChange={(event) => updateField("art_required", event.target.checked)} /> Exigir ART</label></>}</div><div className="form-grid three"><label>Marca<input value={form.brand} onChange={(event) => updateField("brand", event.target.value)} /></label><label>Fabricante<input value={form.manufacturer} onChange={(event) => updateField("manufacturer", event.target.value)} /></label><label>Modelo<input value={form.model} onChange={(event) => updateField("model", event.target.value)} /></label></div><label>Localização no estoque<input value={form.location} onChange={(event) => updateField("location", event.target.value)} placeholder="Ex.: Almoxarifado A" /></label><label>Descrição<textarea value={form.description} onChange={(event) => updateField("description", event.target.value)} rows={2} /></label><label>Observações<textarea value={form.notes} onChange={(event) => updateField("notes", event.target.value)} rows={2} /></label>{editingId && <label>Status<select value={form.status} onChange={(event) => updateField("status", event.target.value)}><option value="active">Ativo</option><option value="inactive">Inativo</option></select></label>}{error && <p className="login-error">{error}</p>}<div className="modal-actions"><button type="button" className="secondary-button" onClick={() => setShowForm(false)}>Cancelar</button><button className="primary-button" disabled={saving}>{saving ? "Salvando..." : editingId ? "Salvar alterações" : "Cadastrar material"}<Check size={16} /></button></div></form></section></div>}
+    {showForm && <div className="modal-backdrop"><section className="modal-card material-edit-modal" role="dialog" aria-modal="true" aria-label="Cadastro de material"><div className="modal-header"><div><p className="eyebrow">{editingId ? "ATUALIZAR CADASTRO" : "NOVO CADASTRO"}</p><h2>{editingId ? "Editar material" : "Cadastrar material"}</h2></div><button type="button" className="close-modal" onClick={() => setShowForm(false)} aria-label="Fechar"><X size={19} /></button></div><form className="material-form" onSubmit={saveMaterial}><div className="form-grid"><label>Nome do material<input value={form.name} onChange={(event) => updateMaterialName(event.target.value)} placeholder="Ex.: Capacete Classe B" required /></label></div><div className="form-grid three"><label>Tipo<select value={form.type} onChange={(event) => updateField("type", event.target.value)}><option value="EPI">EPI</option><option value="EPC">EPC</option><option value="FERRAMENTAL">Ferramental</option></select></label><label>Unidade<select value={form.unit} onChange={(event) => updateField("unit", event.target.value)} required>{form.unit && !STANDARD_UNITS.some((unit) => unit.value === form.unit) && <option value={form.unit}>{form.unit} (cadastro atual)</option>}{STANDARD_UNITS.map((unit) => <option key={unit.value} value={unit.value}>{unit.label}</option>)}</select></label><label>Tamanho / numeração<select value={form.size} onChange={(event) => updateField("size", event.target.value)}>{sizeOptions.map((size) => <option key={size || "not-applicable"} value={size}>{size || "N/A"}{size && !getMaterialSizeOptions(form.name).includes(size) ? " (cadastro atual)" : ""}</option>)}</select></label><label>Estoque mínimo<input type="number" min="0" value={form.minimum_stock} onChange={(event) => updateField("minimum_stock", event.target.value)} required /></label></div><div className="form-grid three"><label>Número do CA {form.type === "EPI" && <em>obrigatório</em>}<input value={form.ca_number} onChange={(event) => updateCaNumber(event.target.value)} disabled={form.type !== "EPI"} required={form.type === "EPI"} /></label><label>Validade do CA<input type="date" value={form.ca_expires_at} onChange={(event) => updateField("ca_expires_at", event.target.value)} disabled={form.type !== "EPI"} /></label><label>Vida útil (meses)<input type="number" min="0" value={form.useful_life_months} onChange={(event) => updateField("useful_life_months", event.target.value)} /></label><label>Troca prevista<select value={form.replacement_interval_days} onChange={(event) => updateField("replacement_interval_days", event.target.value)}><option value="">Não definida</option><option value="30">30 dias</option><option value="60">60 dias</option><option value="90">90 dias</option></select></label></div>
+      {form.type === "EPI" && form.ca_number.trim() && <section className={"material-ca-lookup " + caLookup.status} aria-live="polite">
+        <div className="material-ca-lookup-heading">
+          <ShieldCheck size={17} />
+          <strong>{caLookup.status === "loading" ? "Consultando CA..." : caLookup.status === "found" ? "CA localizado na base sincronizada" : caLookup.status === "not-found" ? "CA não localizado na base sincronizada" : "Consulta de CA indisponível"}</strong>
+          {caLookup.status === "found" && caLookup.certificate?.status && <span className="material-ca-status">{caLookup.certificate.status}</span>}
+        </div>
+        {caLookup.certificate && <dl className="material-ca-lookup-grid">
+          <div><dt>Equipamento</dt><dd>{caLookup.certificate.equipment_name || "Não informado"}</dd></div>
+          <div><dt>Fabricante / CNPJ</dt><dd>{caLookup.certificate.manufacturer_name || "Não informado"}{caLookup.certificate.manufacturer_document ? " · " + caLookup.certificate.manufacturer_document : ""}</dd></div>
+          <div><dt>Marca</dt><dd>{caLookup.certificate.brand || "Não informada"}</dd></div>
+          <div><dt>Referência</dt><dd>{caLookup.certificate.reference || "Não informada"}</dd></div>
+          <div><dt>Norma</dt><dd>{caLookup.certificate.standard || "Não informada"}</dd></div>
+          <div><dt>Processo</dt><dd>{caLookup.certificate.process_number || "Não informado"}</dd></div>
+          <div><dt>Validade oficial do CA</dt><dd>{caLookup.certificate.valid_until ? new Date(caLookup.certificate.valid_until + "T00:00:00").toLocaleDateString("pt-BR") : "Não informada"}</dd></div>
+          {caLookup.certificate.equipment_description && <div className="material-ca-description"><dt>Descrição do CA</dt><dd>{caLookup.certificate.equipment_description}</dd></div>}
+        </dl>}
+        {caLookup.status === "not-found" && <p>Confira o número ou consulte o <a href="https://caepi.trabalho.gov.br/internet/ConsultaCAInternet.aspx" target="_blank" rel="noreferrer">portal oficial do MTE <ExternalLink size={12} /></a>.</p>}
+        {caLookup.status === "error" && <p>Não foi possível consultar a base agora. Você ainda pode preencher os dados manualmente e tentar novamente mais tarde.</p>}
+      </section>}
+<div className="material-compliance-fields"><label className="checkbox-field"><input type="checkbox" checked={form.ca_required} onChange={(event) => updateField("ca_required", event.target.checked)} disabled={form.type !== "EPI"} /> Controle de CA obrigatório</label><label className="checkbox-field"><input type="checkbox" checked={form.test_required} onChange={(event) => updateField("test_required", event.target.checked)} /> Material ensaiável</label>{form.test_required && <><label>Tipo de ensaio<select value={form.test_type} onChange={(event) => updateField("test_type", event.target.value)}><option value="dielectric">Elétrico/dielétrico</option><option value="calibration">Calibração</option><option value="operational">Operacional</option><option value="inspection">Inspeção</option><option value="other">Outro</option></select></label><label>Periodicidade<select value={form.test_interval_months} onChange={(event) => updateField("test_interval_months", event.target.value)}><option value="6">A cada 6 meses</option><option value="12">A cada 12 meses</option></select></label><label className="checkbox-field"><input type="checkbox" checked={form.report_required} onChange={(event) => updateField("report_required", event.target.checked)} /> Exigir número do laudo</label><label className="checkbox-field"><input type="checkbox" checked={form.art_required} onChange={(event) => updateField("art_required", event.target.checked)} /> Exigir ART</label></>}</div><div className="form-grid three"><label>Marca<input value={form.brand} onChange={(event) => updateField("brand", event.target.value)} /></label><label>Fabricante<input value={form.manufacturer} onChange={(event) => updateField("manufacturer", event.target.value)} /></label><label>Modelo<input value={form.model} onChange={(event) => updateField("model", event.target.value)} /></label></div><label>Localização no estoque<input value={form.location} onChange={(event) => updateField("location", event.target.value)} placeholder="Ex.: Almoxarifado A" /></label><label>Descrição<textarea value={form.description} onChange={(event) => updateField("description", event.target.value)} rows={2} /></label><label>Observações<textarea value={form.notes} onChange={(event) => updateField("notes", event.target.value)} rows={2} /></label>{editingId && <label>Status<select value={form.status} onChange={(event) => updateField("status", event.target.value)}><option value="active">Ativo</option><option value="inactive">Inativo</option></select></label>}{error && <p className="login-error">{error}</p>}<div className="modal-actions"><button type="button" className="secondary-button" onClick={() => setShowForm(false)}>Cancelar</button><button className="primary-button" disabled={saving}>{saving ? "Salvando..." : editingId ? "Salvar alterações" : "Cadastrar material"}<Check size={16} /></button></div></form></section></div>}
   </main>;
 }

@@ -2164,6 +2164,25 @@ body{max-width:100%;overflow-x:hidden;}
   .module-table-card .table-wrap .stock-table td:nth-child(11)::before{content:"Localização";}
 }
 
+.material-ca-lookup{display:grid;gap:11px;padding:13px 14px;border:1px solid #e2e7f0;border-radius:10px;background:#f8f9fc;color:#65728a;font-size:11px;line-height:1.45;}
+.material-ca-lookup.found{border-color:#cfe7d8;background:#f6fcf8;}
+.material-ca-lookup.not-found,.material-ca-lookup.error{border-color:#f0d8c2;background:#fffaf4;}
+.material-ca-lookup-heading{display:flex;align-items:center;gap:8px;color:#344057;}
+.material-ca-lookup-heading svg{flex:0 0 auto;color:#7762d6;}
+.material-ca-lookup.found .material-ca-lookup-heading svg{color:#27805a;}
+.material-ca-lookup-heading strong{font-size:11px;}
+.material-ca-status{margin-left:auto;padding:4px 8px;border-radius:999px;background:#e5f5eb;color:#27805a;font-size:10px;font-weight:700;}
+.material-ca-lookup-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px 14px;margin:0;}
+.material-ca-lookup-grid>div{min-width:0;}
+.material-ca-lookup-grid dt{color:#929db0;font-size:9px;font-weight:700;letter-spacing:.35px;text-transform:uppercase;}
+.material-ca-lookup-grid dd{margin:3px 0 0;color:#536078;font-size:11px;overflow-wrap:anywhere;}
+.material-ca-lookup-grid .material-ca-description{grid-column:1/-1;}
+.material-ca-lookup p{margin:0;}
+.material-ca-lookup a{display:inline-flex;align-items:center;gap:4px;color:#6954c9;font-weight:700;text-decoration:none;}
+.material-ca-lookup a:hover{text-decoration:underline;}
+@media(max-width:760px){.material-ca-lookup-grid{grid-template-columns:repeat(2,minmax(0,1fr));}}
+@media(max-width:480px){.material-ca-lookup{padding:11px}.material-ca-lookup-grid{grid-template-columns:minmax(0,1fr)}.material-ca-lookup-grid .material-ca-description{grid-column:auto}.material-ca-status{font-size:9px;}}
+
 .employees-table-card .employee-clickable-row{cursor:pointer;}
 .employees-table-card .employee-clickable-row:hover td{background:#faf9ff;}
 .employees-table-card .employee-row-name{color:inherit;text-decoration:none;}
