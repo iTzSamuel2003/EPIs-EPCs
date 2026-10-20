@@ -3558,6 +3558,9 @@ main.module-shell:not(:has(.module-toolbar)):has(> .module-summary) > .module-ta
 .function-templates-page .template-options button > span:last-child{min-width:0;overflow-wrap:anywhere;}
 .teams-page .template-detail,
 .function-templates-page .template-detail{min-width:0;}
+.teams-page .team-member-actions{padding:16px 20px 20px;border-top:1px solid #edf0f5;margin-top:14px;}
+.teams-page .team-member-form{padding:16px;border:1px solid #e5e9f1;border-radius:12px;background:#fafbfe;}
+.teams-page .team-member-actions-buttons{display:flex;justify-content:flex-end;gap:10px;flex-wrap:wrap;}
 
 @media (max-width:1024px){
   .module-shell .module-header{gap:14px;}
@@ -3597,6 +3600,8 @@ main.module-shell:not(:has(.module-toolbar)):has(> .module-summary) > .module-ta
   .module-shell .header-actions > *,
   .module-shell .row-actions > *,
   .module-shell .modal-actions > *{flex-basis:100%;}
+  .teams-page .team-member-actions{padding:12px;}
+  .teams-page .team-member-actions-buttons > button{flex:1 1 100%;justify-content:center;}
 }
 
 @media (max-width:380px){
