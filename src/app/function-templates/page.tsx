@@ -99,7 +99,7 @@ export default function FunctionTemplatesPage() {
     event.preventDefault();
     if (saving || saveLockRef.current) return;
     setError(""); setSuccess("");
-    let atomicItems = items.map((item) => ({ material_id: item.material_id || null, material_name: item.material_name.trim(), quantity: Number(item.quantity), item_type: item.item_type }))
+    let atomicItems = items.map((item) => ({ material_id: item.material_id || null, material_name: item.material_name.trim().toLocaleUpperCase("pt-BR"), quantity: Number(item.quantity), item_type: item.item_type }))
       .filter((item) => item.material_name && Number.isInteger(item.quantity) && item.quantity > 0);
     if (!name.trim()) { setError("Informe o nome da função."); return; }
     if (!atomicItems.length || atomicItems.length !== items.length) { setError("Informe o material e uma quantidade maior que zero em todos os itens."); return; }
@@ -116,7 +116,7 @@ export default function FunctionTemplatesPage() {
       if (!profile?.organization_id) { setError("Não foi possível identificar a organização do usuário."); return; }
       const materialByName = new Map(materials.map((material) => [material.name.trim().toLocaleLowerCase("pt-BR"), material.id]));
       const missingCatalogItems = atomicItems.filter((item) => !materialByName.has(item.material_name.toLocaleLowerCase("pt-BR"))).map((item) => ({
-        organization_id: profile.organization_id, internal_code: null, name: item.material_name, type: item.item_type, unit: "un.",
+        organization_id: profile.organization_id, internal_code: null, name: item.material_name.toLocaleUpperCase("pt-BR"), type: item.item_type, unit: "un.",
         ca_number: item.item_type === "EPI" ? "PENDENTE" : null, minimum_stock: 0, status: "active",
         notes: "Cadastro criado a partir de Lista por função. Conferir CA, marca, modelo, custos e estoque mínimo.",
       }));
