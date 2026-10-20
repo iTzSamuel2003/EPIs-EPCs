@@ -142,7 +142,7 @@ export default function MaterialsPage() {
     if (profileError) { setError(friendlyError(profileError, "Não foi possível concluir a operação.")); setSaving(false); return; }
     if (!profile?.organization_id) { setError("Não foi possível identificar a organização do usuário."); setSaving(false); return; }
     const payload = {
-      internal_code: form.internal_code.trim() || null, name: form.name.trim(), type: form.type, unit: form.unit.trim() || "un.", size: form.size.trim() || null,
+      internal_code: form.internal_code.trim() || null, name: form.name.trim().toLocaleUpperCase("pt-BR"), type: form.type, unit: form.unit.trim() || "un.", size: form.size.trim() || null,
       description: form.description.trim() || null, brand: form.brand.trim() || null, manufacturer: form.manufacturer.trim() || null,
       model: form.model.trim() || null, ca_number: form.type === "EPI" ? form.ca_number.trim() : null,
       ca_expires_at: form.type === "EPI" ? form.ca_expires_at || null : null,
