@@ -2163,6 +2163,39 @@ body{max-width:100%;overflow-x:hidden;}
   .module-table-card .table-wrap .stock-table td:nth-child(10)::before{content:"Estoque mínimo";}
   .module-table-card .table-wrap .stock-table td:nth-child(11)::before{content:"Localização";}
 }
+
+.employees-table-card .employee-clickable-row{cursor:pointer;}
+.employees-table-card .employee-clickable-row:hover td{background:#faf9ff;}
+.employees-table-card .employee-row-name{color:inherit;text-decoration:none;}
+.employees-table-card .employee-row-name:hover{color:#6954c9;text-decoration:underline;}
+.employees-table-card .table-wrap table{width:100%!important;min-width:0!important;table-layout:fixed;}
+.employees-table-card th,.employees-table-card td{min-width:0;white-space:normal;overflow-wrap:anywhere;}
+.employees-table-card th:last-child,.employees-table-card td:last-child{position:static!important;right:auto!important;z-index:auto!important;background:transparent;}
+.employees-table-card th:nth-child(1),.employees-table-card td:nth-child(1){width:27%;}
+.employees-table-card th:nth-child(2),.employees-table-card td:nth-child(2){width:11%;}
+.employees-table-card th:nth-child(3),.employees-table-card td:nth-child(3){width:21%;}
+.employees-table-card th:nth-child(4),.employees-table-card td:nth-child(4){width:14%;}
+.employees-table-card th:nth-child(5),.employees-table-card td:nth-child(5){width:13%;}
+.employees-table-card th:nth-child(6),.employees-table-card td:nth-child(6){width:14%;}
+
+@media(max-width:1024px){
+  .employees-table-card .table-wrap{overflow:visible!important;margin-right:0;padding-bottom:0;}
+  .employees-table-card .table-wrap::after{display:none!important;}
+  .employees-table-card table{display:block!important;white-space:normal!important;}
+  .employees-table-card thead{display:none!important;}
+  .employees-table-card tbody{display:grid!important;gap:10px;}
+  .employees-table-card tr{display:grid!important;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px 12px;padding:13px;border:1px solid #edf0f5;border-radius:10px;background:#fafbfe;}
+  .employees-table-card td{display:grid!important;gap:4px;min-width:0!important;padding:0!important;border:0!important;overflow-wrap:anywhere;white-space:normal!important;}
+  .employees-table-card td::before{color:#a1aaba;font-size:9px;font-weight:700;letter-spacing:.5px;}
+  .employees-table-card td:nth-child(1),.employees-table-card td:nth-child(6){grid-column:1/-1!important;}
+  .employees-table-card td:nth-child(1)::before{content:"Funcionário";}
+  .employees-table-card td:nth-child(2)::before{content:"Matrícula";}
+  .employees-table-card td:nth-child(3)::before{content:"Cargo / função";}
+  .employees-table-card td:nth-child(4)::before{content:"Setor";}
+  .employees-table-card td:nth-child(5)::before{content:"Unidade";}
+  .employees-table-card td:nth-child(6)::before{content:"Status";}
+  .employees-table-card .material-cell strong{white-space:normal;overflow-wrap:anywhere;}
+}
 .brand-copy{flex:1;min-width:0}.brand .brand-title{display:block;max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:15px;letter-spacing:-.25px;line-height:1.25}.brand-mark.brand-mark-custom{position:relative;background-image:none;background-color:transparent;border:0;box-shadow:none}.brand-mark.brand-mark-custom img{position:absolute;top:-9.4%;left:-20%;width:340%;height:auto;max-width:none}
 
 .term-whatsapp-action{display:grid;gap:5px;max-width:320px;min-width:0}
