@@ -2163,7 +2163,7 @@ body{max-width:100%;overflow-x:hidden;}
   .module-table-card .table-wrap .stock-table td:nth-child(10)::before{content:"Estoque mínimo";}
   .module-table-card .table-wrap .stock-table td:nth-child(11)::before{content:"Localização";}
 }
-.brand-copy{flex:1;min-width:0}.brand .brand-title{display:block;max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:15px;letter-spacing:-.25px;line-height:1.25}.brand-mark.brand-mark-custom{position:relative;background-image:none;background-color:#fff;border:1px solid var(--line);box-shadow:0 7px 16px #17233c10}.brand-mark.brand-mark-custom img{position:absolute;top:0;left:0;width:300%;height:300%;max-width:none;object-fit:cover;object-position:left top}
+.brand-copy{flex:1;min-width:0}.brand .brand-title{display:block;max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:15px;letter-spacing:-.25px;line-height:1.25}.brand-mark.brand-mark-custom{position:relative;background-image:none;background-color:transparent;border:0;box-shadow:none}.brand-mark.brand-mark-custom img{position:absolute;top:-9.4%;left:-20%;width:340%;height:auto;max-width:none}
 
 .term-whatsapp-action{display:grid;gap:5px;max-width:320px;min-width:0}
 .term-whatsapp-button{background:#eaf6f1;color:#187b5b}
