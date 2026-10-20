@@ -2179,6 +2179,7 @@ body{max-width:100%;overflow-x:hidden;}
 .materials-page .materials-catalog-table th:nth-child(4),.materials-page .materials-catalog-table td:nth-child(4){width:12%;white-space:nowrap}
 .materials-page .materials-catalog-table .material-catalog-cell{min-width:0;max-width:none;gap:0}
 .materials-page .materials-catalog-table .material-catalog-cell>div{min-width:0}
+.materials-page .materials-catalog-table .material-catalog-cell strong{text-transform:uppercase}
 @media(max-width:760px){
   .materials-page .module-table-card .table-wrap{overflow:visible;margin-right:0;padding-bottom:0}
   .materials-page .materials-catalog-table{display:block!important;min-width:0!important;width:100%!important;white-space:normal!important}
