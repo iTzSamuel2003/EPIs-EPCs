@@ -35,6 +35,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   const [currentUserName, setCurrentUserName] = useState("Usuário");
   const [currentUserRole, setCurrentUserRole] = useState("user");
   const pathname = usePathname(); const router = useRouter(); const [mobileMenu, setMobileMenu] = useState(false); const [query, setQuery] = useState(""); const [results, setResults] = useState<SearchResult[]>([]); const [searchError, setSearchError] = useState<string | null>(null); const [sessionError, setSessionError] = useState<string | null>(null); const [selectedSearchIndex, setSelectedSearchIndex] = useState(-1); const [validityCount, setValidityCount] = useState(0); const [allowedPaths, setAllowedPaths] = useState<string[] | null>(null); const [organizationLogo, setOrganizationLogo] = useState(""); const [signingOut, setSigningOut] = useState(false); const menuToggleRef = useRef<HTMLButtonElement>(null); const closeMenuRef = useRef<HTMLButtonElement>(null); const menuWasOpen = useRef(false); const searchRequestRef = useRef(0);
+  const [organizationName, setOrganizationName] = useState("");
   const publicRoute = pathname === "/login" || pathname === "/reset-password" || pathname === "/no-access" || pathname.startsWith("/medidas/") || pathname.startsWith("/assinar/") || pathname === "/portal" || pathname.startsWith("/invite/");
   useEffect(() => {
     if (!mobileMenu) return;
@@ -90,8 +91,11 @@ export function AppShell({ children }: { children: React.ReactNode }) {
         const paths = role === "admin" ? rolePageDefaults.admin : override ? override.page_paths : roleAccess?.page_paths ?? rolePageDefaults[role] ?? rolePageDefaults.user;
         setAllowedPaths(paths);
         if (profile?.organization_id) {
-          const { data: organization } = await supabase.from("organizations").select("logo_url").eq("id", profile.organization_id).maybeSingle();
-          if (!cancelled) setOrganizationLogo(organization?.logo_url || "");
+          const { data: organization } = await supabase.from("organizations").select("name,logo_url").eq("id", profile.organization_id).maybeSingle();
+          if (!cancelled) {
+            setOrganizationLogo(organization?.logo_url || "");
+            setOrganizationName(organization?.name?.trim() || "");
+          }
         }
       }
     });
@@ -231,8 +235,8 @@ export function AppShell({ children }: { children: React.ReactNode }) {
         {mobileMenu && <button type="button" className="sidebar-backdrop" onClick={() => setMobileMenu(false)} aria-label="Fechar menu" />}
         <aside id="main-navigation" className={`sidebar ${mobileMenu ? "open" : ""}`} aria-label="Navegação principal" onKeyDown={handleMenuKeyDown}>
           <div className="brand">
-            <div className="brand-mark">{organizationLogo ? <img src={organizationLogo} alt="" /> : <ShieldCheck size={22} />}</div>
-            <div><strong>EPIS<span>+</span></strong><small>Gestão inteligente</small></div>
+            <div className={`brand-mark ${organizationLogo ? "brand-mark-custom" : ""}`}>{organizationLogo ? <img src={organizationLogo} alt="" /> : <ShieldCheck size={22} />}</div>
+            <div className="brand-copy"><strong className="brand-title" title={organizationName || "EPIS+"}>{organizationName || <>EPIS<span>+</span></>}</strong><small>Gestão inteligente</small></div>
             <button ref={closeMenuRef} className="close-menu" type="button" onClick={() => setMobileMenu(false)} aria-label="Fechar menu"><X size={20} /></button>
           </div>
           <div className="workspace-label">MENU PRINCIPAL</div>
