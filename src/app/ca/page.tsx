@@ -1,7 +1,7 @@
 "use client";
 
 import { ExternalLink, FileCheck2, LoaderCircle, Search, ShieldAlert } from "lucide-react";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { createClient } from "@/lib/supabase/client";
 import { friendlyError } from "@/lib/ui-feedback";
 import { FeedbackMessage } from "@/components/feedback-message";
@@ -45,6 +45,8 @@ export default function CAPage() {
   const [selected, setSelected] = useState<Certificate | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
+  const searchSequence = useRef(0);
+  const activeSearch = useRef<AbortController | null>(null);
 
   async function loadMaterials() {
     const supabase = createClient();
@@ -54,24 +56,67 @@ export default function CAPage() {
   }
 
   async function searchCertificates(term: string) {
+    const sequence = ++searchSequence.current;
+    activeSearch.current?.abort();
+    const controller = new AbortController();
+    activeSearch.current = controller;
     setLoading(true);
     setError("");
+    setSelected(null);
     try {
       const supabase = createClient();
-      let request = supabase.from("ca_certificates").select("ca_number,status,valid_until,process_number,manufacturer_name,manufacturer_document,equipment_name,equipment_description,brand,reference,standard,synced_at").order("ca_number").limit(50);
+      const columns = "ca_number,status,valid_until,process_number,manufacturer_name,manufacturer_document,equipment_name,equipment_description,brand,reference,standard,synced_at";
+      const createSearch = () => supabase.from("ca_certificates").select(columns).abortSignal(controller.signal);
       const normalized = term.trim();
-      if (normalized) {
-        const safe = normalized.replace(/[%,()]/g, " ").trim();
-        if (safe) request = request.or(`ca_number.ilike.%${safe}%,equipment_name.ilike.%${safe}%,equipment_description.ilike.%${safe}%,manufacturer_name.ilike.%${safe}%,brand.ilike.%${safe}%,reference.ilike.%${safe}%`);
+      const caNumber = normalized.match(/^(?:CA\s*)?(\d+)$/i)?.[1];
+      let results: Certificate[] = [];
+
+      if (caNumber) {
+        const exact = await createSearch().eq("ca_number", caNumber).order("ca_number").limit(50);
+        if (exact.error) throw exact.error;
+        results = (exact.data ?? []) as Certificate[];
+
+        if (!results.length) {
+          const partial = await createSearch().ilike("ca_number", `%${caNumber}%`).order("ca_number").limit(50);
+          if (partial.error) throw partial.error;
+          results = (partial.data ?? []) as Certificate[];
+        }
+      } else if (normalized) {
+        const safe = normalized.replace(/[^\p{L}\p{N}\s]/gu, " ").replace(/\s+/g, " ").trim();
+        if (safe) {
+          const [equipment, manufacturer] = await Promise.all([
+            createSearch().textSearch("equipment_name", safe, { config: "simple", type: "plain" }).limit(50),
+            createSearch().textSearch("manufacturer_name", safe, { config: "simple", type: "plain" }).limit(50),
+          ]);
+          if (equipment.error) throw equipment.error;
+          if (manufacturer.error) throw manufacturer.error;
+
+          const unique = new Map<string, Certificate>();
+          for (const certificate of [...(equipment.data ?? []), ...(manufacturer.data ?? [])] as Certificate[]) {
+            unique.set(certificate.ca_number, certificate);
+          }
+          results = [...unique.values()]
+            .sort((left, right) => left.ca_number.localeCompare(right.ca_number, "pt-BR", { numeric: true }))
+            .slice(0, 50);
+        }
+      } else {
+        const initial = await createSearch().order("ca_number").limit(50);
+        if (initial.error) throw initial.error;
+        results = (initial.data ?? []) as Certificate[];
       }
-      const { data, error: caError } = await request;
-      if (caError) throw caError;
-      setCertificates((data ?? []) as Certificate[]);
-      setSelected((current) => current && (data ?? []).some((item) => item.ca_number === current.ca_number) ? current : null);
+
+      if (sequence !== searchSequence.current) return;
+      setCertificates(results);
     } catch (caught) {
+      if (sequence !== searchSequence.current) return;
       setError(friendlyError(caught, "Não foi possível carregar a consulta de CA."));
+      setCertificates([]);
+      setSelected(null);
     } finally {
-      setLoading(false);
+      if (sequence === searchSequence.current) {
+        setLoading(false);
+        if (activeSearch.current === controller) activeSearch.current = null;
+      }
     }
   }
 
@@ -80,7 +125,12 @@ export default function CAPage() {
   }, []);
   useEffect(() => {
     const timer = window.setTimeout(() => void searchCertificates(query), 300);
-    return () => window.clearTimeout(timer);
+    return () => {
+      window.clearTimeout(timer);
+      activeSearch.current?.abort();
+      activeSearch.current = null;
+      searchSequence.current += 1;
+    };
   }, [query]);
 
   const linkedCaNumbers = useMemo(() => new Set(materials.map((material) => material.ca_number).filter(Boolean)), [materials]);

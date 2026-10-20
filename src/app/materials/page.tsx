@@ -29,10 +29,26 @@ type CaCertificate = {
   ca_number: string; status: string | null; valid_until: string | null; process_number: string | null;
   manufacturer_name: string | null; manufacturer_document: string | null; equipment_name: string | null;
   equipment_description: string | null; brand: string | null; reference: string | null; standard: string | null;
+  synced_at: string | null;
 };
 
 type CaLookupState = { status: "idle" | "loading" | "found" | "not-found" | "error"; certificate?: CaCertificate };
 type AutoFilledCaFields = { caNumber: string; values: Partial<Pick<MaterialForm, "ca_expires_at" | "manufacturer" | "brand" | "model" | "description">> };
+
+function caSituation(certificate: CaCertificate) {
+  const now = new Date();
+  const today = new Date(now.getTime() - now.getTimezoneOffset() * 60_000).toISOString().slice(0, 10);
+  const normalized = (certificate.status ?? "").normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLocaleLowerCase("pt-BR");
+
+  if (certificate.valid_until && certificate.valid_until < today) return { label: "VENCIDO", tone: "expired" };
+  if (normalized.includes("cancel") || normalized.includes("suspens")) return { label: certificate.status ?? "RESTRITO", tone: "expired" };
+  if (normalized.includes("valid") || normalized.includes("ativo")) return { label: "VÁLIDO", tone: "valid" };
+  return { label: certificate.status || "SITUAÇÃO NÃO INFORMADA", tone: "unknown" };
+}
+
+function formatCaImportDate(value: string | null) {
+  return value ? new Date(value).toLocaleString("pt-BR") : "Não informada";
+}
 
 const STANDARD_UNITS = [
   { value: "un.", label: "Unidade (un.)" },
@@ -154,7 +170,7 @@ export default function MaterialsPage() {
       try {
         const supabase = createClient();
         const { data, error: lookupError } = await supabase.from("ca_certificates")
-          .select("ca_number,status,valid_until,process_number,manufacturer_name,manufacturer_document,equipment_name,equipment_description,brand,reference,standard")
+          .select("ca_number,status,valid_until,process_number,manufacturer_name,manufacturer_document,equipment_name,equipment_description,brand,reference,standard,synced_at")
           .eq("ca_number", caNumber)
           .maybeSingle();
         if (version !== caLookupVersion.current) return;
@@ -403,6 +419,8 @@ export default function MaterialsPage() {
     }
   }
 
+  const caStatus = caLookup.certificate ? caSituation(caLookup.certificate) : null;
+
   return <main className="module-shell materials-page">
     <header className="module-header"><div><p className="eyebrow">CADASTRO E CONTROLE</p><h1>Materiais</h1><p className="module-subtitle">Cadastre EPIs, EPCs e ferramentais. Quantidade, localização e situação atual ficam em Estoque.</p></div><button type="button" className="primary-button" onClick={openNew}><Plus size={17} /> Novo material</button></header>
     {success && <div className="feedback success-feedback" role="status"><Check size={17} /> {success}</div>}
@@ -414,11 +432,11 @@ export default function MaterialsPage() {
       {filtered.length > pageSize && <nav className="pagination-controls" aria-label="Paginação"><button className="secondary-button" onClick={() => setPage((current) => Math.max(1, current - 1))} disabled={page === 1}>Anterior</button><span>Mostrando {(page - 1) * pageSize + 1}–{Math.min(page * pageSize, filtered.length)} de {filtered.length} · Página {page} de {pageCount}</span><button className="secondary-button" onClick={() => setPage((current) => Math.min(pageCount, current + 1))} disabled={page === pageCount}>Próxima</button></nav>}
     </>}
     {showForm && <div className="modal-backdrop"><section className="modal-card material-edit-modal" role="dialog" aria-modal="true" aria-label="Cadastro de material"><div className="modal-header"><div><p className="eyebrow">{editingId ? "ATUALIZAR CADASTRO" : "NOVO CADASTRO"}</p><h2>{editingId ? "Editar material" : "Cadastrar material"}</h2></div><button type="button" className="close-modal" onClick={() => setShowForm(false)} aria-label="Fechar"><X size={19} /></button></div><form className="material-form" onSubmit={saveMaterial}><div className="form-grid"><label>Nome do material<input value={form.name} onChange={(event) => updateMaterialName(event.target.value)} placeholder="Ex.: Capacete Classe B" required /></label></div><div className="form-grid three"><label>Tipo<select value={form.type} onChange={(event) => updateField("type", event.target.value)}><option value="EPI">EPI</option><option value="EPC">EPC</option><option value="FERRAMENTAL">Ferramental</option></select></label><label>Unidade<select value={form.unit} onChange={(event) => updateField("unit", event.target.value)} required>{form.unit && !STANDARD_UNITS.some((unit) => unit.value === form.unit) && <option value={form.unit}>{form.unit} (cadastro atual)</option>}{STANDARD_UNITS.map((unit) => <option key={unit.value} value={unit.value}>{unit.label}</option>)}</select></label><label>Tamanho / numeração<select value={form.size} onChange={(event) => updateField("size", event.target.value)}>{sizeOptions.map((size) => <option key={size || "not-applicable"} value={size}>{size || "N/A"}{size && !getMaterialSizeOptions(form.name).includes(size) ? " (cadastro atual)" : ""}</option>)}</select></label><label>Estoque mínimo<input type="number" min="0" value={form.minimum_stock} onChange={(event) => updateField("minimum_stock", event.target.value)} required /></label></div><div className="form-grid three"><label>Número do CA {form.type === "EPI" && <em>obrigatório</em>}<input value={form.ca_number} onChange={(event) => updateCaNumber(event.target.value)} disabled={form.type !== "EPI"} required={form.type === "EPI"} /></label><label>Validade do CA<input type="date" value={form.ca_expires_at} onChange={(event) => updateField("ca_expires_at", event.target.value)} disabled={form.type !== "EPI"} /></label><label>Vida útil (meses)<input type="number" min="0" value={form.useful_life_months} onChange={(event) => updateField("useful_life_months", event.target.value)} /></label><label>Troca prevista<select value={form.replacement_interval_days} onChange={(event) => updateField("replacement_interval_days", event.target.value)}><option value="">Não definida</option><option value="30">30 dias</option><option value="60">60 dias</option><option value="90">90 dias</option></select></label></div>
-      {form.type === "EPI" && form.ca_number.trim() && <section className={"material-ca-lookup " + caLookup.status} aria-live="polite">
+      {form.type === "EPI" && form.ca_number.trim() && <section className={`material-ca-lookup ${caLookup.status}${caStatus ? ` ${caStatus.tone}` : ""}`} aria-live="polite">
         <div className="material-ca-lookup-heading">
           <ShieldCheck size={17} />
           <strong>{caLookup.status === "loading" ? "Consultando CA..." : caLookup.status === "found" ? "CA localizado na base sincronizada" : caLookup.status === "not-found" ? "CA não localizado na base sincronizada" : "Consulta de CA indisponível"}</strong>
-          {caLookup.status === "found" && caLookup.certificate?.status && <span className="material-ca-status">{caLookup.certificate.status}</span>}
+          {caLookup.status === "found" && caStatus && <span className={`material-ca-status ${caStatus.tone}`}>{caStatus.label}</span>}
         </div>
         {caLookup.certificate && <dl className="material-ca-lookup-grid">
           <div><dt>Equipamento</dt><dd>{caLookup.certificate.equipment_name || "Não informado"}</dd></div>
@@ -428,8 +446,11 @@ export default function MaterialsPage() {
           <div><dt>Norma</dt><dd>{caLookup.certificate.standard || "Não informada"}</dd></div>
           <div><dt>Processo</dt><dd>{caLookup.certificate.process_number || "Não informado"}</dd></div>
           <div><dt>Validade oficial do CA</dt><dd>{caLookup.certificate.valid_until ? new Date(caLookup.certificate.valid_until + "T00:00:00").toLocaleDateString("pt-BR") : "Não informada"}</dd></div>
+          <div><dt>Situação informada na extração</dt><dd>{caLookup.certificate.status || "Não informada"}</dd></div>
+          <div><dt>Registro importado em</dt><dd>{formatCaImportDate(caLookup.certificate.synced_at)}</dd></div>
           {caLookup.certificate.equipment_description && <div className="material-ca-description"><dt>Descrição do CA</dt><dd>{caLookup.certificate.equipment_description}</dd></div>}
         </dl>}
+        {caLookup.certificate && caStatus?.tone === "expired" && <p className="material-ca-warning">A validade oficial do CA já passou, por isso o sistema o classifica como vencido. A última importação informa “{caLookup.certificate.status || "situação não informada"}”. Confira o <a href="https://caepi.mte.gov.br/internet/ConsultaCAInternet.aspx" target="_blank" rel="noreferrer">portal oficial do MTE <ExternalLink size={12} /></a> para consultar a informação mais recente.</p>}
         {caLookup.status === "not-found" && <p>Confira o número ou consulte o <a href="https://caepi.trabalho.gov.br/internet/ConsultaCAInternet.aspx" target="_blank" rel="noreferrer">portal oficial do MTE <ExternalLink size={12} /></a>.</p>}
         {caLookup.status === "error" && <p>Não foi possível consultar a base agora. Você ainda pode preencher os dados manualmente e tentar novamente mais tarde.</p>}
       </section>}
