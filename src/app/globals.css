@@ -2171,6 +2171,29 @@ body{max-width:100%;overflow-x:hidden;}
 .term-whatsapp-feedback{color:#27845f;font-size:11px;line-height:1.4;overflow-wrap:anywhere}
 .term-whatsapp-feedback.error{color:#c64d43}
 .delivery-attachment-actions{display:flex;flex-wrap:wrap;align-items:flex-start;gap:9px}
+
+.materials-page .materials-catalog-table{width:100%;table-layout:fixed}
+.materials-page .materials-catalog-table th:nth-child(1),.materials-page .materials-catalog-table td:nth-child(1){width:56%}
+.materials-page .materials-catalog-table th:nth-child(2),.materials-page .materials-catalog-table td:nth-child(2){width:16%}
+.materials-page .materials-catalog-table th:nth-child(3),.materials-page .materials-catalog-table td:nth-child(3){width:16%}
+.materials-page .materials-catalog-table th:nth-child(4),.materials-page .materials-catalog-table td:nth-child(4){width:12%;white-space:nowrap}
+.materials-page .materials-catalog-table .material-catalog-cell{min-width:0;max-width:none;gap:0}
+.materials-page .materials-catalog-table .material-catalog-cell>div{min-width:0}
+@media(max-width:760px){
+  .materials-page .module-table-card .table-wrap{overflow:visible;margin-right:0;padding-bottom:0}
+  .materials-page .materials-catalog-table{display:block!important;min-width:0!important;width:100%!important;white-space:normal!important}
+  .materials-page .materials-catalog-table thead{display:none!important}
+  .materials-page .materials-catalog-table tbody{display:grid!important;gap:10px}
+  .materials-page .materials-catalog-table tr{display:grid!important;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:9px 14px;padding:13px;border:1px solid #edf0f5;border-radius:10px;background:#fafbfe}
+  .materials-page .materials-catalog-table td{display:grid!important;grid-column:auto!important;gap:4px;min-width:0!important;max-width:none!important;padding:0!important;border:0!important;white-space:normal!important;overflow-wrap:anywhere}
+  .materials-page .materials-catalog-table td::before{color:#a1aaba;font-size:9px;font-weight:700;letter-spacing:.5px}
+  .materials-page .materials-catalog-table td:nth-child(1),.materials-page .materials-catalog-table td:nth-child(4){grid-column:1/-1!important}
+  .materials-page .materials-catalog-table td:nth-child(1)::before{content:"Material"}
+  .materials-page .materials-catalog-table td:nth-child(2)::before{content:"Tipo"}
+  .materials-page .materials-catalog-table td:nth-child(3)::before{content:"CA"}
+  .materials-page .materials-catalog-table td:nth-child(4)::before{content:"Ações"!important}
+  .materials-page .materials-catalog-table td:nth-child(4) .action-button{width:max-content}
+}
 .public-term-signature-page{min-height:100vh;display:grid;place-items:center;padding:30px 16px;background:linear-gradient(135deg,#f4f2ff,#f7fbff)}
 .public-term-card{width:min(760px,100%);padding:30px;background:#fff;border:1px solid #e5e8f0;border-radius:18px;box-shadow:0 20px 60px #24355516;box-sizing:border-box}
 .public-term-brand{display:grid;grid-template-columns:40px auto;align-items:center;column-gap:10px;margin-bottom:28px;color:#243452}

@@ -1,7 +1,7 @@
 "use client";
 
 import { FormEvent, useEffect, useMemo, useRef, useState } from "react";
-import { ArrowDownAZ, ArrowUpAZ, Boxes, Check, LoaderCircle, Pencil, Plus, Search, ShieldCheck, X } from "lucide-react";
+import { ArrowDownAZ, ArrowUpAZ, Check, LoaderCircle, Pencil, Plus, Search, ShieldCheck, X } from "lucide-react";
 import { useSearchParams } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import { friendlyError } from "@/lib/ui-feedback";
@@ -27,13 +27,6 @@ const emptyForm: MaterialForm = {
   model: "", ca_number: "", ca_expires_at: "", useful_life_months: "", replacement_interval_days: "", minimum_stock: "0",
   location: "", notes: "", status: "active", ca_required: true, test_required: false, test_type: "inspection", test_interval_months: "12", report_required: false, art_required: false,
 };
-
-function statusFor(material: MaterialRow, stock: number) {
-  if (material.status === "inactive") return ["Inativo", "inactive"];
-  if (stock === 0) return ["Sem estoque", "danger"];
-  if (material.minimum_stock > 0 && stock < material.minimum_stock) return ["Estoque baixo", "warning"];
-  return ["Normal", "success"];
-}
 
 function formFromMaterial(material: MaterialRow): MaterialForm {
   return {
@@ -62,12 +55,10 @@ function isNonNegativeNumber(value: string, integer = false) {
 export default function MaterialsPage() {
   const searchParams = useSearchParams();
   const [materials, setMaterials] = useState<MaterialRow[]>([]);
-  const [stockByMaterial, setStockByMaterial] = useState<Record<string, number>>({});
   const [form, setForm] = useState<MaterialForm>(emptyForm);
   const [query, setQuery] = useState("");
   const [typeFilter, setTypeFilter] = useState("all");
   const [statusFilter, setStatusFilter] = useState("active");
-  const [lowStockOnly, setLowStockOnly] = useState(false);
   const [ascending, setAscending] = useState(true);
   const [page, setPage] = useState(1);
   const [editingId, setEditingId] = useState<string | null>(null);
@@ -90,22 +81,12 @@ export default function MaterialsPage() {
     setLoading(true);
     setError("");
     setMaterials([]);
-    setStockByMaterial({});
     try {
     const supabase = createClient();
-    const [{ data, error: materialsError }, { data: lots, error: lotsError }] = await Promise.all([
-      supabase.from("materials").select("id,internal_code,name,type,unit,size,description,brand,manufacturer,model,ca_number,ca_expires_at,useful_life_months,replacement_interval_days,minimum_stock,location,notes,status,ca_required,test_required,test_type,test_interval_months,report_required,art_required").order("name"),
-      supabase.from("material_lots").select("material_id,available_quantity"),
-    ]);
+    const { data, error: materialsError } = await supabase.from("materials").select("id,internal_code,name,type,unit,size,description,brand,manufacturer,model,ca_number,ca_expires_at,useful_life_months,replacement_interval_days,minimum_stock,location,notes,status,ca_required,test_required,test_type,test_interval_months,report_required,art_required").order("name");
     if (!mountedRef.current || version !== loadVersion.current) return;
-    if (materialsError || lotsError) setError(friendlyError(materialsError ?? lotsError, "Não foi possível carregar materiais."));
-    else {
-      setMaterials((data ?? []) as MaterialRow[]);
-      setStockByMaterial((lots ?? []).reduce<Record<string, number>>((total, lot) => {
-        total[lot.material_id] = (total[lot.material_id] ?? 0) + Number(lot.available_quantity);
-        return total;
-      }, {}));
-    }
+    if (materialsError) setError(friendlyError(materialsError, "Não foi possível carregar materiais."));
+    else setMaterials((data ?? []) as MaterialRow[]);
     } catch (caught) {
       if (mountedRef.current && version === loadVersion.current) setError(friendlyError(caught, "Falha ao carregar materiais."));
     } finally {
@@ -119,28 +100,19 @@ export default function MaterialsPage() {
     return () => { mountedRef.current = false; loadVersion.current += 1; };
   }, []);
 
-  useEffect(() => {
-    const refresh = () => { void loadMaterials(); };
-    const events = ["delivery-created", "return-created", "stock-entry-created", "stock-entry-updated", "stock-entry-deleted"];
-    events.forEach((eventName) => window.addEventListener(eventName, refresh));
-    return () => events.forEach((eventName) => window.removeEventListener(eventName, refresh));
-  }, []);
-
   const filtered = useMemo(() => materials
     .filter((material) => {
-      const stock = stockByMaterial[material.id] ?? 0;
       return `${material.name} ${material.internal_code} ${material.ca_number ?? ""}`.toLowerCase().includes(query.toLowerCase())
         && (typeFilter === "all" || (typeFilter === "EPI_EPC" ? material.type === "EPI" || material.type === "EPC" : material.type === typeFilter))
-        && (statusFilter === "all" || material.status === statusFilter)
-        && (!lowStockOnly || (material.minimum_stock > 0 && stock < material.minimum_stock));
+        && (statusFilter === "all" || material.status === statusFilter);
     })
-    .sort((a, b) => ascending ? a.name.localeCompare(b.name, "pt-BR") : b.name.localeCompare(a.name, "pt-BR")), [materials, stockByMaterial, query, typeFilter, statusFilter, lowStockOnly, ascending]);
+    .sort((a, b) => ascending ? a.name.localeCompare(b.name, "pt-BR") : b.name.localeCompare(a.name, "pt-BR")), [materials, query, typeFilter, statusFilter, ascending]);
 
   const pageSize = 40;
   const pageCount = Math.max(1, Math.ceil(filtered.length / pageSize));
   const paginatedMaterials = filtered.slice((page - 1) * pageSize, page * pageSize);
 
-  useEffect(() => { setPage(1); }, [query, typeFilter, statusFilter, lowStockOnly, ascending]);
+  useEffect(() => { setPage(1); }, [query, typeFilter, statusFilter, ascending]);
   useEffect(() => { if (page > pageCount) setPage(pageCount); }, [page, pageCount]);
 
   function updateField(field: keyof MaterialForm, value: string | boolean) { setForm((current) => ({ ...current, [field]: value })); }
@@ -204,13 +176,13 @@ export default function MaterialsPage() {
   }
 
   return <main className="module-shell materials-page">
-    <header className="module-header"><div><p className="eyebrow">CADASTRO E CONTROLE</p><h1>Materiais</h1><p className="module-subtitle">Gerencie EPIs, EPCs e ferramentais, certificados e níveis mínimos de estoque.</p></div><button type="button" className="primary-button" onClick={openNew}><Plus size={17} /> Novo material</button></header>
+    <header className="module-header"><div><p className="eyebrow">CADASTRO E CONTROLE</p><h1>Materiais</h1><p className="module-subtitle">Cadastre EPIs, EPCs e ferramentais. Quantidade, localização e situação atual ficam em Estoque.</p></div><button type="button" className="primary-button" onClick={openNew}><Plus size={17} /> Novo material</button></header>
     {success && <div className="feedback success-feedback" role="status"><Check size={17} /> {success}</div>}
     {error && !showForm && <FeedbackMessage onRetry={() => void loadMaterials()}>{error}</FeedbackMessage>}
-    <section className="module-toolbar"><div className="module-search"><Search size={17} /><input aria-label="Buscar por nome ou CA" value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Buscar por nome ou CA" /></div><select aria-label="Filtrar por grupo de materiais" value={typeFilter} onChange={(event) => setTypeFilter(event.target.value)}><option value="all">Todos os tipos</option><option value="EPI_EPC">EPIs e EPCs</option><option value="FERRAMENTAL">Ferramentais</option></select><select aria-label="Filtrar materiais por status" value={statusFilter} onChange={(event) => setStatusFilter(event.target.value)}><option value="all">Todos os status</option><option value="active">Ativos</option><option value="inactive">Inativos</option></select><label className="check-filter"><input type="checkbox" checked={lowStockOnly} onChange={(event) => setLowStockOnly(event.target.checked)} /> Estoque baixo</label></section>
+    <section className="module-toolbar"><div className="module-search"><Search size={17} /><input aria-label="Buscar por nome ou CA" value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Buscar por nome ou CA" /></div><select aria-label="Filtrar por grupo de materiais" value={typeFilter} onChange={(event) => setTypeFilter(event.target.value)}><option value="all">Todos os tipos</option><option value="EPI_EPC">EPIs e EPCs</option><option value="FERRAMENTAL">Ferramentais</option></select><select aria-label="Filtrar situação do cadastro" value={statusFilter} onChange={(event) => setStatusFilter(event.target.value)}><option value="all">Todos os cadastros</option><option value="active">Ativos</option><option value="inactive">Inativos</option></select></section>
     <section className="module-summary"><div><strong>{materials.filter((item) => item.status === "active").length}</strong><span>materiais ativos</span></div><div><strong>{materials.filter((item) => item.status === "active" && item.type === "EPI").length}</strong><span>EPIs ativos</span></div><div><strong>{materials.filter((item) => item.status === "active" && item.type === "EPC").length}</strong><span>EPCs ativos</span></div><div><strong>{materials.filter((item) => item.status === "active" && item.type === "FERRAMENTAL").length}</strong><span>ferramentais ativos</span></div></section>
     {!showForm && <>
-      <section className="panel module-table-card"><div className="panel-header"><div><h2>Catálogo de materiais</h2><p>{filtered.length} resultado(s) encontrados</p></div><button className="select-button" onClick={() => setAscending((current) => !current)}>{ascending ? "Nome: A–Z" : "Nome: Z–A"} {ascending ? <ArrowUpAZ size={15} /> : <ArrowDownAZ size={15} />}</button></div>{loading ? <div className="module-loading"><LoaderCircle className="spin" size={22} /> Carregando materiais...</div> : <div className="table-wrap"><table><thead><tr><th>MATERIAL</th><th>TIPO</th><th>CA</th><th>ESTOQUE</th><th>LOCALIZAÇÃO</th><th>SITUAÇÃO</th><th>AÇÕES</th></tr></thead><tbody>{paginatedMaterials.map((material) => { const stock = stockByMaterial[material.id] ?? 0; const [status, tone] = statusFor(material, stock); return <tr key={material.id}><td><div className="material-cell"><div className={`material-type-icon ${material.type === "EPI" ? "epi" : material.type === "EPC" ? "epc" : "ferramental"}`}><Boxes size={17} /></div><div><strong>{material.name}</strong><small>{material.unit}</small></div></div></td><td><span className={`type-badge ${material.type.toLowerCase()}`}>{material.type}</span></td><td>{material.ca_number || <span className="muted-cell">Não se aplica</span>}</td><td><strong>{stock}</strong> <span className="muted-cell">/ mín. {material.minimum_stock}</span></td><td>{material.location || <span className="muted-cell">Não informado</span>}</td><td><span className={`status-pill ${tone}`}>{status}</span></td><td><button className="action-button" onClick={() => openEdit(material)}><Pencil size={14} /> Editar</button></td></tr>; })}</tbody></table>{!filtered.length && <div className="empty-state"><ShieldCheck size={27} /><strong>Nenhum material encontrado</strong><span>Ajuste os filtros ou cadastre o primeiro material.</span></div>}</div>}</section>
+      <section className="panel module-table-card"><div className="panel-header"><div><h2>Catálogo de materiais</h2><p>{filtered.length} resultado(s) encontrados</p></div><button className="select-button" onClick={() => setAscending((current) => !current)}>{ascending ? "Nome: A–Z" : "Nome: Z–A"} {ascending ? <ArrowUpAZ size={15} /> : <ArrowDownAZ size={15} />}</button></div>{loading ? <div className="module-loading"><LoaderCircle className="spin" size={22} /> Carregando materiais...</div> : <div className="table-wrap"><table className="materials-catalog-table" aria-label="Catálogo de materiais"><thead><tr><th>MATERIAL</th><th>TIPO</th><th>CA</th><th>AÇÕES</th></tr></thead><tbody>{paginatedMaterials.map((material) => <tr key={material.id}><td><div className="material-cell material-catalog-cell"><div><strong>{material.name}</strong><small>{material.unit}</small></div></div></td><td><span className={`type-badge ${material.type.toLowerCase()}`}>{material.type}</span></td><td>{material.ca_number || <span className="muted-cell">Não se aplica</span>}</td><td><button className="action-button" onClick={() => openEdit(material)}><Pencil size={14} /> Editar</button></td></tr>)}</tbody></table>{!filtered.length && <div className="empty-state"><ShieldCheck size={27} /><strong>Nenhum material encontrado</strong><span>Ajuste os filtros ou cadastre o primeiro material.</span></div>}</div>}</section>
       {filtered.length > pageSize && <nav className="pagination-controls" aria-label="Paginação"><button className="secondary-button" onClick={() => setPage((current) => Math.max(1, current - 1))} disabled={page === 1}>Anterior</button><span>Mostrando {(page - 1) * pageSize + 1}–{Math.min(page * pageSize, filtered.length)} de {filtered.length} · Página {page} de {pageCount}</span><button className="secondary-button" onClick={() => setPage((current) => Math.min(pageCount, current + 1))} disabled={page === pageCount}>Próxima</button></nav>}
     </>}
     {showForm && <div className="modal-backdrop"><section className="modal-card material-edit-modal" role="dialog" aria-modal="true" aria-label="Cadastro de material"><div className="modal-header"><div><p className="eyebrow">{editingId ? "ATUALIZAR CADASTRO" : "NOVO CADASTRO"}</p><h2>{editingId ? "Editar material" : "Cadastrar material"}</h2></div><button type="button" className="close-modal" onClick={() => setShowForm(false)} aria-label="Fechar"><X size={19} /></button></div><form className="material-form" onSubmit={saveMaterial}><div className="form-grid two"><label>Código interno<input value={form.internal_code} onChange={(event) => updateField("internal_code", event.target.value)} placeholder="EPI-00001" required /></label><label>Nome do material<input value={form.name} onChange={(event) => updateField("name", event.target.value)} placeholder="Ex.: Capacete Classe B" required /></label></div><div className="form-grid three"><label>Tipo<select value={form.type} onChange={(event) => updateField("type", event.target.value)}><option value="EPI">EPI</option><option value="EPC">EPC</option><option value="FERRAMENTAL">Ferramental</option></select></label><label>Unidade<input value={form.unit} onChange={(event) => updateField("unit", event.target.value)} required /></label><label>Tamanho / numeração<input value={form.size} onChange={(event) => updateField("size", event.target.value)} placeholder="Ex.: G, 40 ou aba total" /></label><label>Estoque mínimo<input type="number" min="0" value={form.minimum_stock} onChange={(event) => updateField("minimum_stock", event.target.value)} required /></label></div><div className="form-grid three"><label>Número do CA {form.type === "EPI" && <em>obrigatório</em>}<input value={form.ca_number} onChange={(event) => updateField("ca_number", event.target.value)} disabled={form.type !== "EPI"} required={form.type === "EPI"} /></label><label>Validade do CA<input type="date" value={form.ca_expires_at} onChange={(event) => updateField("ca_expires_at", event.target.value)} disabled={form.type !== "EPI"} /></label><label>Vida útil (meses)<input type="number" min="0" value={form.useful_life_months} onChange={(event) => updateField("useful_life_months", event.target.value)} /></label><label>Troca prevista<select value={form.replacement_interval_days} onChange={(event) => updateField("replacement_interval_days", event.target.value)}><option value="">Não definida</option><option value="30">30 dias</option><option value="60">60 dias</option><option value="90">90 dias</option></select></label></div><div className="material-compliance-fields"><label className="checkbox-field"><input type="checkbox" checked={form.ca_required} onChange={(event) => updateField("ca_required", event.target.checked)} disabled={form.type !== "EPI"} /> Controle de CA obrigatório</label><label className="checkbox-field"><input type="checkbox" checked={form.test_required} onChange={(event) => updateField("test_required", event.target.checked)} /> Material ensaiável</label>{form.test_required && <><label>Tipo de ensaio<select value={form.test_type} onChange={(event) => updateField("test_type", event.target.value)}><option value="dielectric">Elétrico/dielétrico</option><option value="calibration">Calibração</option><option value="operational">Operacional</option><option value="inspection">Inspeção</option><option value="other">Outro</option></select></label><label>Periodicidade<select value={form.test_interval_months} onChange={(event) => updateField("test_interval_months", event.target.value)}><option value="6">A cada 6 meses</option><option value="12">A cada 12 meses</option></select></label><label className="checkbox-field"><input type="checkbox" checked={form.report_required} onChange={(event) => updateField("report_required", event.target.checked)} /> Exigir número do laudo</label><label className="checkbox-field"><input type="checkbox" checked={form.art_required} onChange={(event) => updateField("art_required", event.target.checked)} /> Exigir ART</label></>}</div><div className="form-grid three"><label>Marca<input value={form.brand} onChange={(event) => updateField("brand", event.target.value)} /></label><label>Fabricante<input value={form.manufacturer} onChange={(event) => updateField("manufacturer", event.target.value)} /></label><label>Modelo<input value={form.model} onChange={(event) => updateField("model", event.target.value)} /></label></div><label>Localização no estoque<input value={form.location} onChange={(event) => updateField("location", event.target.value)} placeholder="Ex.: Almoxarifado A" /></label><label>Descrição<textarea value={form.description} onChange={(event) => updateField("description", event.target.value)} rows={2} /></label><label>Observações<textarea value={form.notes} onChange={(event) => updateField("notes", event.target.value)} rows={2} /></label>{editingId && <label>Status<select value={form.status} onChange={(event) => updateField("status", event.target.value)}><option value="active">Ativo</option><option value="inactive">Inativo</option></select></label>}{error && <p className="login-error">{error}</p>}<div className="modal-actions"><button type="button" className="secondary-button" onClick={() => setShowForm(false)}>Cancelar</button><button className="primary-button" disabled={saving}>{saving ? "Salvando..." : editingId ? "Salvar alterações" : "Cadastrar material"}<Check size={16} /></button></div></form></section></div>}
