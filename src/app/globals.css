@@ -2164,6 +2164,32 @@ body{max-width:100%;overflow-x:hidden;}
   .module-table-card .table-wrap .stock-table td:nth-child(11)::before{content:"Localização";}
 }
 
+.material-edit-modal .material-compliance-fields{
+  grid-template-columns:repeat(2,minmax(0,1fr));
+  align-items:center;
+}
+.material-edit-modal .material-compliance-fields > label.checkbox-field{
+  display:flex;
+  align-items:center;
+  justify-content:flex-start;
+  gap:9px;
+  min-width:0;
+  min-height:42px;
+  line-height:1.35;
+}
+.material-edit-modal .material-compliance-fields > label.checkbox-field input[type="checkbox"]{
+  flex:0 0 16px;
+  width:16px;
+  height:16px;
+  min-height:16px;
+  margin:0;
+  padding:0;
+  accent-color:#7762d6;
+}
+@media(max-width:480px){
+  .material-edit-modal .material-compliance-fields{grid-template-columns:minmax(0,1fr);}
+}
+
 .material-ca-lookup{display:grid;gap:11px;padding:13px 14px;border:1px solid #e2e7f0;border-radius:10px;background:#f8f9fc;color:#65728a;font-size:11px;line-height:1.45;}
 .material-ca-lookup.found{border-color:#cfe7d8;background:#f6fcf8;}
 .material-ca-lookup.not-found,.material-ca-lookup.error{border-color:#f0d8c2;background:#fffaf4;}
