@@ -71,7 +71,7 @@ const NUMBER_VARIATION_OPTIONS = ["36", "37", "38", "39", "40", "41", "42"];
 const VARIATION_TYPE_LABELS: Record<VariationType, string> = {
   none: "N/A — não se aplica",
   size: "Tamanho — P, M, G, GG, XGG",
-  number: "Numeração — 36, 37, 38, 39, 40, 41, 42",
+  number: "Numeração",
   custom: "Personalizada",
 };
 
@@ -110,9 +110,10 @@ const emptyForm: MaterialForm = {
 function formFromMaterial(material: MaterialRow, variants: MaterialVariant[]): MaterialForm {
   const activeVariants = variants.filter((variant) => variant.active);
   const variationType = variationTypeForMaterial(material, variants);
-  const selectedVariations = variationType === "size" ? [...SIZE_VARIATION_OPTIONS]
+  const selectedVariations = variationType === "none" ? []
+    : activeVariants.length ? activeVariants.map(variationValue)
+    : variationType === "size" ? [...SIZE_VARIATION_OPTIONS]
     : variationType === "number" ? [...NUMBER_VARIATION_OPTIONS]
-    : variationType === "custom" ? activeVariants.map(variationValue)
     : [];
   return {
     name: material.name, type: material.type, unit: material.unit, size: VARIATION_TYPE_LABELS[variationType], legacySize: material.size ?? "",

@@ -10,10 +10,12 @@ import { friendlyError } from "@/lib/ui-feedback";
 
 type MaterialOption = { id: string; name: string; internal_code: string; unit: string; test_required: boolean; report_required: boolean };
 type MaterialVariant = { id: string; material_id: string; name: string; size: string | null; active: boolean };
-type EntryItem = { material_id: string; materialQuery: string; variant_id: string; quantity: string; unit_cost: string; manufactured_at: string; expires_at: string; test_performed_at: string; test_expires_at: string; test_report_number: string };
-const newItem = (): EntryItem => ({ material_id: "", materialQuery: "", variant_id: "", quantity: "1", unit_cost: "0", manufactured_at: "", expires_at: "", test_performed_at: "", test_expires_at: "", test_report_number: "" });
+type EntryItem = { material_id: string; materialQuery: string; variant_id: string; custom_variant_size: string; quantity: string; unit_cost: string; manufactured_at: string; expires_at: string; test_performed_at: string; test_expires_at: string; test_report_number: string };
+const NEW_NUMBER_VARIANT = "__new_number_variant__";
+const newItem = (): EntryItem => ({ material_id: "", materialQuery: "", variant_id: "", custom_variant_size: "", quantity: "1", unit_cost: "0", manufactured_at: "", expires_at: "", test_performed_at: "", test_expires_at: "", test_report_number: "" });
 const localDateValue = (value = new Date()) => `${value.getFullYear()}-${String(value.getMonth() + 1).padStart(2, "0")}-${String(value.getDate()).padStart(2, "0")}`;
 function isValidDateValue(value: string) { if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) return false; const [year, month, day] = value.split("-").map(Number); const date = new Date(year, month - 1, day); return date.getFullYear() === year && date.getMonth() === month - 1 && date.getDate() === day; }
+function normalizedNumber(value: string) { const trimmed = value.trim(); if (!/^\d+$/.test(trimmed)) return ""; const parsed = Number(trimmed); return Number.isSafeInteger(parsed) && parsed > 0 ? String(parsed) : ""; }
 
 export default function EntriesPage() {
   const [materials, setMaterials] = useState<MaterialOption[]>([]);
@@ -81,8 +83,13 @@ export default function EntriesPage() {
     return variants.filter((variant) => variant.material_id === materialId);
   }
 
+  function isNumberedMaterial(materialId: string) {
+    const materialVariants = variantsFor(materialId);
+    return materialVariants.length > 0 && materialVariants.every((variant) => /^\d+$/.test((variant.size || variant.name).trim()));
+  }
+
   function selectMaterial(index: number, material: MaterialOption) {
-    setItems((current) => current.map((item, itemIndex) => itemIndex === index ? { ...item, material_id: material.id, materialQuery: material.name, variant_id: "", manufactured_at: "", expires_at: "", test_performed_at: "", test_expires_at: "", test_report_number: "" } : item));
+    setItems((current) => current.map((item, itemIndex) => itemIndex === index ? { ...item, material_id: material.id, materialQuery: material.name, variant_id: "", custom_variant_size: "", manufactured_at: "", expires_at: "", test_performed_at: "", test_expires_at: "", test_report_number: "" } : item));
     setMaterialSuggestionsOpen(null);
   }
 
@@ -107,13 +114,53 @@ export default function EntriesPage() {
       const invalidTestDates = Boolean(material?.test_required && (!isValidDateValue(item.test_performed_at) || !isValidDateValue(item.test_expires_at) || item.test_performed_at > entryDate || item.test_expires_at < item.test_performed_at));
       const missingTestReport = Boolean(material?.test_required && material.report_required && !item.test_report_number.trim());
       const invalidMaterialDates = Boolean((item.manufactured_at && !isValidDateValue(item.manufactured_at)) || (item.expires_at && !isValidDateValue(item.expires_at)) || (item.manufactured_at && item.expires_at && item.expires_at < item.manufactured_at));
+      const invalidCustomNumber = item.variant_id === NEW_NUMBER_VARIANT && (!isNumberedMaterial(item.material_id) || !normalizedNumber(item.custom_variant_size));
       return !item.material_id || !Number.isInteger(quantity) || quantity <= 0 || !item.unit_cost.trim() || !Number.isFinite(unitCost) || unitCost < 0
         || (variantsFor(item.material_id).length > 0 && !item.variant_id)
-        || invalidTestDates || missingTestReport || invalidMaterialDates;
+        || invalidCustomNumber || invalidTestDates || missingTestReport || invalidMaterialDates;
     });
-    if (hasInvalidItem) { setError("Preencha material, tamanho, quantidade inteira e custo. Confira também se as datas e a validade do ensaio estão corretas e não informe ensaio posterior à entrada."); return; }
+    if (hasInvalidItem) { setError("Preencha material, tamanho ou numeração, quantidade inteira e custo. Confira também se as datas e a validade do ensaio estão corretas e não informe ensaio posterior à entrada."); return; }
     submitLockRef.current = true;
     setSaving(true); const supabase = createClient(); let uploadedPath = ""; try {
+    const entryItems: { material_id: string; variant_id: string | null; quantity: number; unit_cost: number; manufactured_at: string | null; expires_at: string | null; test_performed_at: string | null; test_expires_at: string | null; test_report_number: string | null }[] = [];
+    const resolvedVariants = [...variants];
+    let organizationId: string | null = null;
+    for (const item of items) {
+      let variantId = item.variant_id;
+      if (variantId === NEW_NUMBER_VARIANT) {
+        const number = normalizedNumber(item.custom_variant_size);
+        let matchingVariant = resolvedVariants.find((variant) => variant.material_id === item.material_id && normalizedNumber(variant.size || variant.name) === number);
+        if (!matchingVariant) {
+          const { data: existingVariant, error: lookupError } = await supabase.from("material_variants").select("id,material_id,name,size,active").eq("material_id", item.material_id).eq("size", number).maybeSingle();
+          if (lookupError) throw lookupError;
+          matchingVariant = existingVariant as MaterialVariant | null ?? undefined;
+        }
+        if (matchingVariant) {
+          if (!matchingVariant.active) {
+            const { error: activateError } = await supabase.from("material_variants").update({ active: true }).eq("id", matchingVariant.id);
+            if (activateError) throw activateError;
+            matchingVariant = { ...matchingVariant, active: true };
+          }
+          variantId = matchingVariant.id;
+          if (!resolvedVariants.some((variant) => variant.id === matchingVariant?.id)) resolvedVariants.push(matchingVariant);
+        } else {
+          if (!organizationId) {
+            const { data: auth, error: authError } = await supabase.auth.getUser();
+            if (authError || !auth.user) { setError(friendlyError(authError, "Sua sessão expirou. Entre novamente.")); return; }
+            const { data: profile, error: profileError } = await supabase.from("profiles").select("organization_id").eq("id", auth.user.id).single();
+            if (profileError || !profile?.organization_id) { setError(friendlyError(profileError, "Não foi possível identificar a organização do usuário.")); return; }
+            organizationId = profile.organization_id;
+          }
+          const { data: createdVariant, error: createVariantError } = await supabase.from("material_variants").insert({ organization_id: organizationId, material_id: item.material_id, name: number, size: number, active: true }).select("id,material_id,name,size,active").single();
+          if (createVariantError || !createdVariant) throw createVariantError ?? new Error("Não foi possível cadastrar a numeração.");
+          matchingVariant = createdVariant as MaterialVariant;
+          variantId = matchingVariant.id;
+          resolvedVariants.push(matchingVariant);
+        }
+      }
+      entryItems.push({ material_id: item.material_id, variant_id: variantId || null, quantity: Number(item.quantity), unit_cost: Number(item.unit_cost) || 0, manufactured_at: item.manufactured_at || null, expires_at: item.expires_at || null, test_performed_at: item.test_performed_at || null, test_expires_at: item.test_expires_at || null, test_report_number: item.test_report_number.trim() || null });
+    }
+    if (resolvedVariants.length !== variants.length || resolvedVariants.some((variant, index) => variant.active !== variants[index]?.active)) setVariants(resolvedVariants);
     if (invoiceFile) {
       const { data: auth, error: authError } = await supabase.auth.getUser();
       if (authError || !auth.user) { setError(friendlyError(authError, "Sua sessão expirou. Entre novamente.")); return; }
@@ -124,7 +171,7 @@ export default function EntriesPage() {
       const { error: uploadError } = await supabase.storage.from("invoice-attachments").upload(uploadedPath, invoiceFile, { contentType: invoiceFile.type, upsert: false });
 if (uploadError) { setError(friendlyError(uploadError, "Não foi possível anexar a nota fiscal.")); if (uploadedPath) { try { await supabase.storage.from("invoice-attachments").remove([uploadedPath]); } catch {} } uploadedPath = ""; return; }
     }
-    const { error: entryError } = await supabase.rpc("register_stock_entry_batch", { p_invoice_number: invoiceNumber || null, p_entry_date: entryDate || null, p_items: items.map((item) => ({ material_id: item.material_id, variant_id: item.variant_id || null, quantity: Number(item.quantity), unit_cost: Number(item.unit_cost) || 0, manufactured_at: item.manufactured_at || null, expires_at: item.expires_at || null, test_performed_at: item.test_performed_at || null, test_expires_at: item.test_expires_at || null, test_report_number: item.test_report_number.trim() || null })), p_invoice_file_path: uploadedPath || null, p_notes: notes || null });
+    const { error: entryError } = await supabase.rpc("register_stock_entry_batch", { p_invoice_number: invoiceNumber || null, p_entry_date: entryDate || null, p_items: entryItems, p_invoice_file_path: uploadedPath || null, p_notes: notes || null });
     if (entryError) {
       if (uploadedPath) { try { await supabase.storage.from("invoice-attachments").remove([uploadedPath]); } catch {} }
       uploadedPath = "";
@@ -151,9 +198,9 @@ if (uploadError) { setError(friendlyError(uploadError, "Não foi possível anexa
         <div className="form-grid two"><label>Número da nota fiscal (opcional)<input value={invoiceNumber} onChange={(event) => setInvoiceNumber(event.target.value)} placeholder="Deixe em branco se não houver" /></label><label>Data da entrada<input type="date" value={entryDate} onChange={(event) => setEntryDate(event.target.value)} required /></label></div>
         <label className="file-upload">Foto ou PDF da nota fiscal<input type="file" accept="image/jpeg,image/png,image/webp,application/pdf" onChange={chooseFile} /><span><FileImage size={18} /> {invoiceFile ? invoiceFile.name : "Selecionar arquivo (máx. 10 MB)"}</span></label>
         <div className="delivery-items-header"><div><h3>Produtos da nota</h3><p>Uma linha para cada material, tamanho ou lote recebido.</p></div><button type="button" className="secondary-button" onClick={() => setItems((current) => [...current, newItem()])}><Plus size={15} /> Adicionar produto</button></div>
-        <div className="delivery-items">{items.map((item, index) => { const selectedMaterial = materials.find((material) => material.id === item.material_id); const materialVariants = variantsFor(item.material_id); return <div className={`delivery-item-row entry-item-row ${materialVariants.length > 0 ? "entry-item-row-with-size" : ""}`} key={index}><span className="item-index">{index + 1}</span>
+        <div className="delivery-items">{items.map((item, index) => { const selectedMaterial = materials.find((material) => material.id === item.material_id); const materialVariants = variantsFor(item.material_id); const numberedMaterial = isNumberedMaterial(item.material_id); return <div className={`delivery-item-row entry-item-row ${materialVariants.length > 0 ? "entry-item-row-with-size" : ""}`} key={index}><span className="item-index">{index + 1}</span>
             <label className="material-picker">Material<div className="material-picker-control"><input id={`entry-material-${index}`} role="combobox" aria-autocomplete="list" aria-expanded={materialSuggestionsOpen === index && Boolean(item.materialQuery)} aria-controls={`entry-material-suggestions-${index}`} value={item.materialQuery} onChange={(event) => { setItems((current) => current.map((currentItem, itemIndex) => itemIndex === index ? { ...currentItem, materialQuery: event.target.value, material_id: "", variant_id: "" } : currentItem)); setMaterialSuggestionsOpen(index); }} onFocus={() => setMaterialSuggestionsOpen(index)} placeholder="Digite o nome do material" required disabled={loading} autoComplete="off" />{materialSuggestionsOpen === index && item.materialQuery && <div id={`entry-material-suggestions-${index}`} className="employee-suggestions" role="listbox" aria-label="Materiais encontrados">{filteredMaterials(item.materialQuery).map((material) => <button type="button" role="option" aria-selected={false} key={material.id} onMouseDown={() => selectMaterial(index, material)}><strong>{material.name}</strong></button>)}{!filteredMaterials(item.materialQuery).length && <span role="status">Nenhum material encontrado.</span>}</div>}</div></label>
-          {materialVariants.length > 0 && <label>Tamanho<select value={item.variant_id} onChange={(event) => updateItem(index, "variant_id", event.target.value)} required><option value="">Selecione o tamanho</option>{materialVariants.map((variant) => <option value={variant.id} key={variant.id}>{variant.size || variant.name}</option>)}</select></label>}
+          {materialVariants.length > 0 && <label>{numberedMaterial ? "Numeração" : "Tamanho"}<select value={item.variant_id} onChange={(event) => { const value = event.target.value; setItems((current) => current.map((currentItem, itemIndex) => itemIndex === index ? { ...currentItem, variant_id: value, custom_variant_size: "" } : currentItem)); }} required><option value="">Selecione {numberedMaterial ? "a numeração" : "o tamanho"}</option>{materialVariants.map((variant) => <option value={variant.id} key={variant.id}>{variant.size || variant.name}</option>)}{numberedMaterial && <option value={NEW_NUMBER_VARIANT}>Adicionar outra numeração…</option>}</select>{item.variant_id === NEW_NUMBER_VARIANT && <><input type="number" min="1" step="1" inputMode="numeric" aria-label={`Nova numeração para ${selectedMaterial?.name || "o material"}`} placeholder="Ex.: 10" value={item.custom_variant_size} onChange={(event) => updateItem(index, "custom_variant_size", event.target.value)} required /><small>Essa numeração ficará disponível nas próximas entradas.</small></>}</label>}
           <label>Quantidade<input type="number" min="1" value={item.quantity} onChange={(event) => updateItem(index, "quantity", event.target.value)} required /></label><label>Custo unitário (R$)<input type="number" min="0" step="0.01" value={item.unit_cost} onChange={(event) => updateItem(index, "unit_cost", event.target.value)} required /></label>
           {selectedMaterial?.test_required ? <><label>Data do ensaio<input type="date" value={item.test_performed_at} onChange={(event) => updateItem(index, "test_performed_at", event.target.value)} required /></label><label>Validade do ensaio<input type="date" value={item.test_expires_at} onChange={(event) => updateItem(index, "test_expires_at", event.target.value)} required /></label></> : <><label>Fabricação<input type="date" value={item.manufactured_at} onChange={(event) => updateItem(index, "manufactured_at", event.target.value)} /></label><label>Validade<input type="date" value={item.expires_at} onChange={(event) => updateItem(index, "expires_at", event.target.value)} /></label></>}{items.length > 1 && <button type="button" className="remove-item" aria-label={`Remover produto ${index + 1}`} onClick={() => setItems((current) => current.filter((_, itemIndex) => itemIndex !== index))}><Trash2 size={17} /></button>}
         </div>; })}</div>
