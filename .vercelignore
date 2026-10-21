@@ -1,0 +1,5 @@
+# Local mirror used for GitHub synchronization, not part of the application.
+.github-sync/
+
+# Large CAEPI source export used only by the import workflow.
+caepi-extract-*/
