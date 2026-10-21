@@ -5,7 +5,7 @@ import { ArrowDownAZ, ArrowUpAZ, Check, LoaderCircle, Pencil, Plus, Search, Shie
 import { useSearchParams } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import { friendlyError } from "@/lib/ui-feedback";
-import { contractAnnexLabel } from "@/lib/contract-annex";
+import { CONTRACT_ANNEX_LABELS, contractAnnexLabel, getContractAnnexNumbers, type ContractAnnexAssociation } from "@/lib/contract-annex";
 import type { MaterialType } from "@/types/domain";
 import { FeedbackMessage } from "@/components/feedback-message";
 
@@ -20,6 +20,7 @@ type MaterialRow = {
 type VariationType = "none" | "size" | "number" | "custom";
 type MaterialVariant = { id: string; material_id: string; name: string; size: string | null; active: boolean };
 type AnnexSetting = { annex_number: string; active: boolean };
+type MaterialContractAnnex = ContractAnnexAssociation & { organization_id: string; material_id: string };
 type MaterialForm = {
   name: string; type: MaterialType; unit: string; size: string; legacySize: string; description: string;
   variationType: VariationType; selectedVariations: string[];
@@ -28,28 +29,26 @@ type MaterialForm = {
   useful_life_months: string; replacement_interval_days: string; minimum_stock: string; location: string; notes: string; status: "active" | "inactive";
 };
 
-function materialOriginLabel(material: Pick<MaterialRow, "contract_source" | "contract_item_code">) {
+function materialOriginLabel(material: Pick<MaterialRow, "contract_source" | "contract_item_code">, associations: MaterialContractAnnex[]) {
+  if (associations.length) {
+    const orderedAssociations = [...associations].sort((a, b) =>
+      Number(a.annex_number) - Number(b.annex_number)
+      || a.contract_item_code.localeCompare(b.contract_item_code),
+    );
+    const annexes = getContractAnnexNumbers(material, orderedAssociations);
+    const annexLabels = annexes.map((annex) =>
+      `${CONTRACT_ANNEX_LABELS[annex] ?? `Anexo ${annex}`} (Anexo ${annex})`,
+    );
+    const codes = [...new Set(orderedAssociations.map((association) => association.contract_item_code))];
+    return `${annexLabels.join(", ")} · Códigos: ${codes.join(", ")}`;
+  }
+
   const source = material.contract_source?.replace(/^Contrato WS 93000\s*-\s*/i, "").trim();
   const code = material.contract_item_code?.trim();
   const annexNumber = code?.match(/^A(\d{2})-/i)?.[1];
   const origin = source || (annexNumber ? `Anexo ${annexNumber}` : null);
   return origin ? `${origin}${code ? ` · ${code}` : ""}` : "Cadastro manual";
 }
-
-function materialAnnexNumber(material: Pick<MaterialRow, "contract_source" | "contract_item_code">) {
-  const itemCodeAnnex = material.contract_item_code?.trim().match(/^A(\d{1,2})\s*[-.]/i)?.[1];
-  if (itemCodeAnnex) return itemCodeAnnex.padStart(2, "0");
-
-  const sourceAnnex = material.contract_source?.match(/\banexo\s*(?:n[º°.]?\s*)?(\d{1,2})\b/i)?.[1];
-  return sourceAnnex?.padStart(2, "0") ?? null;
-}
-
-const CONTRACT_ANNEX_LABELS: Record<string, string> = {
-  "04": "C&M e Poda",
-  "05": "Linha Viva Distribuição",
-  "06": "STC - Operação e Perdas",
-  "07": "Motociclista",
-};
 
 const STANDARD_UNITS = [
   { value: "un.", label: "Unidade (un.)" },
@@ -128,6 +127,7 @@ export default function MaterialsPage() {
   const searchParams = useSearchParams();
   const [materials, setMaterials] = useState<MaterialRow[]>([]);
   const [materialVariants, setMaterialVariants] = useState<MaterialVariant[]>([]);
+  const [materialAnnexes, setMaterialAnnexes] = useState<MaterialContractAnnex[]>([]);
   const [annexSettings, setAnnexSettings] = useState<AnnexSetting[]>([]);
   const [annexSettingsLoaded, setAnnexSettingsLoaded] = useState(false);
   const [annexSettingsError, setAnnexSettingsError] = useState("");
@@ -163,25 +163,29 @@ export default function MaterialsPage() {
     setAnnexSettingsLoaded(false);
     setMaterials([]);
     setMaterialVariants([]);
+      setMaterialAnnexes([]);
     try {
       const supabase = createClient();
       const [
         { data, error: materialsError },
         { data: variants, error: variantsError },
         { data: settings, error: settingsError },
+        { data: annexes, error: annexesError },
       ] = await Promise.all([
-        supabase.from("materials").select("id,internal_code,name,type,unit,size,contract_item_code,contract_source,description,brand,manufacturer,model,useful_life_months,replacement_interval_days,minimum_stock,location,notes,status,ca_required,test_required,test_type,test_interval_months,report_required,art_required").order("name"),
+        supabase.from("materials").select("id,internal_code,name,type,unit,size,contract_item_code,contract_source,description,brand,manufacturer,model,useful_life_months,replacement_interval_days,minimum_stock,location,notes,status,ca_required,test_required,test_type,test_interval_months,report_required,art_required").is("merged_into_material_id", null).order("name"),
         supabase.from("material_variants").select("id,material_id,name,size,active"),
         supabase.from("organization_annex_settings").select("annex_number,active"),
+        supabase.from("material_contract_annexes").select("organization_id,material_id,annex_number,contract_item_code,contract_source"),
       ]);
       if (!mountedRef.current || version !== loadVersion.current) return;
-      if (materialsError || variantsError) {
+      if (materialsError || variantsError || annexesError) {
         setAnnexSettingsError("Falha ao carregar o catálogo e os anexos. Tente novamente.");
-        setError(friendlyError(materialsError ?? variantsError, "Falha ao carregar materiais e variações."));
+        setError(friendlyError(materialsError ?? variantsError ?? annexesError, "Falha ao carregar materiais e variações."));
         return;
       }
       setMaterials((data ?? []) as MaterialRow[]);
       setMaterialVariants((variants ?? []) as MaterialVariant[]);
+      setMaterialAnnexes((annexes ?? []) as MaterialContractAnnex[]);
       if (settingsError) {
         setAnnexSettings([]);
         setAnnexSettingsError(friendlyError(settingsError, "Não foi possível carregar a situação dos anexos."));
@@ -204,11 +208,21 @@ export default function MaterialsPage() {
     return () => { mountedRef.current = false; loadVersion.current += 1; };
   }, []);
 
+  const materialAnnexesById = useMemo(() => {
+    const result = new Map<string, MaterialContractAnnex[]>();
+    for (const association of materialAnnexes) {
+      const existing = result.get(association.material_id) ?? [];
+      existing.push(association);
+      result.set(association.material_id, existing);
+    }
+    return result;
+  }, [materialAnnexes]);
+
   const annexOptions = useMemo(() => [...new Set([
     ...Object.keys(CONTRACT_ANNEX_LABELS),
-    ...materials.map(materialAnnexNumber).filter((annex): annex is string => Boolean(annex)),
+    ...materialAnnexes.map((association) => association.annex_number),
     ...annexSettings.map((setting) => setting.annex_number),
-  ])].sort((a, b) => Number(a) - Number(b)), [materials, annexSettings]);
+  ])].sort((a, b) => Number(a) - Number(b)), [materialAnnexes, annexSettings]);
 
   const enabledAnnexes = useMemo(() => new Set(annexOptions.filter((annex) =>
     annexSettings.find((setting) => setting.annex_number === annex)?.active ?? true
@@ -217,10 +231,10 @@ export default function MaterialsPage() {
   const entryEligibleMaterialIds = useMemo(() => {
     if (!annexSettingsLoaded) return new Set<string>();
     return new Set(materials.filter((material) => {
-      const annex = materialAnnexNumber(material);
-      return !annex || enabledAnnexes.has(annex);
+      const annexes = getContractAnnexNumbers(material, materialAnnexesById.get(material.id));
+      return !annexes.length || annexes.some((annex) => enabledAnnexes.has(annex));
     }).map((material) => material.id));
-  }, [materials, enabledAnnexes, annexSettingsLoaded]);
+  }, [materials, materialAnnexesById, enabledAnnexes, annexSettingsLoaded]);
 
   const filtered = useMemo(() => materials
     .filter((material) => {
@@ -228,9 +242,9 @@ export default function MaterialsPage() {
       return `${material.name} ${material.internal_code}`.toLowerCase().includes(query.toLowerCase())
         && (typeFilter === "all" || (typeFilter === "EPI_EPC" ? material.type === "EPI" || material.type === "EPC" : material.type === typeFilter))
         && (statusFilter === "all" || (statusFilter === "active" ? availableForEntry : !availableForEntry))
-        && (annexFilter === "all" || materialAnnexNumber(material) === annexFilter);
+        && (annexFilter === "all" || getContractAnnexNumbers(material, materialAnnexesById.get(material.id)).includes(annexFilter));
     })
-    .sort((a, b) => ascending ? a.name.localeCompare(b.name, "pt-BR") : b.name.localeCompare(a.name, "pt-BR")), [materials, query, typeFilter, statusFilter, annexFilter, ascending, entryEligibleMaterialIds]);
+    .sort((a, b) => ascending ? a.name.localeCompare(b.name, "pt-BR") : b.name.localeCompare(a.name, "pt-BR")), [materials, query, typeFilter, statusFilter, annexFilter, ascending, entryEligibleMaterialIds, materialAnnexesById]);
 
   const entryEligibleActiveMaterials = useMemo(() => materials.filter((material) =>
     material.status === "active" && entryEligibleMaterialIds.has(material.id)
@@ -419,7 +433,7 @@ export default function MaterialsPage() {
       {!annexSettingsLoaded && !annexSettingsError ? <p className="annex-settings-loading">Carregando situação dos anexos...</p> : null}
       {annexSettingsLoaded && <div className="annex-settings-grid">{annexOptions.map((annex) => {
         const active = annexSettings.find((setting) => setting.annex_number === annex)?.active ?? true;
-        const count = materials.filter((material) => materialAnnexNumber(material) === annex).length;
+        const count = materials.filter((material) => getContractAnnexNumbers(material, materialAnnexesById.get(material.id)).includes(annex)).length;
         const saving = savingAnnex === annex;
         return <label className={`annex-setting-card ${active ? "is-active" : "is-inactive"}`} key={annex}>
           <input type="checkbox" checked={active} disabled={Boolean(savingAnnex)} onChange={(event) => void updateAnnexStatus(annex, event.target.checked)} aria-label={`${active ? "Desativar" : "Ativar"} ${contractAnnexLabel(annex)}`} />
@@ -433,7 +447,7 @@ export default function MaterialsPage() {
     {!showForm && <>
       <section className="panel module-table-card"><div className="panel-header"><div><h2>Catálogo de materiais</h2><p>{filtered.length} resultado(s) encontrados</p></div><button className="select-button" onClick={() => setAscending((current) => !current)}>{ascending ? "Nome: A–Z" : "Nome: Z–A"} {ascending ? <ArrowUpAZ size={15} /> : <ArrowDownAZ size={15} />}</button></div>{loading ? <div className="module-loading"><LoaderCircle className="spin" size={22} /> Carregando materiais...</div> : <div className="table-wrap"><table className="materials-catalog-table" aria-label="Catálogo de materiais"><thead><tr><th>MATERIAL</th><th>TIPO</th><th>AÇÕES</th></tr></thead><tbody>{paginatedMaterials.map((material) => {
         return <tr key={material.id}>
-          <td><div className="material-cell material-catalog-cell"><div><strong>{material.name}</strong><small>{material.unit}</small><small>Origem: {materialOriginLabel(material)}</small></div></div></td>
+          <td><div className="material-cell material-catalog-cell"><div><strong>{material.name}</strong><small>{material.unit}</small><small>Origem: {materialOriginLabel(material, materialAnnexesById.get(material.id) ?? [])}</small></div></div></td>
           <td><span className={`type-badge ${material.type.toLowerCase()}`}>{material.type}</span></td>
           <td><button className="action-button" onClick={() => openEdit(material)}><Pencil size={14} /> Editar</button></td>
         </tr>;

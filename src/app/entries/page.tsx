@@ -13,7 +13,7 @@ import { RecentStockEntries } from "@/components/recent-stock-entries";
 import { FeedbackMessage } from "@/components/feedback-message";
 import { createClient } from "@/lib/supabase/client";
 import { friendlyError } from "@/lib/ui-feedback";
-import { getContractAnnexNumber } from "@/lib/contract-annex";
+import { getContractAnnexNumbers, type ContractAnnexAssociation } from "@/lib/contract-annex";
 
 type MaterialOption = {
   id: string;
@@ -28,6 +28,7 @@ type MaterialOption = {
   contract_source: string | null;
 };
 type AnnexSetting = { annex_number: string; active: boolean };
+type MaterialContractAnnex = ContractAnnexAssociation & { organization_id: string; material_id: string };
 type MaterialVariant = {
   id: string;
   material_id: string;
@@ -120,12 +121,14 @@ export default function EntriesPage() {
         { data, error: loadError },
         { data: variantData, error: variantError },
         { data: annexSettings, error: annexSettingsError },
+        { data: annexData, error: annexError },
       ] = await Promise.all([
         supabase
           .from("materials")
           .select(
             "id, name, internal_code, unit, type, ca_required, test_required, report_required, contract_item_code, contract_source",
           )
+          .is("merged_into_material_id", null)
           .eq("status", "active")
           .order("name"),
         supabase
@@ -134,14 +137,17 @@ export default function EntriesPage() {
           .eq("active", true)
           .order("size"),
         supabase.from("organization_annex_settings").select("annex_number,active"),
+        supabase
+          .from("material_contract_annexes")
+          .select("organization_id,material_id,annex_number,contract_item_code,contract_source"),
       ]);
       if (requestId !== loadRequestRef.current) return;
-      if (loadError || variantError || annexSettingsError) {
+      if (loadError || variantError || annexSettingsError || annexError) {
         setMaterials([]);
         setVariants([]);
         setError(
           friendlyError(
-            loadError ?? variantError ?? annexSettingsError,
+            loadError ?? variantError ?? annexSettingsError ?? annexError,
             "Não foi possível carregar os materiais.",
           ),
         );
@@ -152,9 +158,17 @@ export default function EntriesPage() {
             .filter((setting) => !setting.active)
             .map((setting) => setting.annex_number),
         );
+        const associations = (annexData ?? []) as MaterialContractAnnex[];
+        const associationsByMaterial = new Map<string, MaterialContractAnnex[]>();
+        for (const association of associations) {
+          const current = associationsByMaterial.get(association.material_id) ?? [];
+          current.push(association);
+          associationsByMaterial.set(association.material_id, current);
+        }
         setMaterials(((data ?? []) as MaterialOption[]).filter((material) => {
-          const annexNumber = getContractAnnexNumber(material);
-          return !annexNumber || !disabledAnnexes.has(annexNumber);
+          const links = associationsByMaterial.get(material.id) ?? [];
+          const annexNumbers = getContractAnnexNumbers(material, links);
+          return !annexNumbers.length || annexNumbers.some((annex) => !disabledAnnexes.has(annex));
         }));
         setVariants((variantData ?? []) as MaterialVariant[]);
       }

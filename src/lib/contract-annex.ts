@@ -3,12 +3,34 @@ export type ContractAnnexMaterial = {
   contract_source: string | null;
 };
 
+export type ContractAnnexAssociation = {
+  annex_number: string;
+  contract_item_code: string;
+  contract_source: string | null;
+};
+
 export const CONTRACT_ANNEX_LABELS: Record<string, string> = {
   "04": "C&M e Poda",
   "05": "Linha Viva Distribuição",
   "06": "STC - Operação e Perdas",
   "07": "Motociclista",
 };
+
+export function getContractAnnexNumbers(
+  material: ContractAnnexMaterial,
+  associations: ContractAnnexAssociation[] = [],
+) {
+  const linkedAnnexes = [...new Set(
+    associations
+      .map((association) => association.annex_number.trim().padStart(2, "0"))
+      .filter((annex) => /^\d{2}$/.test(annex)),
+  )].sort((a, b) => Number(a) - Number(b));
+
+  if (linkedAnnexes.length) return linkedAnnexes;
+
+  const fallback = getContractAnnexNumber(material);
+  return fallback ? [fallback] : [];
+}
 
 export function getContractAnnexNumber(material: ContractAnnexMaterial) {
   const itemCodeAnnex = material.contract_item_code
