@@ -1,8 +1,9 @@
 "use client";
 
 import { ChangeEvent, ReactNode, useEffect, useMemo, useRef, useState } from "react";
-import { AlertTriangle, ArrowLeft, CalendarClock, Check, Download, Eye, LoaderCircle, PackageCheck, ShieldCheck, Upload, UserRound } from "lucide-react";
+import { AlertTriangle, ArrowLeft, CalendarClock, Check, Download, Eye, LoaderCircle, PackageCheck, Printer, ShieldCheck, Upload } from "lucide-react";
 import Link from "next/link";
+import Image from "next/image";
 import { useParams } from "next/navigation";
 import { jsPDF } from "jspdf";
 import { createClient } from "@/lib/supabase/client";
@@ -13,9 +14,10 @@ import { DeliverySignatureModal } from "@/components/delivery-signature-modal";
 import { ReturnSignatureModal } from "@/components/return-signature-modal";
 import { FeedbackMessage } from "@/components/feedback-message";
 
-type Employee = { id: string; registration: string | null; full_name: string; cpf: string; job_title: string | null; function_name: string | null; function_classification: string | null; department: string | null; unit: string | null };
-type MaterialUnit = { unit_identifier: string; delivered_at: string | null; valid_until: string | null };
-type Item = { id: string; quantity: number; returned: number; expected_replacement_at: string | null; material: { name: string; internal_code: string | null; unit: string } | null; lot: { lot_number: string } | null; units: MaterialUnit[]; delivery: { id: string; delivered_at: string; reason: string; term_file_path: string | null; term_uploaded_at: string | null; term_signature_method: string | null } | null };
+type Organization = { name: string; cnpj: string | null; logo_url: string | null; address: string | null; phone: string | null };
+type Employee = { id: string; registration: string | null; full_name: string; cpf: string; job_title: string | null; function_name: string | null; function_classification: string | null; department: string | null; unit: string | null; admission_date: string | null; termination_date: string | null; status: "active" | "away" | "terminated"; organization: Organization | null };
+type MaterialUnit = { unit_identifier: string; delivered_at: string | null; valid_until: string | null; ca_number: string | null; ca_expires_at: string | null };
+type Item = { id: string; quantity: number; returned: number; expected_replacement_at: string | null; material: { name: string; internal_code: string | null; unit: string; type: string } | null; variant: { name: string; size: string | null } | null; lot: { lot_number: string; ca_number: string | null; ca_expires_at: string | null } | null; units: MaterialUnit[]; delivery: { id: string; delivered_at: string; reason: string; term_file_path: string | null; term_uploaded_at: string | null; term_signature_method: string | null; term_signed_at: string | null } | null };
 type Course = { id: string; name: string; provider: string | null; expires_at: string | null };
 type ReturnSheet = { id: string; returned_at: string; reason: string; term_file_path: string | null; term_signature_method: string | null; term_signed_at: string | null; items: Array<{ quantity: number; material: { name: string; unit: string } | null; variant: { name: string; size: string | null } | null }> };
 
@@ -24,6 +26,24 @@ function date(value: string | null) {
   if (!value) return "—";
   const parsed = new Date(`${value.slice(0, 10)}T00:00:00`);
   return Number.isNaN(parsed.getTime()) ? "Data inválida" : parsed.toLocaleDateString("pt-BR");
+}
+function epiCaDetails(item: Item) {
+  const unitCertificates = item.units.flatMap((unit) => unit.ca_number
+    ? [`CA ${unit.ca_number}${unit.ca_expires_at ? ` · válido até ${date(unit.ca_expires_at)}` : ""}`]
+    : []);
+  const certificates = unitCertificates.length
+    ? [...new Set(unitCertificates)]
+    : item.lot?.ca_number
+      ? [`CA ${item.lot.ca_number}${item.lot.ca_expires_at ? ` · válido até ${date(item.lot.ca_expires_at)}` : ""}`]
+      : [];
+  if (certificates.length) return certificates.join("; ");
+  return item.material?.type === "EPI" ? "Não informado" : "Não se aplica";
+}
+function deliverySignatureLabel(delivery: Item["delivery"]) {
+  if (!delivery?.term_signed_at) return delivery?.term_file_path ? "Documento anexado" : "Pendente";
+  if (delivery.term_signature_method === "physical_upload") return `Assinado fisicamente · ${date(delivery.term_signed_at)}`;
+  if (delivery.term_signature_method === "assisted") return `Assinado no aparelho · ${date(delivery.term_signed_at)}`;
+  return `Assinado digitalmente · ${date(delivery.term_signed_at)}`;
 }
 function replacementStatus(value: string | null) {
   if (!value) return { label: "Sem previsão", tone: "neutral" };
@@ -69,14 +89,14 @@ export default function EmployeeMaterialsPage() {
       try {
       const supabase = createClient();
       const [{ data: employeeData, error: employeeError }, { data: deliveryData, error: deliveryError }, { data: courseData, error: courseError }, { data: returnData, error: returnError }] = await Promise.all([
-        supabase.from("employees").select("id,registration,full_name,cpf,job_title,function_name,function_classification,department,unit").eq("id", id).single(),
-        supabase.from("delivery_items").select("id,quantity,expected_replacement_at,materials(name,internal_code,unit),material_lots(lot_number),material_units(unit_identifier,delivered_at,valid_until),deliveries!inner(id,delivered_at,reason,employee_id,term_file_path,term_uploaded_at,term_signature_method),return_items(quantity)").eq("deliveries.employee_id", id).order("created_at", { ascending: false }),
+        supabase.from("employees").select("id,registration,full_name,cpf,job_title,function_name,function_classification,department,unit,admission_date,termination_date,status,organization:organizations(name,cnpj,logo_url,address,phone)").eq("id", id).single(),
+        supabase.from("delivery_items").select("id,quantity,expected_replacement_at,materials(name,internal_code,unit,type),material_lots(lot_number,ca_number,ca_expires_at),variant:material_variants(name,size),material_units(unit_identifier,delivered_at,valid_until,ca_number,ca_expires_at),deliveries!inner(id,delivered_at,reason,employee_id,term_file_path,term_uploaded_at,term_signature_method,term_signed_at),return_items(quantity)").eq("deliveries.employee_id", id).order("created_at", { ascending: false }),
         supabase.from("employee_courses").select("id,name,provider,expires_at").eq("employee_id", id).order("expires_at", { ascending: true, nullsFirst: false }),
         supabase.from("returns").select("id,returned_at,reason,term_file_path,term_signature_method,term_signed_at,return_items(quantity,material:materials(name,unit),delivery_item:delivery_items(variant:material_variants(name,size)))").eq("employee_id", id).order("returned_at", { ascending: false }),
       ]);
       if (cancelled) return;
       if (employeeError || deliveryError || courseError || returnError) setError(friendlyError(employeeError ?? deliveryError ?? courseError ?? returnError, "Não foi possível carregar a ficha."));
-      setEmployee(employeeData as Employee);
+      setEmployee(employeeData as unknown as Employee);
       setCourses((courseData ?? []) as Course[]);
       setReturnSheets(((returnData ?? []) as Array<Record<string, unknown>>).map((row) => ({ id: String(row.id), returned_at: String(row.returned_at), reason: String(row.reason), term_file_path: row.term_file_path as string | null, term_signature_method: row.term_signature_method as string | null, term_signed_at: row.term_signed_at as string | null, items: ((row.return_items ?? []) as Array<Record<string, unknown>>).map((item) => ({ quantity: Number(item.quantity), material: item.material as ReturnSheet["items"][number]["material"], variant: ((item.delivery_item as Record<string, unknown> | null)?.variant ?? null) as ReturnSheet["items"][number]["variant"] })) })));
       setItems(((deliveryData ?? []) as unknown[]).map((row) => {
@@ -84,7 +104,7 @@ export default function EmployeeMaterialsPage() {
         const units = (value.material_units ?? []) as MaterialUnit[];
         const material = value.materials as Item["material"];
 
-        return { id: String(value.id), quantity: Number(value.quantity), returned: ((value.return_items ?? []) as Array<Record<string, unknown>>).reduce((total, item) => total + Number(item.quantity || 0), 0), expected_replacement_at: value.expected_replacement_at as string | null, material, lot: value.material_lots as Item["lot"], units, delivery: value.deliveries as Item["delivery"] };
+        return { id: String(value.id), quantity: Number(value.quantity), returned: ((value.return_items ?? []) as Array<Record<string, unknown>>).reduce((total, item) => total + Number(item.quantity || 0), 0), expected_replacement_at: value.expected_replacement_at as string | null, material, variant: value.variant as Item["variant"], lot: value.material_lots as Item["lot"], units, delivery: value.deliveries as Item["delivery"] };
       }));
       } catch (caught) {
         if (!cancelled) setError(friendlyError(caught, "Não foi possível carregar a ficha."));
@@ -102,6 +122,7 @@ export default function EmployeeMaterialsPage() {
     return { totalQuantity, pending };
   }, [items]);
   const currentItems = useMemo(() => items.filter((item) => item.quantity > item.returned), [items]);
+  const epiSheetRows = useMemo(() => [...items].sort((first, second) => (first.delivery?.delivered_at ?? "").localeCompare(second.delivery?.delivered_at ?? "")), [items]);
 
   const deliverySheets = useMemo(() => {
     const grouped = new Map<string, { id: string; delivered_at: string; reason: string; term_file_path: string | null; term_uploaded_at: string | null; term_signature_method: string | null; items: number; materials: Item[] }>();
@@ -116,6 +137,12 @@ export default function EmployeeMaterialsPage() {
   }, [items]);
 
   const safeFileName = (value: string) => value.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "");
+
+  async function printEpiSheet() {
+    const logos = Array.from(document.querySelectorAll<HTMLImageElement>(".employee-epi-brand img"));
+    await Promise.all(logos.map((logo) => logo.decode().catch(() => undefined)));
+    window.print();
+  }
 
   async function uploadTerm(sheet: (typeof deliverySheets)[number], event: ChangeEvent<HTMLInputElement>) {
     const file = event.target.files?.[0];
@@ -229,12 +256,66 @@ export default function EmployeeMaterialsPage() {
   if (loading) return <main className="module-shell"><div className="module-loading"><LoaderCircle className="spin" size={22} /> Carregando ficha...</div></main>;
   if (error || !employee) return <main className="module-shell"><section className="panel runtime-error-card"><FeedbackMessage onRetry={() => window.location.reload()}>{error || "Funcionário não encontrado."}</FeedbackMessage></section><Link className="secondary-button" href="/employees"><ArrowLeft size={16} /> Funcionários</Link></main>;
 
+  const organization = employee.organization;
+  const companyName = organization?.name || "DSX";
+  const isDsx = companyName.toLocaleUpperCase("pt-BR").includes("DSX");
+  const companyAddress = organization?.address || (isDsx ? "Rua Harrison de Figueiredo, 132, Jd. Sta. Maria, 79833-552, Dourados-MS" : "");
+  const companyPhone = organization?.phone || (isDsx ? "+55 67 3425-2324" : "");
+
   return <main className="module-shell employee-sheet">
-    <header className="module-header no-print"><div><Link className="employee-back-link" href="/employees"><ArrowLeft size={14} /> Funcionários</Link><p className="eyebrow">CONTROLE INDIVIDUAL</p><h1>Ficha de materiais entregues</h1><p className="module-subtitle">Histórico de responsabilidade, reposições previstas e treinamentos do colaborador.</p></div><div className="employee-header-tools"><EmployeeNavigation id={id} current="sheet" /></div></header>
+    <header className="module-header no-print"><div><Link className="employee-back-link" href="/employees"><ArrowLeft size={14} /> Funcionários</Link><p className="eyebrow">CONTROLE INDIVIDUAL</p><h1>Ficha de EPI</h1><p className="module-subtitle">Registro de fornecimento, dados do colaborador e assinaturas por entrega.</p></div><div className="employee-header-tools"><EmployeeNavigation id={id} current="sheet" /></div></header>
     <section className="panel sheet-card enhanced-sheet">
-      <div className="sheet-brand"><div className="brand-mark"><ShieldCheck size={22} /></div><div><strong>EPIS<span>+</span></strong><small>Ficha de entrega e responsabilidade de materiais</small></div><div className="sheet-document"><span>DOCUMENTO INDIVIDUAL</span><strong>Emitida em {new Date().toLocaleDateString("pt-BR")}</strong></div></div>
-      <section className="sheet-employee-heading"><div className="sheet-person-icon"><UserRound size={23} /></div><div><p>COLABORADOR</p><h2>{employee.full_name}</h2><span>{employee.function_name || employee.job_title || "Função não informada"}{employee.function_classification ? ` · Classe ${employee.function_classification}` : ""} · {employee.department || "Setor não informado"}</span></div><div className="sheet-unit"><span>UNIDADE</span><strong>{employee.unit || "Não informada"}</strong></div></section>
-      <div className="employee-summary sheet-details"><div><span>Matrícula</span><strong>{employee.registration || "—"}</strong></div><div><span>CPF</span><strong>{employee.cpf || "—"}</strong></div><div><span>Setor</span><strong>{employee.department || "—"}</strong></div><div><span>Função</span><strong>{employee.function_name || employee.job_title || "—"}{employee.function_classification ? ` · Classe ${employee.function_classification}` : ""}</strong></div></div>
+      <section className="employee-epi-print">
+        <header className="employee-epi-header">
+          <div className="employee-epi-brand">
+            {organization?.logo_url ? <Image src={organization.logo_url} alt={`Logo ${companyName}`} width={142} height={48} unoptimized /> : <strong>{companyName}</strong>}
+            <div><h2>FICHA DE EPI</h2><span>Equipamento de Proteção Individual · Registro de fornecimento</span></div>
+          </div>
+          <button type="button" className="secondary-button no-print" onClick={() => void printEpiSheet()}><Printer size={16} /> Imprimir ficha de EPI</button>
+        </header>
+
+        <section className="employee-epi-identification" aria-label="Identificação do colaborador">
+          <div className="employee-epi-name"><small>Nome completo</small><strong>{employee.full_name}</strong></div>
+          <div><small>Matrícula</small><strong>{employee.registration || "Não informada"}</strong></div>
+          <div><small>Data de admissão</small><strong>{date(employee.admission_date)}</strong></div>
+          {employee.status === "terminated" && <div><small>Data de demissão</small><strong>{date(employee.termination_date)}</strong></div>}
+          <div><small>Cargo / função</small><strong>{employee.function_name || employee.job_title || "Não informado"}{employee.function_classification ? ` · Classe ${employee.function_classification}` : ""}</strong></div>
+          <div><small>Setor</small><strong>{employee.department || "Não informado"}</strong></div>
+          <div><small>Unidade</small><strong>{employee.unit || "Não informada"}</strong></div>
+        </section>
+
+        <section className="employee-epi-declaration" aria-labelledby="employee-epi-declaration-title">
+          <h3 id="employee-epi-declaration-title">Declaração de recebimento e responsabilidade</h3>
+          <p>Declaro que recebi os materiais relacionados nesta ficha. Quanto aos equipamentos de proteção individual (EPIs), confirmo o recebimento em condições de uso e a ciência das orientações aplicáveis sobre sua finalidade, os riscos contra os quais oferecem proteção, suas limitações, o uso e ajuste corretos, manutenção e substituição e os cuidados de limpeza, guarda e conservação, conforme a NR-06 e as instruções do fabricante.</p>
+          <p>Comprometo-me a utilizar cada EPI somente para a finalidade a que se destina, zelar por sua limpeza, guarda e conservação, comunicar à organização qualquer extravio, dano ou alteração que o torne impróprio e cumprir as orientações de uso. Estou ciente de que a recusa injustificada em cumprir essas obrigações pode caracterizar ato faltoso conforme a NR-01, item 1.4.2.1, preservado o direito de interromper a atividade diante de risco grave e iminente e comunicar a chefia, nos termos do item 1.4.3. A organização deve fornecer EPI gratuitamente e prestar orientação e treinamento quando aplicáveis; esta ficha não substitui os registros próprios de capacitação.</p>
+          <p className="employee-epi-deduction-note"><strong>Perda, extravio ou dano:</strong> a ocorrência poderá ser registrada e apurada individualmente. Esta ficha não autoriza desconto automático; eventual ressarcimento ou desconto deverá ser analisado conforme o caso e os limites do art. 462 da CLT e demais normas aplicáveis.</p>
+        </section>
+
+        <div className="employee-epi-declaration-signature"><span></span><strong>{employee.full_name}</strong><small>Assinatura do colaborador — ciência da ficha</small></div>
+
+        <section className="employee-epi-deliveries" aria-labelledby="employee-epi-deliveries-title">
+          <div className="employee-epi-section-heading"><div><h3 id="employee-epi-deliveries-title">Materiais entregues</h3><p>Histórico por entrega, com variação, CA quando aplicável e situação da assinatura.</p></div><span>{epiSheetRows.length} registro(s)</span></div>
+          <div className="employee-epi-table-wrap"><table className="employee-epi-table"><thead><tr><th>Data</th><th>Descrição do equipamento</th><th>Quantidade</th><th>Tamanho / numeração</th><th>Nº CA / validade oficial</th><th>Assinatura</th></tr></thead><tbody>
+            {epiSheetRows.length ? epiSheetRows.map((item) => {
+              const signature = deliverySignatureLabel(item.delivery);
+              const signed = Boolean(item.delivery?.term_signed_at);
+              return <tr key={item.id}>
+                <td data-label="Data">{date(item.delivery?.delivered_at ?? null)}</td>
+                <td data-label="Descrição do equipamento"><strong>{item.material?.name || "Material"}</strong></td>
+                <td data-label="Quantidade">{item.quantity} {item.material?.unit || "un."}</td>
+                <td data-label="Tamanho / numeração">{item.variant ? item.variant.size || item.variant.name : "N/A"}</td>
+                <td data-label="Nº CA / validade oficial">{epiCaDetails(item)}</td>
+                <td data-label="Assinatura"><span className={`employee-epi-signature-status ${signed ? "signed" : "pending"}`}>{signature}</span>{!signed && <span className="employee-epi-row-signature-line" aria-hidden="true" />}</td>
+              </tr>;
+            }) : <tr><td colSpan={6} className="employee-epi-empty">Nenhum EPI entregue até o momento.</td></tr>}
+          </tbody></table></div>
+        </section>
+
+        <footer className="employee-epi-footer">
+          <div>{companyAddress && <span>{companyAddress}</span>}{companyPhone && <span>{companyPhone}</span>}{isDsx && <span>www.dsxenergia.com.br</span>}{organization?.cnpj && <span>CNPJ {organization.cnpj}</span>}</div>
+          <small>Ficha emitida pelo EPIS+ em {new Date().toLocaleDateString("pt-BR", { timeZone: "America/Cuiaba" })} · Registros e assinaturas vinculados às entregas.</small>
+        </footer>
+      </section>
       <section className="sheet-metrics"><div><PackageCheck size={18} /><span><strong>{items.length}</strong> materiais distintos</span></div><div><PackageCheck size={18} /><span><strong>{summary.totalQuantity}</strong> itens entregues</span></div><div className={summary.pending ? "attention" : ""}><CalendarClock size={18} /><span><strong>{summary.pending}</strong> troca(s) a acompanhar</span></div></section>
       <section className="sheet-section employee-delivery-sheets"><div className="sheet-section-heading"><div><p>FICHAS DE ENTREGA</p><h2>Termos de entrega</h2><span>{deliverySheets.length} ficha(s) registrada(s)</span></div></div>{deliverySheets.length ? <div className="table-wrap"><table><thead><tr><th>DATA</th><th>MOTIVO</th><th>ITENS</th><th>DOCUMENTO</th><th>AÇÕES</th></tr></thead><tbody>{deliverySheets.map((sheet) => <tr key={sheet.id}><td>{date(sheet.delivered_at)}</td><td>{reasonLabels[sheet.reason] || sheet.reason}</td><td>{sheet.items}</td><td><span className={`status-pill ${sheet.term_file_path ? "success" : "warning"}`}>{sheet.term_file_path ? <><Check size={11} /> {sheet.term_signature_method === "assisted" ? "Assinado" : "Anexado"}</> : "Pendente"}</span></td><td><EmployeeTermActions><div className="employee-sheet-actions"><button type="button" className="action-button" onClick={() => downloadTerm(sheet)}><Download size={14} /> Baixar termo para assinatura</button>{!sheet.term_file_path && <DeliverySignatureModal deliveryId={sheet.id} employeeName={employee.full_name} employeeCpf={employee.cpf} employeeRegistration={employee.registration} deliveredAt={sheet.delivered_at} reason={sheet.reason} items={sheet.materials.map((item) => ({ quantity: item.quantity, expected_replacement_at: item.expected_replacement_at, material: item.material }))} currentPath={sheet.term_file_path} onComplete={(path) => setItems((current) => current.map((item) => item.delivery?.id === sheet.id ? { ...item, delivery: item.delivery ? { ...item.delivery, term_file_path: path, term_signature_method: "assisted" } : item.delivery } : item))} />}</div></EmployeeTermActions>{sheet.term_file_path && <button type="button" className="action-button" onClick={() => void downloadSignedTerm(sheet)}><Eye size={14} /> Visualizar termo</button>}<label className="action-button upload-term-button"><Upload size={14} /> {uploadingId === sheet.id ? "Enviando..." : sheet.term_file_path ? "Trocar termo assinado" : "Anexar termo assinado"}<input type="file" accept="application/pdf,image/jpeg,image/png,image/webp" onChange={(event) => void uploadTerm(sheet, event)} disabled={uploadingId === sheet.id} /></label></td></tr>)}</tbody></table></div> : <div className="empty-state"><ShieldCheck size={27} /><strong>Nenhuma ficha registrada</strong><span>As fichas aparecerão após cada entrega.</span></div>}</section>
 
