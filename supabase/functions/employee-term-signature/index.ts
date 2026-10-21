@@ -125,6 +125,22 @@ async function createPreDeliverySignedPdf(snapshot: Snapshot, signatureBytes: Ui
   document.setCreator("EPIS+ Gestão inteligente");
   const regular = await document.embedFont(StandardFonts.Helvetica);
   const bold = await document.embedFont(StandardFonts.HelveticaBold);
+  const pdfReplacements: Record<string, string> = {
+    "—": "-", "–": "-", "−": "-", "·": "-", "•": "-", "…": "...",
+    "“": '"', "”": '"', "„": '"', "‘": "'", "’": "'", "‚": "'",
+    "\u00a0": " ", "\u202f": " ", "\u2009": " ",
+  };
+  function pdfText(value: unknown) {
+    return Array.from(String(value ?? "")).map((character) => {
+      if (character === "\n" || character === "\r" || character === "\t") return character;
+      const candidate = pdfReplacements[character] ?? character;
+      try { regular.encodeText(candidate); return candidate; }
+      catch {
+        const fallback = candidate.normalize("NFKD").replace(/[\u0300-\u036f]/g, "").replace(/[^\x20-\x7e]/g, "");
+        return fallback || "?";
+      }
+    }).join("");
+  }
   const signature = await document.embedPng(signatureBytes);
   const pageSize: [number, number] = [595.28, 841.89];
   const margin = 42;
@@ -156,9 +172,9 @@ async function createPreDeliverySignedPdf(snapshot: Snapshot, signatureBytes: Ui
     const top = pageSize[1];
     target.drawRectangle({ x: 0, y: top - 97, width: pageSize[0], height: 97, color: rgb(1, 0.998, 0.96) });
     target.drawRectangle({ x: 0, y: top - 101, width: pageSize[0], height: 5, color: gold });
-    target.drawText(renderText(snapshot.organization_name).toUpperCase(), { x: margin, y: top - 35, size: 11, font: bold, color: ink, maxWidth: width - 160 });
-    target.drawText("FICHA DE EPI - EQUIPAMENTO DE PROTEÇÃO INDIVIDUAL", { x: margin, y: top - 60, size: 12, font: bold, color: ink, maxWidth: width - 160 });
-    target.drawText("RECIBO DE ENTREGA E RESPONSABILIDADE", { x: margin, y: top - 78, size: 8, font: regular, color: muted });
+    target.drawText(pdfText(renderText(snapshot.organization_name).toUpperCase()), { x: margin, y: top - 35, size: 11, font: bold, color: ink, maxWidth: width - 160 });
+    target.drawText(pdfText("FICHA DE EPI - EQUIPAMENTO DE PROTEÇÃO INDIVIDUAL"), { x: margin, y: top - 60, size: 12, font: bold, color: ink, maxWidth: width - 160 });
+    target.drawText(pdfText("RECIBO DE ENTREGA E RESPONSABILIDADE"), { x: margin, y: top - 78, size: 8, font: regular, color: muted });
     if (logo) {
       const scale = Math.min(138 / logo.width, 57 / logo.height);
       const imageWidth = logo.width * scale;
@@ -175,7 +191,7 @@ async function createPreDeliverySignedPdf(snapshot: Snapshot, signatureBytes: Ui
 
   function wrappedLines(text: string, font: typeof regular, size: number, maxWidth: number) {
     const result: string[] = [];
-    for (const paragraph of String(text ?? "").replace(/\r/g, "").split("\n")) {
+    for (const paragraph of pdfText(text).replace(/\r/g, "").split("\n")) {
       const words = paragraph.trim().split(/\s+/).filter(Boolean);
       if (!words.length) { result.push(""); continue; }
       let current = "";
@@ -200,7 +216,7 @@ async function createPreDeliverySignedPdf(snapshot: Snapshot, signatureBytes: Ui
   }
 
   function drawMetaCell(label: string, value: string, x: number, top: number, cellWidth: number) {
-    page.drawText(label.toUpperCase(), { x, y: top - 7, size: 6.2, font: bold, color: muted, maxWidth: cellWidth });
+    page.drawText(pdfText(label.toUpperCase()), { x, y: top - 7, size: 6.2, font: bold, color: muted, maxWidth: cellWidth });
     const valueHeight = drawWrapped(value || "Não informada", x, top - 20, cellWidth, 8, bold, ink, 9.5);
     return Math.max(31, 23 + valueHeight);
   }
@@ -259,7 +275,7 @@ async function createPreDeliverySignedPdf(snapshot: Snapshot, signatureBytes: Ui
   const declarationLines = wrappedLines(declaration, regular, 7.2, width - 18);
   const declarationHeight = declarationLines.length * 9.5 + 26;
   page.drawRectangle({ x: margin, y: y - declarationHeight, width, height: declarationHeight, color: rgb(0.985, 0.985, 0.975), borderColor: border, borderWidth: 0.7 });
-  page.drawText("DECLARAÇÃO DE RECEBIMENTO E RESPONSABILIDADE", { x: margin + 9, y: y - 13, size: 7.3, font: bold, color: ink });
+  page.drawText(pdfText("DECLARAÇÃO DE RECEBIMENTO E RESPONSABILIDADE"), { x: margin + 9, y: y - 13, size: 7.3, font: bold, color: ink });
   drawWrapped(declaration, margin + 9, y - 26, width - 18, 7.2, regular, ink, 9.5);
   y -= declarationHeight + 9;
 
@@ -272,9 +288,9 @@ async function createPreDeliverySignedPdf(snapshot: Snapshot, signatureBytes: Ui
   const signatureWidth = signature.width * signatureScale;
   const signatureHeight = signature.height * signatureScale;
   page.drawImage(signature, { x: margin + (signatureBoxWidth - signatureWidth) / 2, y: signatureTop - signatureHeight - 45, width: signatureWidth, height: signatureHeight });
-  page.drawText(renderText(signerName), { x: margin + 4, y: signatureTop - 61, size: 8, font: bold, color: ink });
-  page.drawText(`CPF ${maskedCpf(signerCpf)} · Assinado em ${new Intl.DateTimeFormat("pt-BR", { dateStyle: "short", timeStyle: "short", timeZone: "America/Cuiaba" }).format(signedAt)}`, { x: margin + 4, y: signatureTop - 72, size: 6.5, font: regular, color: muted });
-  page.drawText("ASSINATURA ELETRÔNICA DO COLABORADOR", { x: margin + signatureBoxWidth + 14, y: signatureTop - 30, size: 7.2, font: bold, color: ink, maxWidth: width - signatureBoxWidth - 14 });
+  page.drawText(pdfText(renderText(signerName)), { x: margin + 4, y: signatureTop - 61, size: 8, font: bold, color: ink });
+  page.drawText(pdfText(`CPF ${maskedCpf(signerCpf)} · Assinado em ${new Intl.DateTimeFormat("pt-BR", { dateStyle: "short", timeStyle: "short", timeZone: "America/Cuiaba" }).format(signedAt)}`), { x: margin + 4, y: signatureTop - 72, size: 6.5, font: regular, color: muted });
+  page.drawText(pdfText("ASSINATURA ELETRÔNICA DO COLABORADOR"), { x: margin + signatureBoxWidth + 14, y: signatureTop - 30, size: 7.2, font: bold, color: ink, maxWidth: width - signatureBoxWidth - 14 });
   drawWrapped("A assinatura confirma o recebimento e a ciência sobre todos os itens listados nesta ficha.", margin + signatureBoxWidth + 14, signatureTop - 44, width - signatureBoxWidth - 14, 7, regular, muted, 9);
   y = signatureTop - signatureBoxHeight - 9;
 
@@ -317,8 +333,8 @@ async function createPreDeliverySignedPdf(snapshot: Snapshot, signatureBytes: Ui
   const footer = [snapshot.organization_cnpj ? `CNPJ ${snapshot.organization_cnpj}` : "", address, phone, website].filter(Boolean).join("  |  ");
   for (const [index, currentPage] of document.getPages().entries()) {
     currentPage.drawLine({ start: { x: margin, y: 38 }, end: { x: pageSize[0] - margin, y: 38 }, thickness: 2.5, color: gold });
-    if (footer) currentPage.drawText(footer, { x: margin, y: 25, size: 6.1, font: regular, color: muted, maxWidth: width });
-    currentPage.drawText(`Registro ${linkId} · ${index + 1}/${document.getPageCount()} · assinatura por link de uso único; não utiliza certificado ICP-Brasil.`, { x: margin, y: 13, size: 5.5, font: regular, color: muted, maxWidth: width });
+    if (footer) currentPage.drawText(pdfText(footer), { x: margin, y: 25, size: 6.1, font: regular, color: muted, maxWidth: width });
+    currentPage.drawText(pdfText(`Registro ${linkId} · ${index + 1}/${document.getPageCount()} · assinatura por link de uso único; não utiliza certificado ICP-Brasil.`), { x: margin, y: 13, size: 5.5, font: regular, color: muted, maxWidth: width });
   }
   return document.save();
 }
@@ -546,7 +562,10 @@ Deno.serve(async (request) => {
   const path = `${link.organization_id}/${recordId}/whatsapp-signature-${link.id}-${crypto.randomUUID()}.pdf`;
   let pdfBytes: Uint8Array;
   try { pdfBytes = await createSignedPdf(snapshot, signatureBytes, String(employee.full_name), signerCpf, signedAt, String(link.id)); }
-  catch { return respond({ error: "Não foi possível preparar o documento. Tente novamente ou solicite um novo link." }, 500, origin); }
+  catch (error) {
+    console.error("Delivery signature PDF preparation failed", { message: error instanceof Error ? error.message.slice(0, 240) : "unknown PDF generation error" });
+    return respond({ error: "Não foi possível preparar o documento. Tente novamente ou solicite um novo link." }, 500, origin);
+  }
 
   const { error: uploadError } = await admin.storage.from("delivery-terms").upload(path, pdfBytes, { contentType: "application/pdf", upsert: false });
   if (uploadError) return respond({ error: "Não foi possível salvar o documento assinado. Tente novamente." }, 500, origin);
