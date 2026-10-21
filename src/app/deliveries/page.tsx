@@ -16,6 +16,9 @@ type TestLot = { material_id: string; variant_id: string | null; lot_number: str
 type CaCertificate = { ca_number: string; valid_until: string | null; status: string | null };
 type DeliveryItem = { material_id: string; materialQuery: string; variant_id: string; quantity: string; expected_replacement_at: string };
 type FunctionTemplate = { id: string; name: string; items: Array<{ material_name: string; material_id: string | null; quantity: number }> };
+type DeliverySnapshot = { type: "delivery"; pre_delivery_signature?: boolean; organization_id?: string; organization_name: string; organization_logo_url?: string | null; organization_cnpj?: string | null; organization_address?: string | null; organization_phone?: string | null; responsible_name: string; employee_name: string; employee_registration: string | null; employee_function?: string | null; employee_department?: string | null; employee_admission_date?: string | null; employee_termination_date?: string | null; date: string; reason: string; notes: string | null; items: Array<{ material: string; code?: string | null; unit: string; quantity: number; size?: string | null; ca_number?: string | null; ca_expires_at?: string | null; expected_replacement_at?: string | null; units?: Array<Record<string, unknown>> }> };
+type PendingDelivery = { id: string; organization_id: string; employee_id: string; requested_by: string; delivered_at: string; reason: string; notes: string | null; request_items: Array<{ material_id: string; variant_id: string | null; quantity: number; expected_replacement_at: string | null }>; snapshot: DeliverySnapshot | null; status: "pending_signature" | "completed" | "cancelled"; completed_delivery_id: string | null; created_at: string; employee: { full_name: string; registration: string | null } | null };
+type PendingLink = { id: string; url: string; expires_at: string; snapshot: DeliverySnapshot };
 const newDeliveryItem = (): DeliveryItem => ({ material_id: "", materialQuery: "", variant_id: "", quantity: "1", expected_replacement_at: "" });
 function calculateReplacementDate(deliveredAt: string, intervalDays: number | null) { if (!deliveredAt || !intervalDays) return ""; const date = new Date(`${deliveredAt}T00:00:00`); date.setDate(date.getDate() + intervalDays); return localDateValue(date); }
 function localDateValue(date = new Date()) { return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`; }
@@ -30,6 +33,16 @@ export default function DeliveriesPage() {
   const loadOptionsRequestRef = useRef(0);
   const submitLockRef = useRef(false);
   const mountedRef = useRef(true);
+  const [pendingDeliveries, setPendingDeliveries] = useState<PendingDelivery[]>([]);
+  const [activePendingLink, setActivePendingLink] = useState<PendingLink | null>(null);
+  const [pendingBusyId, setPendingBusyId] = useState("");
+  const [pendingFeedback, setPendingFeedback] = useState("");
+  const [pendingError, setPendingError] = useState("");
+  const [printSnapshot, setPrintSnapshot] = useState<DeliverySnapshot | null>(null);
+  const [currentUserId, setCurrentUserId] = useState("");
+  const pendingStatusRef = useRef(new Map<string, string>());
+  const pendingPhotosRef = useRef(new Map<string, File[]>());
+  const pendingRefreshInFlightRef = useRef(false);
   function clearLoadedOptions() {
     setEmployees([]);
     setMaterials([]);
@@ -83,6 +96,48 @@ export default function DeliveriesPage() {
       if (mountedRef.current && requestId === loadOptionsRequestRef.current) setLoading(false);
     }
   }, []);
+  const refreshPendingDeliveries = useCallback(async () => {
+    if (pendingRefreshInFlightRef.current) return;
+    pendingRefreshInFlightRef.current = true;
+    try {
+      const supabase = createClient();
+      const [{ data: authData }, { data, error: loadError }] = await Promise.all([
+        supabase.auth.getUser(),
+        supabase.from("pending_deliveries").select("id,organization_id,employee_id,requested_by,delivered_at,reason,notes,request_items,snapshot,status,completed_delivery_id,created_at,employee:employees(full_name,registration)").in("status", ["pending_signature", "completed"]).order("created_at", { ascending: false }).limit(80),
+      ]);
+      if (authData.user) setCurrentUserId(authData.user.id);
+      if (loadError) { setPendingError(friendlyError(loadError, "Não foi possível carregar as fichas pendentes.")); return; }
+      setPendingError("");
+      const records = (data ?? []) as unknown as PendingDelivery[];
+      const currentPending = records.filter((record) => record.status === "pending_signature");
+      setPendingDeliveries(currentPending);
+      for (const record of records) {
+        const previousStatus = pendingStatusRef.current.get(record.id);
+        if (previousStatus === "pending_signature" && record.status === "completed") {
+          window.dispatchEvent(new Event("delivery-created"));
+          const files = pendingPhotosRef.current.get(record.id);
+          if (files?.length && record.completed_delivery_id) {
+            const photoResult = await uploadTransactionPhotos(supabase, { files, recordId: record.completed_delivery_id, type: "delivery" });
+            if (photoResult.error) setPendingError("O recebimento foi registrado, mas as fotos não foram anexadas. Anexe-as depois na ficha da entrega.");
+            pendingPhotosRef.current.delete(record.id);
+          }
+        }
+        pendingStatusRef.current.set(record.id, record.status);
+      }
+    } catch (caught) { setPendingError(friendlyError(caught, "Não foi possível atualizar as fichas pendentes.")); }
+    finally { pendingRefreshInFlightRef.current = false; }
+  }, []);
+  useEffect(() => {
+    void refreshPendingDeliveries();
+    const timer = window.setInterval(() => void refreshPendingDeliveries(), 12000);
+    window.addEventListener("focus", refreshPendingDeliveries);
+    window.addEventListener("delivery-created", refreshPendingDeliveries);
+    return () => {
+      window.clearInterval(timer);
+      window.removeEventListener("focus", refreshPendingDeliveries);
+      window.removeEventListener("delivery-created", refreshPendingDeliveries);
+    };
+  }, [refreshPendingDeliveries]);
   useEffect(() => { const refresh = () => void loadOptions(); const events = ["delivery-created", "return-created", "stock-entry-created", "stock-entry-updated", "stock-entry-deleted"]; events.forEach((eventName) => window.addEventListener(eventName, refresh)); void loadOptions(); return () => { mountedRef.current = false; events.forEach((eventName) => window.removeEventListener(eventName, refresh)); }; }, [loadOptions]);
   useEffect(() => { if (!success) return; const timer = window.setTimeout(() => setSuccess(""), 4500); return () => window.clearTimeout(timer); }, [success]);
   function retryLoadOptions() { if (!canRetryLoad && !error) return; setLoading(true); setError(""); void loadOptions(); }
@@ -163,6 +218,70 @@ export default function DeliveriesPage() {
   const formLoading = loading || variantsLoading;
   const hasInsufficientStock = items.some((item) => { const available = availableFor(item); const requested = requestedByStockKey[item.variant_id || item.material_id] ?? Number(item.quantity); return !item.material_id || !Number.isInteger(Number(item.quantity)) || available <= 0 || requested <= 0 || requested > available; });
   const hasMissingRequiredVariant = items.some((item) => variantsFor(item.material_id).length > 0 && !item.variant_id);
+  async function generatePendingLink(pendingId: string) {
+    setPendingBusyId(pendingId); setPendingError(""); setPendingFeedback("");
+    try {
+      const { data, error: invokeError } = await createClient().functions.invoke("create-term-signature-link", { body: { record_type: "pending_delivery", record_id: pendingId } });
+      if (invokeError) throw invokeError;
+      const result = data as { url?: string; expires_at?: string; snapshot?: DeliverySnapshot } | null;
+      if (!result?.url || !result.expires_at || !result.snapshot) throw new Error("O serviço não retornou a ficha e o link de assinatura.");
+      const link = { id: pendingId, url: result.url, expires_at: result.expires_at, snapshot: result.snapshot };
+      setActivePendingLink(link);
+      setPendingDeliveries((current) => current.map((pending) => pending.id === pendingId ? { ...pending, snapshot: result.snapshot ?? pending.snapshot } : pending));
+      return link;
+    } catch (caught) {
+      setPendingError(friendlyError(caught, "Não foi possível gerar o link de assinatura."));
+      return null;
+    } finally { setPendingBusyId(""); }
+  }
+  async function copyPendingLink(pendingId: string) {
+    const link = activePendingLink?.id === pendingId ? activePendingLink : await generatePendingLink(pendingId);
+    if (!link) return;
+    try { await navigator.clipboard.writeText(link.url); setPendingFeedback("Link copiado. Peça ao colaborador para conferir os itens e assinar no ato em que receber os materiais."); }
+    catch { setPendingError("Não foi possível copiar automaticamente. Selecione e copie o link exibido abaixo."); }
+  }
+  async function printPendingSheet(pending: PendingDelivery) {
+    const snapshot = pending.snapshot ?? (activePendingLink?.id === pending.id ? activePendingLink.snapshot : null);
+    const link = snapshot ? null : await generatePendingLink(pending.id);
+    const printable = snapshot ?? link?.snapshot;
+    if (!printable) return;
+    setPrintSnapshot(printable);
+    window.addEventListener("afterprint", () => setPrintSnapshot(null), { once: true });
+    window.setTimeout(() => window.print(), 120);
+  }
+  async function uploadPhysicalSignature(pending: PendingDelivery, event: ChangeEvent<HTMLInputElement>) {
+    const file = event.target.files?.[0]; event.target.value = "";
+    if (!file || pendingBusyId) return;
+    if (!["application/pdf", "image/jpeg", "image/png", "image/webp"].includes(file.type)) { setPendingError("Anexe um PDF, JPG, PNG ou WEBP da ficha assinada."); return; }
+    if (file.size > 10 * 1024 * 1024) { setPendingError("O arquivo da ficha assinada deve ter no máximo 10 MB."); return; }
+    setPendingBusyId(pending.id); setPendingError(""); setPendingFeedback("");
+    const supabase = createClient(); let uploadedPath = "";
+    try {
+      const { data: auth, error: authError } = await supabase.auth.getUser();
+      if (authError || !auth.user) throw authError ?? new Error("Sua sessão expirou. Entre novamente.");
+      const { data: profile, error: profileError } = await supabase.from("profiles").select("organization_id").eq("id", auth.user.id).maybeSingle();
+      if (profileError || !profile?.organization_id) throw profileError ?? new Error("Não foi possível identificar sua organização.");
+      const safeName = file.name.replace(/[^\p{L}\p{N}._-]+/gu, "-").slice(-100) || "ficha-assinada";
+      uploadedPath = `${profile.organization_id}/${pending.id}/physical-${crypto.randomUUID()}-${safeName}`;
+      const { error: uploadError } = await supabase.storage.from("delivery-terms").upload(uploadedPath, file, { contentType: file.type, upsert: false });
+      if (uploadError) throw uploadError;
+      const { data: deliveryId, error: finalizeError } = await supabase.rpc("confirm_pending_delivery_physical", { p_pending_delivery_id: pending.id, p_signature_file_path: uploadedPath });
+      if (finalizeError || !deliveryId) throw finalizeError ?? new Error("Não foi possível concluir a entrega com a ficha física assinada.");
+      uploadedPath = "";
+      setPendingFeedback("Ficha física assinada e anexada. Recebimento registrado e estoque atualizado.");
+      setActivePendingLink(null); window.dispatchEvent(new Event("delivery-created")); void refreshPendingDeliveries();
+    } catch (caught) {
+      if (uploadedPath) await supabase.storage.from("delivery-terms").remove([uploadedPath]);
+      setPendingError(friendlyError(caught, "Não foi possível registrar a assinatura física."));
+    } finally { setPendingBusyId(""); }
+  }
+  async function cancelPending(pendingId: string) {
+    setPendingBusyId(pendingId); setPendingError(""); setPendingFeedback("");
+    const { error: cancelError } = await createClient().rpc("cancel_pending_delivery", { p_pending_delivery_id: pendingId });
+    if (cancelError) setPendingError(friendlyError(cancelError, "Não foi possível cancelar a ficha pendente."));
+    else { setPendingFeedback("Ficha cancelada. Nenhum material foi baixado do estoque."); setActivePendingLink((current) => current?.id === pendingId ? null : current); void refreshPendingDeliveries(); }
+    setPendingBusyId("");
+  }
   async function submit(event: FormEvent) {
     event.preventDefault();
     if (saving || submitLockRef.current) return;
@@ -193,11 +312,16 @@ export default function DeliveriesPage() {
       setError("Não há lote com CA e ensaio válidos para um dos materiais na data da entrega.");
       return;
     }
+    const itemKeys = items.map((item) => `${item.material_id}:${item.variant_id || "none"}`);
+    if (new Set(itemKeys).size !== itemKeys.length) {
+      setError("O mesmo material e variação aparecem mais de uma vez. Ajuste a quantidade em uma única linha.");
+      return;
+    }
     submitLockRef.current = true;
     setSaving(true);
     try {
       const supabase = createClient();
-      const { data: deliveryId, error: deliveryError } = await supabase.rpc("register_delivery", {
+      const { data: pendingId, error: prepareError } = await supabase.rpc("prepare_delivery_for_signature", {
         p_employee_id: employeeId,
         p_reason: reason,
         p_delivered_at: deliveredAt,
@@ -209,32 +333,70 @@ export default function DeliveriesPage() {
         })),
         p_notes: notes || null,
       });
-      if (deliveryError) {
-        setError(deliveryError.message.includes("Estoque insuficiente") ? "Estoque insuficiente para um dos materiais selecionados." : friendlyError(deliveryError, "Não foi possível registrar a entrega."));
+      if (prepareError || !pendingId) {
+        setError(prepareError?.message.includes("Estoque insuficiente") ? "Estoque insuficiente para um dos materiais selecionados." : friendlyError(prepareError, "Não foi possível preparar a ficha para assinatura."));
         return;
       }
-      const photoResult = deliveryId && photoFiles.length ? await uploadTransactionPhotos(supabase, { files: photoFiles, recordId: deliveryId, type: "delivery" }) : null;
-      setSuccess(photoResult?.error ? "Entrega registrada. As fotos não foram anexadas; você pode anexá-las em Últimas entregas." : "Entrega registrada e o estoque foi atualizado pelo lote mais próximo do vencimento.");
-      window.dispatchEvent(new Event("delivery-created"));
+      const pendingKey = String(pendingId);
+      if (photoFiles.length) pendingPhotosRef.current.set(pendingKey, photoFiles);
+      const link = await generatePendingLink(pendingKey);
+      setSuccess(link ? "Recibo gerado. Imprima-o ou envie o link; o colaborador deve assinar no ato do recebimento. O estoque será atualizado após a confirmação." : "Recibo preparado e salvo como pendente. Gere o link na lista abaixo; nenhum material foi baixado do estoque.");
       setEmployeeId("");
       setEmployeeFunction("");
       setEmployeeQuery("");
       setItems([newDeliveryItem()]);
       setNotes("");
       setPhotoFiles([]);
+      void refreshPendingDeliveries();
     } catch (unexpectedError) {
-      setError(friendlyError(unexpectedError, "Não foi possível registrar a entrega."));
+      setError(friendlyError(unexpectedError, "Não foi possível preparar a ficha para assinatura."));
     } finally {
       submitLockRef.current = false;
       setSaving(false);
     }
   }
-  return <main className="module-shell">
+  return <main className={`module-shell${printSnapshot ? " print-pending-delivery" : ""}`}>
     <header className="module-header"><div><p className="eyebrow">MOVIMENTAÇÃO DE EQUIPAMENTOS</p><h1>Nova entrega</h1><p className="module-subtitle">Registre vários EPIs/EPCs em uma única entrega para o funcionário.</p></div><Link className="secondary-button" href="/employees"><ArrowLeft size={16} /> Funcionários</Link></header>
     {success && <div className="feedback success-feedback" role="status"><Check size={17} /> {success}</div>}
     {error && <FeedbackMessage onRetry={canRetryLoad ? retryLoadOptions : undefined}>{error}</FeedbackMessage>}
+    {pendingFeedback && <div className="feedback success-feedback pending-signature-feedback" role="status">{pendingFeedback}</div>}
+    {pendingError && <FeedbackMessage>{pendingError}</FeedbackMessage>}
+    {activePendingLink && <section className="panel pending-signature-active"><div><p className="eyebrow">FICHA PRONTA</p><h2>Registre o recebimento dos materiais</h2><p>Envie o link ao colaborador ou imprima a ficha. A assinatura deve ser feita no ato da entrega; o estoque é atualizado após a confirmação.</p></div><label>Link de assinatura<input value={activePendingLink.url} readOnly onFocus={(event) => event.currentTarget.select()} aria-label="Link de assinatura do colaborador" /></label><small>Link de uso único · válido até {new Date(activePendingLink.expires_at).toLocaleString("pt-BR")}</small><div className="pending-signature-actions"><button type="button" className="primary-button" onClick={() => void copyPendingLink(activePendingLink.id)}><ClipboardCheck size={15} /> Copiar link para o colaborador</button><button type="button" className="secondary-button" onClick={() => { setPrintSnapshot(activePendingLink.snapshot); window.addEventListener("afterprint", () => setPrintSnapshot(null), { once: true }); window.setTimeout(() => window.print(), 120); }}>Imprimir ficha para assinatura</button></div></section>}
+    {pendingDeliveries.length > 0 && <section className="panel pending-deliveries-panel"><div className="panel-header"><div><p className="eyebrow">AGUARDANDO CONFIRMAÇÃO</p><h2>Entregas pendentes de recebimento</h2><p>Confirme a assinatura no ato da entrega; o estoque ainda não foi atualizado.</p></div><span className="pending-count">{pendingDeliveries.length}</span></div><div className="pending-delivery-list">{pendingDeliveries.map((pending) => {
+      const employee = pending.employee?.full_name || employees.find((candidate) => candidate.id === pending.employee_id)?.full_name || "Colaborador";
+      const canManage = pending.requested_by === currentUserId;
+      const itemSummary = pending.request_items.map((request) => {
+        const material = materials.find((candidate) => candidate.id === request.material_id);
+        const variant = variants.find((candidate) => candidate.id === request.variant_id);
+        return `${request.quantity}× ${material?.name || "Material"}${variant ? ` · ${variant.size || variant.name}` : ""}`;
+      }).join("; ");
+      return <article className="pending-delivery-card" key={pending.id}><div className="pending-delivery-copy"><strong>{employee}</strong><small>{new Date(`${pending.delivered_at}T12:00:00`).toLocaleDateString("pt-BR")} · {reasons.find(([value]) => value === pending.reason)?.[1] || pending.reason}</small><p>{itemSummary}</p><span className="delivery-term-status pending">Aguardando assinatura · recebimento não registrado</span></div><div className="pending-delivery-actions"><button type="button" className="action-button" onClick={() => void copyPendingLink(pending.id)} disabled={Boolean(pendingBusyId)}>{pendingBusyId === pending.id ? "Preparando..." : "Copiar link"}</button><button type="button" className="action-button" onClick={() => void printPendingSheet(pending)} disabled={Boolean(pendingBusyId)}>Imprimir ficha para assinatura</button>{canManage && <label className="action-button upload-term-button">{pendingBusyId === pending.id ? "Enviando..." : "Anexar ficha assinada"}<input type="file" accept="application/pdf,image/jpeg,image/png,image/webp" onChange={(event) => void uploadPhysicalSignature(pending, event)} disabled={Boolean(pendingBusyId)} /></label>}{canManage && <button type="button" className="action-button" onClick={() => void cancelPending(pending.id)} disabled={Boolean(pendingBusyId)}>Cancelar ficha</button>}</div></article>;
+    })}</div></section>}
+    {printSnapshot && <section className="pending-delivery-print" aria-label="Recibo físico de entrega para assinatura">
+      <header>{printSnapshot.organization_logo_url && <div className="pending-delivery-print-logo" aria-hidden="true" style={{ backgroundImage: `url(${JSON.stringify(printSnapshot.organization_logo_url)})` }} />}<div><strong>{printSnapshot.organization_name}</strong><span>RECIBO DE ENTREGA E RESPONSABILIDADE SOBRE EPI/EPC</span></div></header>
+      <div className="pending-print-meta">
+        <div><small>COLABORADOR</small><strong>{printSnapshot.employee_name}</strong></div>
+        <div><small>MATRÍCULA</small><strong>{printSnapshot.employee_registration || "Não informada"}</strong></div>
+        {printSnapshot.employee_function && <div><small>CARGO / FUNÇÃO</small><strong>{printSnapshot.employee_function}</strong></div>}
+        {printSnapshot.employee_department && <div><small>SETOR</small><strong>{printSnapshot.employee_department}</strong></div>}
+        {printSnapshot.employee_admission_date && <div><small>DATA DE ADMISSÃO</small><strong>{new Date(`${printSnapshot.employee_admission_date}T12:00:00`).toLocaleDateString("pt-BR")}</strong></div>}
+        {printSnapshot.employee_termination_date && <div><small>DATA DE DESLIGAMENTO</small><strong>{new Date(`${printSnapshot.employee_termination_date}T12:00:00`).toLocaleDateString("pt-BR")}</strong></div>}
+        <div><small>DATA DA ENTREGA</small><strong>{new Date(`${printSnapshot.date}T12:00:00`).toLocaleDateString("pt-BR")}</strong></div>
+        <div><small>MOTIVO</small><strong>{reasons.find(([value]) => value === printSnapshot.reason)?.[1] || printSnapshot.reason}</strong></div>
+      </div>
+      <h2>Materiais recebidos nesta entrega</h2>
+      <table><thead><tr><th>Data</th><th>Material</th><th>Qtd.</th><th>Tam.</th><th>CA / ensaio</th><th>Assinatura / rubrica</th></tr></thead><tbody>{printSnapshot.items.map((item, index) => {
+        const test = item.units?.[0];
+        const compliance = [item.ca_number ? `CA ${item.ca_number}${item.ca_expires_at ? ` · válido até ${new Date(`${item.ca_expires_at}T12:00:00`).toLocaleDateString("pt-BR")}` : ""}` : "", test?.test_number ? `Ensaio nº ${String(test.test_number)}` : "", test?.test_report_number ? `Laudo ${String(test.test_report_number)}` : "", test?.test_performed_at ? `Realizado ${new Date(`${String(test.test_performed_at)}T12:00:00`).toLocaleDateString("pt-BR")}` : "", test?.test_expires_at ? `Válido até ${new Date(`${String(test.test_expires_at)}T12:00:00`).toLocaleDateString("pt-BR")}` : ""].filter(Boolean);
+        return <tr key={`${item.material}-${index}`}><td>{new Date(`${printSnapshot.date}T12:00:00`).toLocaleDateString("pt-BR")}</td><td>{item.material}</td><td>{item.quantity} {item.unit}</td><td>{item.size || "—"}</td><td>{compliance.length ? compliance.map((value) => <div key={value}>{value}</div>) : "—"}</td><td><span className="pending-item-signature-line" /></td></tr>;
+      })}</tbody></table>
+      <p className="pending-print-declaration">Declaro que conferi e recebi os materiais relacionados nesta ficha. Comprometo-me a utilizá-los somente para a finalidade a que se destinam, seguir as orientações recebidas, cuidar da guarda e conservação, comunicar prontamente dano, alteração ou extravio e devolvê-los quando solicitado, na substituição, transferência ou desligamento, conforme os procedimentos aplicáveis. Estou ciente de que perda, extravio, dano ou mau uso poderá ser apurado individualmente; qualquer ressarcimento ou desconto dependerá da apuração e dos requisitos legais aplicáveis, não decorrendo automaticamente desta assinatura.</p>
+      {printSnapshot.notes && <p><strong>Observações:</strong> {printSnapshot.notes}</p>}
+      <div className="pending-print-signatures"><div><span />{printSnapshot.employee_name}<small>Assinatura do colaborador · CPF</small></div><div><span />{printSnapshot.responsible_name}<small>Responsável pelo controle</small></div></div>
+      <footer>{[printSnapshot.organization_cnpj && `CNPJ ${printSnapshot.organization_cnpj}`, printSnapshot.organization_address, printSnapshot.organization_phone].filter(Boolean).join(" · ")}<br />Assine no ato da entrega física. Após a assinatura, digitalize e anexe a ficha ao EPIS+ para registrar o recebimento e atualizar o estoque. A assinatura eletrônica por link não utiliza certificado ICP-Brasil.</footer>
+    </section>}
     <section className="panel entry-card delivery-card">
-      <div className="entry-intro"><div className="entry-icon"><ClipboardCheck size={22} /></div><div><h2>Ficha de entrega</h2><p>CA, validade e dados do ensaio são puxados automaticamente do lote que será baixado (FEFO).</p></div></div>
+      <div className="entry-intro"><div className="entry-icon"><ClipboardCheck size={22} /></div><div><h2>Ficha de entrega</h2><p>Prepare o recibo com os dados do lote (CA e ensaio). O colaborador assina no ato em que recebe os materiais.</p></div></div>
       <form className="material-form" onSubmit={submit}>
         <div className="form-grid three">
           <label className="employee-picker">Funcionário<div className="employee-picker-control"><input value={employeeQuery} onChange={(event) => { setEmployeeQuery(event.target.value); setEmployeeId(""); setEmployeeFunction(""); setEmployeeSuggestionsOpen(true); }} onFocus={() => { if (!employeeId) setEmployeeSuggestionsOpen(true); }} placeholder="Digite nome, matrícula ou setor" required disabled={loading} autoComplete="off" />{employeeSuggestionsOpen && employeeQuery && <div className="employee-suggestions">{filteredEmployees.map((employee) => <button type="button" key={employee.id} onMouseDown={() => selectEmployee(employee)}><strong>{employee.full_name}</strong><small>{employee.registration}{employee.department ? ` · ${employee.department}` : ""}</small></button>)}{!filteredEmployees.length && <span>Nenhum funcionário encontrado.</span>}</div>}</div>{employeeId && <><small className="employee-function-info">Matrícula: {employees.find((employee) => employee.id === employeeId)?.registration || "Não informada"}</small><small className="employee-function-info">Função: {employeeFunction || "Não informada"}</small></>}</label>
@@ -269,7 +431,7 @@ export default function DeliveriesPage() {
         })}</div>
         <div className="transaction-photo-field"><div><strong>Fotos da entrega</strong><span>Opcional: registre os materiais entregues.</span></div><label className="action-button upload-term-button">Adicionar fotos<input type="file" accept="image/jpeg,image/png,image/webp" multiple onChange={selectPhotos} /></label>{photoFiles.length > 0 && <div className="transaction-photo-list">{photoFiles.map((file, index) => <span key={`${file.name}-${index}`}>{file.name}<button type="button" onClick={() => setPhotoFiles((current) => current.filter((_, fileIndex) => fileIndex !== index))}>×</button></span>)}</div>}</div>
         <label>Observações<textarea value={notes} onChange={(event) => setNotes(event.target.value)} placeholder="Termo, condições ou observações da entrega" rows={3} /></label>
-        <div className="modal-actions"><Link className="secondary-button" href="/stock">Consultar estoque</Link><button className="primary-button" disabled={saving || loading || !employees.length || !materials.length || hasInsufficientStock || hasMissingRequiredVariant}>{hasInsufficientStock ? "Indisponível: verifique o estoque" : saving ? "Registrando..." : "Confirmar entrega"}<Check size={16} /></button></div>
+        <div className="modal-actions"><Link className="secondary-button" href="/stock">Consultar estoque</Link><button className="primary-button" disabled={saving || loading || !employees.length || !materials.length || hasInsufficientStock || hasMissingRequiredVariant}>{saving ? "Gerando ficha..." : "Gerar ficha para assinatura"}<Check size={16} /></button></div>
       </form>
     </section>
     <RecentDeliveries />

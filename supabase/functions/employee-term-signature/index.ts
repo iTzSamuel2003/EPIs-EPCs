@@ -19,10 +19,20 @@ const destinationLabels: Record<string, string> = { stock: "Estoque", maintenanc
 type Snapshot = {
   version: number;
   type: "delivery" | "return";
+  pre_delivery_signature?: boolean;
+  organization_id?: string;
   organization_name: string;
+  organization_logo_url?: string | null;
+  organization_cnpj?: string | null;
+  organization_address?: string | null;
+  organization_phone?: string | null;
   responsible_name: string;
   employee_name: string;
   employee_registration: string | null;
+  employee_function?: string | null;
+  employee_department?: string | null;
+  employee_admission_date?: string | null;
+  employee_termination_date?: string | null;
   date: string;
   reason: string;
   notes: string | null;
@@ -110,7 +120,7 @@ function renderText(value: unknown) {
 
 async function createSignedPdf(snapshot: Snapshot, signatureBytes: Uint8Array, signerName: string, signerCpf: string, signedAt: Date, linkId: string) {
   const document = await PDFDocument.create();
-  document.setTitle(`${snapshot.type === "delivery" ? "Termo de entrega" : "Termo de devolução"} - ${snapshot.employee_name}`);
+  document.setTitle(`${snapshot.pre_delivery_signature ? "Recibo de entrega e responsabilidade" : snapshot.type === "delivery" ? "Termo de entrega" : "Termo de devolução"} - ${snapshot.employee_name}`);
   document.setSubject(`Assinatura eletrônica por link de uso único. Registro ${linkId}.`);
   document.setCreator("EPIS+ Gestão inteligente");
   const regular = await document.embedFont(StandardFonts.Helvetica);
@@ -147,15 +157,44 @@ async function createSignedPdf(snapshot: Snapshot, signatureBytes: Uint8Array, s
     }
   }
 
+  try {
+    if (snapshot.organization_id && snapshot.organization_logo_url) {
+      const logoUrl = new URL(snapshot.organization_logo_url);
+      const supabaseOrigin = new URL(supabaseUrl).origin;
+      const expectedPath = `/storage/v1/object/public/organization-logos/${snapshot.organization_id}/logo`;
+      if (logoUrl.origin === supabaseOrigin && logoUrl.pathname === expectedPath) {
+        const { data: logo, error: logoError } = await admin.storage.from("organization-logos").download(`${snapshot.organization_id}/logo`);
+        if (!logoError && logo && logo.size <= 2 * 1024 * 1024) {
+          const bytes = new Uint8Array(await logo.arrayBuffer());
+          const mimeType = logo.type.split(";")[0].trim().toLowerCase();
+          const embeddedLogo = mimeType === "image/png" ? await document.embedPng(bytes) : mimeType === "image/jpeg" ? await document.embedJpg(bytes) : null;
+          if (embeddedLogo) {
+            const scale = Math.min(42 / embeddedLogo.width, 42 / embeddedLogo.height);
+            const width = embeddedLogo.width * scale;
+            const height = embeddedLogo.height * scale;
+            page.drawImage(embeddedLogo, { x: (pageSize[0] - width) / 2, y: y - 42, width, height });
+            y -= 48;
+          }
+        }
+      }
+    }
+  } catch { /* Logo indisponível não deve impedir a assinatura do recibo. */ }
+
   line(snapshot.organization_name, 16, true, 23);
-  line(snapshot.type === "delivery" ? "TERMO DE ENTREGA DE MATERIAIS" : "TERMO DE DEVOLUÇÃO DE MATERIAIS", 11, true, 20);
+  line(snapshot.pre_delivery_signature ? "RECIBO DE ENTREGA E RESPONSABILIDADE SOBRE EPI/EPC" : snapshot.type === "delivery" ? "TERMO DE ENTREGA DE MATERIAIS" : "TERMO DE DEVOLUÇÃO DE MATERIAIS", 11, true, 20);
+  const organizationDetails = [snapshot.organization_cnpj ? `CNPJ ${snapshot.organization_cnpj}` : "", snapshot.organization_address || "", snapshot.organization_phone || ""].filter(Boolean).join(" · ");
+  if (organizationDetails) line(organizationDetails, 8, false, 11);
   page.drawLine({ start: { x: margin, y: y + 3 }, end: { x: pageSize[0] - margin, y: y + 3 }, thickness: 0.7, color: rgb(0.82, 0.85, 0.89) });
   y -= 12;
   line(`Colaborador: ${snapshot.employee_name}`, 10, true);
   if (snapshot.employee_registration) line(`Matrícula: ${snapshot.employee_registration}`);
+  if (snapshot.employee_function) line(`Cargo / função: ${snapshot.employee_function}`);
+  if (snapshot.employee_department) line(`Setor: ${snapshot.employee_department}`);
+  if (snapshot.employee_admission_date) line(`Data de admissão: ${dateLabel(snapshot.employee_admission_date)}`);
+  if (snapshot.employee_termination_date) line(`Data de desligamento: ${dateLabel(snapshot.employee_termination_date)}`);
   line(`Data: ${dateLabel(snapshot.date)}    Motivo: ${formatReason(snapshot.reason)}`);
   y -= 8;
-  line(snapshot.type === "delivery" ? "Materiais entregues" : "Materiais devolvidos", 11, true, 18);
+  line(snapshot.pre_delivery_signature ? "Materiais recebidos nesta entrega" : snapshot.type === "delivery" ? "Materiais entregues" : "Materiais devolvidos", 11, true, 18);
 
   for (const value of snapshot.items) {
     const item = object(value);
@@ -194,8 +233,10 @@ async function createSignedPdf(snapshot: Snapshot, signatureBytes: Uint8Array, s
     line(String(snapshot.notes), 8, false, 11);
   }
   y -= 7;
-  const statement = snapshot.type === "delivery"
-    ? "Este termo registra a entrega e o controle de EPI/EPC conforme as obrigações aplicáveis da NR-06 e os procedimentos internos da organização. Declaro que conferi e recebi os materiais relacionados, comprometendo-me a utilizá-los corretamente, conservá-los e devolvê-los quando solicitado. Ocorrências serão apuradas conforme os procedimentos da organização e a legislação aplicável; eventual desconto depende de análise e autorização próprias."
+  const statement = snapshot.pre_delivery_signature
+    ? "Declaro que conferi e recebi os materiais relacionados nesta ficha. Comprometo-me a utilizá-los somente para a finalidade a que se destinam, seguir as orientações recebidas, cuidar da guarda e conservação, comunicar prontamente dano, alteração ou extravio e devolvê-los quando solicitado, na substituição, transferência ou desligamento, conforme os procedimentos aplicáveis. Estou ciente de que perda, extravio, dano ou mau uso poderá ser apurado individualmente; qualquer ressarcimento ou desconto dependerá da apuração e dos requisitos legais aplicáveis, não decorrendo automaticamente desta assinatura."
+    : snapshot.type === "delivery"
+      ? "Declaro que conferi e recebi os materiais relacionados nesta ficha. Comprometo-me a utilizá-los somente para a finalidade a que se destinam, seguir as orientações recebidas, cuidar da guarda e conservação, comunicar prontamente dano, alteração ou extravio e devolvê-los quando solicitado, na substituição, transferência ou desligamento, conforme os procedimentos aplicáveis da NR-06. Estou ciente de que eventuais danos ou perdas serão apurados individualmente; qualquer ressarcimento ou desconto dependerá da apuração e dos requisitos legais aplicáveis, não decorrendo automaticamente desta assinatura."
     : "Declaro que acompanhei a devolução dos materiais relacionados e conferi as informações desta ficha. Eventual ocorrência ou solicitação de desconto será analisada separadamente e não implica desconto automático.";
   line(statement, 9, false, 14);
   y -= 10;
@@ -241,7 +282,7 @@ Deno.serve(async (request) => {
   if (!isToken(token)) return respond({ error: "Este link é inválido, expirou ou já foi utilizado." }, 404, origin);
   const tokenHash = await sha256(token);
   const { data: link, error: linkError } = await admin.from("term_signature_links")
-    .select("id,organization_id,employee_id,delivery_id,return_id,expires_at,used_at,revoked_at,failed_attempts,locked_until,accessed_at,snapshot,snapshot_hash")
+    .select("id,organization_id,employee_id,delivery_id,return_id,pending_delivery_id,expires_at,used_at,revoked_at,failed_attempts,locked_until,accessed_at,snapshot,snapshot_hash")
     .eq("token_hash", tokenHash).maybeSingle();
   if (linkError || !link) return respond({ error: "Este link é inválido, expirou ou já foi utilizado." }, 404, origin);
 
@@ -255,10 +296,15 @@ Deno.serve(async (request) => {
   }
 
   if (action === "preview") {
-    const table = link.delivery_id ? "deliveries" : "returns";
-    const recordId = link.delivery_id ?? link.return_id;
-    const { data: transaction, error: transactionError } = await admin.from(table).select("term_signed_at").eq("id", recordId).eq("organization_id", link.organization_id).maybeSingle();
-    if (transactionError || !transaction || transaction.term_signed_at) return respond({ error: "Esta ficha não está mais pendente de assinatura." }, 410, origin);
+    if (link.pending_delivery_id) {
+      const { data: pending, error: pendingError } = await admin.from("pending_deliveries").select("status").eq("id", link.pending_delivery_id).eq("organization_id", link.organization_id).maybeSingle();
+      if (pendingError || !pending || pending.status !== "pending_signature") return respond({ error: "Esta ficha não está mais pendente de assinatura." }, 410, origin);
+    } else {
+      const table = link.delivery_id ? "deliveries" : "returns";
+      const recordId = link.delivery_id ?? link.return_id;
+      const { data: transaction, error: transactionError } = await admin.from(table).select("term_signed_at").eq("id", recordId).eq("organization_id", link.organization_id).maybeSingle();
+      if (transactionError || !transaction || transaction.term_signed_at) return respond({ error: "Esta ficha não está mais pendente de assinatura." }, 410, origin);
+    }
     if (!link.accessed_at) await admin.from("term_signature_links").update({ accessed_at: new Date().toISOString() }).eq("id", link.id).is("accessed_at", null);
     return respond({ snapshot, expires_at: link.expires_at }, 200, origin);
   }
@@ -290,7 +336,7 @@ Deno.serve(async (request) => {
   }
 
   const signedAt = new Date();
-  const recordId = String(link.delivery_id ?? link.return_id);
+  const recordId = String(link.pending_delivery_id ?? link.delivery_id ?? link.return_id);
   const path = `${link.organization_id}/${recordId}/whatsapp-signature-${link.id}-${crypto.randomUUID()}.pdf`;
   let pdfBytes: Uint8Array;
   try { pdfBytes = await createSignedPdf(snapshot, signatureBytes, String(employee.full_name), signerCpf, signedAt, String(link.id)); }
@@ -307,6 +353,10 @@ Deno.serve(async (request) => {
   });
   if (completeError || !completedAt) {
     await admin.storage.from("delivery-terms").remove([path]);
+    const completionMessage = completeError?.message ?? "A ficha já foi assinada ou o link deixou de ser válido.";
+    if (/lote.*saldo|saldo.*lote|estoque insuficiente|plano de lotes/i.test(completionMessage)) {
+      return respond({ error: "O saldo de um dos lotes mudou desde a criação da ficha. Nenhuma entrega foi registrada; solicite uma nova ficha ao responsável." }, 409, origin);
+    }
     return respond({ error: "A ficha já foi assinada ou o link deixou de ser válido. Atualize a página." }, 409, origin);
   }
 

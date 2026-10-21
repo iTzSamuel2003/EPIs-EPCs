@@ -2284,6 +2284,9 @@ body{max-width:100%;overflow-x:hidden;}
 .public-term-brand strong{font-size:20px;line-height:1.1}
 .public-term-brand strong span{color:#7762d6}
 .public-term-brand small{color:#8793a8;font-size:11px}
+.public-term-org-logo{grid-row:span 2;width:40px;height:40px;background-position:center;background-repeat:no-repeat;background-size:contain}
+.public-term-brand-organization strong{font-size:18px;overflow-wrap:anywhere}
+.public-term-org-footer{display:grid;gap:4px;margin-top:22px;padding-top:12px;border-top:1px solid #e8ebf2;color:#8793a8;font-size:10px;line-height:1.5}
 .public-term-heading{margin-bottom:16px}
 .public-term-heading .eyebrow{margin:0 0 7px;color:#8b97ae;font-size:10px;font-weight:700;letter-spacing:.1em}
 .public-term-heading h1{margin:0;color:#243452;font-size:25px;line-height:1.25}
@@ -2295,6 +2298,9 @@ body{max-width:100%;overflow-x:hidden;}
 .public-term-meta small,.public-term-items li>small{color:#8793a8;font-size:11px;line-height:1.45}
 .public-term-meta strong{color:#35435d;font-size:12px;overflow-wrap:anywhere}
 .public-term-summary h2{margin:0 0 9px;color:#35435d;font-size:13px}
+.public-term-responsibilities{display:grid;gap:8px;margin-top:14px;padding:16px;background:#fffaf0;border:1px solid #f1dfb9;border-radius:12px;color:#5d5364;font-size:12px;line-height:1.6}
+.public-term-responsibilities h2{margin:0;color:#35435d;font-size:13px}
+.public-term-responsibilities p{margin:0}
 .public-term-items{display:grid;gap:8px;margin:0;padding:0;list-style:none}
 .public-term-items li{display:grid;gap:4px;min-width:0;padding:11px 12px;background:#fff;border:1px solid #e8ebf2;border-radius:9px}
 .public-term-item-heading{display:flex;justify-content:space-between;gap:12px;align-items:flex-start}
@@ -4858,4 +4864,62 @@ html,body{max-width:100%;overflow-x:hidden}
 }
 @media(max-width:480px){
   .stock-entry-edit-ca-details .material-ca-lookup-grid{grid-template-columns:minmax(0,1fr);}
+}
+
+.pending-signature-active,
+.pending-deliveries-panel{display:grid;gap:14px;margin-bottom:18px;padding:20px 22px;}
+.pending-signature-active h2,
+.pending-deliveries-panel h2{margin:0;color:#243452;font-size:17px;}
+.pending-signature-active p,
+.pending-deliveries-panel .panel-header p{margin:5px 0 0;color:#8390a7;font-size:12px;line-height:1.5;}
+.pending-signature-active label{display:grid;gap:6px;color:#64728b;font-size:11px;font-weight:700;}
+.pending-signature-active input{width:100%;box-sizing:border-box;min-width:0;}
+.pending-signature-active>small{color:#8995aa;font-size:10px;}
+.pending-signature-actions,.pending-delivery-actions{display:flex;align-items:center;flex-wrap:wrap;gap:9px;}
+.pending-signature-actions .primary-button,.pending-signature-actions .secondary-button{min-height:40px;}
+.pending-count{display:grid;place-items:center;width:34px;height:34px;border-radius:50%;background:#f0edff;color:#705bd2;font-size:12px;font-weight:800;}
+.pending-delivery-list{display:grid;gap:10px;}
+.pending-delivery-card{display:flex;align-items:center;justify-content:space-between;gap:18px;padding:15px;border:1px solid #e7eaf1;border-radius:12px;background:#fbfcff;}
+.pending-delivery-copy{display:grid;gap:5px;min-width:0;}
+.pending-delivery-copy>strong{color:#344057;font-size:13px;}
+.pending-delivery-copy>small{color:#8995aa;font-size:10px;}
+.pending-delivery-copy>p{margin:0;color:#64728b;font-size:11px;line-height:1.5;overflow-wrap:anywhere;}
+.pending-delivery-actions{justify-content:flex-end;flex-shrink:0;}
+.pending-signature-feedback{margin-bottom:14px;}
+.pending-delivery-print{display:none;}
+@media(max-width:760px){
+  .pending-signature-active,.pending-deliveries-panel{padding:16px;}
+  .pending-delivery-card{align-items:flex-start;flex-direction:column;}
+  .pending-delivery-actions{justify-content:flex-start;width:100%;}
+  .pending-delivery-actions>*{flex:1 1 auto;justify-content:center;}
+}
+@media print{
+  .module-shell.print-pending-delivery>*{display:none!important;}
+  .module-shell.print-pending-delivery>.pending-delivery-print{display:block!important;visibility:visible!important;}
+  .pending-delivery-print{color:#243452;font:10pt/1.45 Arial,sans-serif;}
+  .pending-delivery-print header{display:flex;align-items:center;gap:14px;padding-bottom:12px;border-bottom:2px solid #dce1e9;}
+  .pending-delivery-print-logo{flex:0 0 64px;width:64px;height:52px;background-position:center;background-repeat:no-repeat;background-size:contain;}
+  .pending-delivery-print header div{display:grid;gap:5px;}
+  .pending-delivery-print header strong{font-size:18pt;}
+  .pending-delivery-print header span{font-size:11pt;font-weight:700;}
+  .pending-print-meta{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px;margin:16px 0;padding-bottom:14px;border-bottom:1px solid #e5e8ee;}
+  .pending-print-meta small{display:block;margin-bottom:3px;color:#78859b;font-size:7pt;font-weight:700;}
+  .pending-print-meta strong{font-size:9pt;}
+  .pending-delivery-print h2{margin:16px 0 8px;font-size:12pt;}
+  .pending-delivery-print table{width:100%;border-collapse:collapse;table-layout:fixed;}
+  .pending-delivery-print th,.pending-delivery-print td{padding:7px;border:1px solid #dfe3eb;text-align:left;overflow-wrap:anywhere;font-size:8pt;}
+  .pending-delivery-print th{background:#f3f5f8;}
+  .pending-delivery-print th:nth-child(1){width:11%;}
+  .pending-delivery-print th:nth-child(2){width:27%;}
+  .pending-delivery-print th:nth-child(3){width:11%;}
+  .pending-delivery-print th:nth-child(4){width:8%;}
+  .pending-delivery-print th:nth-child(5){width:26%;}
+  .pending-delivery-print th:nth-child(6){width:17%;}
+  .pending-item-signature-line{display:block;min-height:28px;border-bottom:1px solid #8791a2;}
+  .pending-print-declaration{margin-top:18px;line-height:1.65;}
+  .pending-print-signatures{display:grid;grid-template-columns:1fr 1fr;gap:50px;margin-top:65px;}
+  .pending-print-signatures>div{display:grid;gap:4px;text-align:center;font-size:9pt;font-weight:700;}
+  .pending-print-signatures span{height:1px;background:#566177;}
+  .pending-print-signatures small{font-size:8pt;font-weight:400;}
+  .pending-delivery-print footer{margin-top:25px;color:#69758b;font-size:7pt;}
 }

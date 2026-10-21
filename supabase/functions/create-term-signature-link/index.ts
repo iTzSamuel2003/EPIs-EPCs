@@ -130,6 +130,62 @@ function mapReturnItem(value: unknown) {
   };
 }
 
+async function mapPendingDeliveryItems(pending: Record<string, unknown>, organizationId: string) {
+  const requests = Array.isArray(pending.request_items) ? pending.request_items.map(object) : [];
+  const plan = Array.isArray(pending.lot_plan) ? pending.lot_plan.map(object) : [];
+  const materialIds = [...new Set(requests.map((item) => text(item.material_id)).filter(Boolean))];
+  const variantIds = [...new Set(requests.map((item) => text(item.variant_id)).filter(Boolean))];
+  const lotIds = [...new Set(plan.map((item) => text(item.lot_id)).filter(Boolean))];
+  if (!requests.length || !plan.length || !materialIds.length || !lotIds.length) return [];
+
+  const [materialsResult, variantsResult, lotsResult] = await Promise.all([
+    admin.from("materials").select("id,name,internal_code,unit,test_required").eq("organization_id", organizationId).in("id", materialIds),
+    variantIds.length ? admin.from("material_variants").select("id,name,size").eq("organization_id", organizationId).in("id", variantIds) : Promise.resolve({ data: [], error: null }),
+    admin.from("material_lots").select("id,lot_number,ca_number,ca_expires_at,test_number,test_performed_at,test_expires_at,test_report_number").eq("organization_id", organizationId).in("id", lotIds),
+  ]);
+  if (materialsResult.error || variantsResult.error || lotsResult.error) throw new Error("Não foi possível carregar os dados dos lotes para a ficha.");
+  const materials = new Map((materialsResult.data ?? []).map((item) => [item.id, item]));
+  const variants = new Map((variantsResult.data ?? []).map((item) => [item.id, item]));
+  const lots = new Map((lotsResult.data ?? []).map((item) => [item.id, item]));
+  const caNumbers = [...new Set((lotsResult.data ?? []).map((lot) => text(lot.ca_number)).filter(Boolean))];
+  const certificatesResult = caNumbers.length
+    ? await admin.from("ca_certificates").select("ca_number,valid_until").in("ca_number", caNumbers)
+    : { data: [], error: null };
+  if (certificatesResult.error) throw new Error("Não foi possível consultar as validades dos CAs da ficha.");
+  const certificates = new Map((certificatesResult.data ?? []).map((certificate) => [certificate.ca_number, certificate.valid_until]));
+
+  return requests.flatMap((request, requestIndex) => plan
+    .filter((allocation) => Number(allocation.item_index) === requestIndex + 1)
+    .map((allocation) => {
+      const material = materials.get(text(allocation.material_id));
+      const variant = variants.get(text(request.variant_id));
+      const lot = lots.get(text(allocation.lot_id));
+      if (!material || !lot || text(allocation.material_id) !== text(request.material_id)) throw new Error("A ficha contém um lote que não está mais disponível. Gere uma nova ficha.");
+      const quantity = Number(allocation.quantity) || 0;
+      const caExpiresAt = text(lot.ca_number ? certificates.get(lot.ca_number) : null) || text(lot.ca_expires_at) || null;
+      const units = material.test_required ? Array.from({ length: quantity }, () => ({
+        valid_until: text(lot.test_expires_at) || null,
+        test_performed_at: text(lot.test_performed_at) || null,
+        test_expires_at: text(lot.test_expires_at) || null,
+        test_number: text(lot.test_number) || null,
+        test_report_number: text(lot.test_report_number) || null,
+        ca_number: text(lot.ca_number) || null,
+        ca_expires_at: caExpiresAt,
+      })) : [];
+      return {
+        material: text(material.name) || "Material",
+        code: text(material.internal_code) || null,
+        unit: text(material.unit) || "un.",
+        quantity,
+        size: text(variant?.size) || text(variant?.name) || null,
+        expected_replacement_at: text(request.expected_replacement_at) || null,
+        ca_number: text(lot.ca_number) || null,
+        ca_expires_at: caExpiresAt,
+        units,
+      };
+    }));
+}
+
 const supabaseUrl = Deno.env.get("SUPABASE_URL") ?? "";
 const publishableKeys = Deno.env.get("SUPABASE_PUBLISHABLE_KEYS");
 const publishableKey = (publishableKeys ? JSON.parse(publishableKeys).default : "") || Deno.env.get("SUPABASE_PUBLISHABLE_KEY") || Deno.env.get("SUPABASE_ANON_KEY") || "";
@@ -161,11 +217,11 @@ Deno.serve(async (request) => {
   try { body = object(await request.json()); } catch { return respond({ error: "Solicitação inválida." }, 400, origin); }
   const recordType = text(body.record_type);
   const recordId = text(body.record_id);
-  if (!(recordType === "delivery" || recordType === "return") || !isUuid(recordId)) return respond({ error: "Ficha inválida." }, 400, origin);
+  if (!(recordType === "delivery" || recordType === "pending_delivery" || recordType === "return") || !isUuid(recordId)) return respond({ error: "Ficha inválida." }, 400, origin);
 
   const { data: profile, error: profileError } = await userClient.from("profiles").select("organization_id,role,full_name").eq("id", user.id).maybeSingle();
   if (profileError || !profile?.organization_id) return respond({ error: "Não foi possível identificar a organização." }, 403, origin);
-  const requiredPage = recordType === "delivery" ? "/deliveries" : "/returns";
+  const requiredPage = recordType === "return" ? "/returns" : "/deliveries";
   let pagePaths: unknown = null;
   if (profile.role !== "admin") {
     const [{ data: override, error: overrideError }, { data: roleAccess, error: roleError }] = await Promise.all([
@@ -177,36 +233,56 @@ Deno.serve(async (request) => {
   }
   if (!allowedToManage(String(profile.role ?? "user"), pagePaths, requiredPage)) return respond({ error: "Seu perfil não tem acesso a esta ficha." }, 403, origin);
 
-  const table = recordType === "delivery" ? "deliveries" : "returns";
-  const select = recordType === "delivery"
-    ? "id,organization_id,employee_id,delivered_at,reason,notes,term_signed_at,employee:employees(full_name,registration,phone),delivery_items(quantity,expected_replacement_at,material:materials(name,unit,internal_code),lot:material_lots(ca_number,ca_expires_at),variant:material_variants(name,size),material_units(unit_identifier,valid_until,test_performed_at,test_expires_at,test_number,test_report_number,ca_number,ca_expires_at))"
-    : "id,organization_id,employee_id,returned_at,reason,notes,term_signed_at,employee:employees(full_name,registration,phone),return_items(quantity,equipment_condition,destination,incident_type,incident_description,deduction_requested,deduction_amount,material:materials(name,unit),delivery_item:delivery_items(variant:material_variants(name,size)))";
+  const table = recordType === "pending_delivery" ? "pending_deliveries" : recordType === "delivery" ? "deliveries" : "returns";
+  const select = recordType === "pending_delivery"
+    ? "id,organization_id,employee_id,delivered_at,reason,notes,request_items,lot_plan,status,snapshot,employee:employees(full_name,registration,phone,job_title,function_name,department,admission_date,termination_date,status)"
+    : recordType === "delivery"
+      ? "id,organization_id,employee_id,delivered_at,reason,notes,term_signed_at,employee:employees(full_name,registration,phone,job_title,function_name,department,admission_date,termination_date,status),delivery_items(quantity,expected_replacement_at,material:materials(name,unit,internal_code),lot:material_lots(ca_number,ca_expires_at),variant:material_variants(name,size),material_units(unit_identifier,valid_until,test_performed_at,test_expires_at,test_number,test_report_number,ca_number,ca_expires_at))"
+      : "id,organization_id,employee_id,returned_at,reason,notes,term_signed_at,employee:employees(full_name,registration,phone),return_items(quantity,equipment_condition,destination,incident_type,incident_description,deduction_requested,deduction_amount,material:materials(name,unit),delivery_item:delivery_items(variant:material_variants(name,size)))";
   const { data: transaction, error: transactionError } = await userClient.from(table).select(select).eq("id", recordId).maybeSingle();
   if (transactionError || !transaction || transaction.organization_id !== profile.organization_id) return respond({ error: "A ficha não foi encontrada nesta organização." }, 404, origin);
   const transactionRecord = transaction as unknown as Record<string, unknown>;
-  if (transactionRecord.term_signed_at) return respond({ error: "Esta ficha já está assinada." }, 409, origin);
+  if (recordType === "pending_delivery" && transactionRecord.status !== "pending_signature") return respond({ error: "Esta ficha não está mais pendente de assinatura." }, 409, origin);
+  if (recordType !== "pending_delivery" && transactionRecord.term_signed_at) return respond({ error: "Esta ficha já está assinada." }, 409, origin);
 
   const employee = object(transactionRecord.employee);
   const employeeId = text(transactionRecord.employee_id);
-  const { data: organization, error: organizationError } = await userClient.from("organizations").select("name").eq("id", profile.organization_id).maybeSingle();
+  const { data: organization, error: organizationError } = await userClient.from("organizations").select("name,logo_url,cnpj,address,phone").eq("id", profile.organization_id).maybeSingle();
   if (organizationError) return respond({ error: "Não foi possível carregar a organização." }, 500, origin);
   const rawItems = recordType === "delivery" ? transactionRecord.delivery_items : transactionRecord.return_items;
-  const items = Array.isArray(rawItems)
-    ? rawItems.map((value) => recordType === "delivery" ? mapDeliveryItem(value) : mapReturnItem(value))
-    : [];
+  const items = recordType === "pending_delivery"
+    ? await mapPendingDeliveryItems(transactionRecord, String(profile.organization_id))
+    : Array.isArray(rawItems)
+      ? rawItems.map((value) => recordType === "delivery" ? mapDeliveryItem(value) : mapReturnItem(value))
+      : [];
   const snapshot = {
     version: 1,
-    type: recordType,
+    type: recordType === "return" ? "return" : "delivery",
+    pre_delivery_signature: recordType === "pending_delivery",
+    organization_id: String(profile.organization_id),
     organization_name: text(organization?.name) || "Organização",
+    organization_logo_url: text(organization?.logo_url) || null,
+    organization_cnpj: text(organization?.cnpj) || null,
+    organization_address: text(organization?.address) || null,
+    organization_phone: text(organization?.phone) || null,
     responsible_name: text(profile.full_name) || "Responsável pelo controle",
     employee_name: text(employee.full_name) || "Colaborador",
     employee_registration: text(employee.registration) || null,
-    date: recordType === "delivery" ? text(transactionRecord.delivered_at) : text(transactionRecord.returned_at),
+    employee_function: text(employee.job_title) || text(employee.function_name) || null,
+    employee_department: text(employee.department) || null,
+    employee_admission_date: text(employee.admission_date) || null,
+    employee_termination_date: text(employee.status) === "terminated" ? text(employee.termination_date) || null : null,
+    date: recordType === "return" ? text(transactionRecord.returned_at) : text(transactionRecord.delivered_at),
     reason: text(transactionRecord.reason),
     notes: text(transactionRecord.notes) || null,
     items,
   };
   if (!employeeId || !items.length) return respond({ error: "A ficha não possui dados suficientes para assinatura." }, 409, origin);
+
+  const { error: snapshotUpdateError } = recordType === "pending_delivery"
+    ? await admin.from("pending_deliveries").update({ snapshot }).eq("id", recordId).eq("organization_id", profile.organization_id)
+    : { error: null };
+  if (snapshotUpdateError) return respond({ error: "Não foi possível guardar a ficha para impressão." }, 500, origin);
 
   const now = new Date();
   const expiresAt = new Date(now.getTime() + 48 * 60 * 60 * 1000).toISOString();
@@ -218,6 +294,7 @@ Deno.serve(async (request) => {
     employee_id: employeeId,
     delivery_id: recordType === "delivery" ? recordId : null,
     return_id: recordType === "return" ? recordId : null,
+    pending_delivery_id: recordType === "pending_delivery" ? recordId : null,
     created_by: user.id,
     token_hash: tokenHash,
     snapshot,
@@ -228,9 +305,11 @@ Deno.serve(async (request) => {
 
   const revokeQuery = admin.from("term_signature_links").update({ revoked_at: now.toISOString() })
     .eq("organization_id", profile.organization_id).neq("id", link.id).is("used_at", null).is("revoked_at", null);
-  const { error: revokeError } = recordType === "delivery"
-    ? await revokeQuery.eq("delivery_id", recordId)
-    : await revokeQuery.eq("return_id", recordId);
+  const { error: revokeError } = recordType === "return"
+    ? await revokeQuery.eq("return_id", recordId)
+    : recordType === "pending_delivery"
+      ? await revokeQuery.eq("pending_delivery_id", recordId)
+      : await revokeQuery.eq("delivery_id", recordId);
   if (revokeError) {
     await admin.from("term_signature_links").update({ revoked_at: new Date().toISOString() }).eq("id", link.id);
     return respond({ error: "Não foi possível preparar o link de assinatura." }, 500, origin);
@@ -242,5 +321,6 @@ Deno.serve(async (request) => {
     expires_at: link.expires_at,
     employee_name: snapshot.employee_name,
     employee_phone: text(employee.phone) || null,
+    snapshot,
   }, 200, origin);
 });

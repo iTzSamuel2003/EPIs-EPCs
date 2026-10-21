@@ -23,9 +23,19 @@ type SnapshotItem = {
 
 type Snapshot = {
   type: "delivery" | "return";
+  pre_delivery_signature?: boolean;
+  organization_id?: string;
   organization_name: string;
+  organization_logo_url?: string | null;
+  organization_cnpj?: string | null;
+  organization_address?: string | null;
+  organization_phone?: string | null;
   employee_name: string;
   employee_registration: string | null;
+  employee_function?: string | null;
+  employee_department?: string | null;
+  employee_admission_date?: string | null;
+  employee_termination_date?: string | null;
   date: string;
   reason: string;
   items: SnapshotItem[];
@@ -175,19 +185,21 @@ export function PublicTermSignature({ token }: { token: string }) {
   }
 
   const isDelivery = snapshot?.type === "delivery";
+  const isPreDelivery = snapshot?.pre_delivery_signature === true;
 
   return <main className="public-term-signature-page">
     <section className="public-term-card">
-      <div className="public-term-brand"><span><ShieldCheck size={22} aria-hidden="true" /></span><strong>EPIS<span>+</span></strong><small>Gestão inteligente</small></div>
+      <div className={`public-term-brand${isPreDelivery && snapshot?.organization_logo_url ? " public-term-brand-organization" : ""}`}>{isPreDelivery && snapshot?.organization_logo_url ? <div className="public-term-org-logo" role="img" aria-label={`Logo de ${snapshot.organization_name}`} style={{ backgroundImage: `url(${JSON.stringify(snapshot.organization_logo_url)})` }} /> : <span><ShieldCheck size={22} aria-hidden="true" /></span>}<strong>{isPreDelivery ? snapshot?.organization_name : <>EPIS<span>+</span></>}</strong><small>{isPreDelivery ? "Recibo de entrega de EPI/EPC" : "Gestão inteligente"}</small></div>
       {loading ? <div className="module-loading" role="status"><LoaderCircle className="spin" size={22} aria-hidden="true" /> Validando link de uso único...</div>
-        : success ? <div className="public-term-success" role="status"><Check size={38} aria-hidden="true" /><h1>Assinatura registrada</h1><p>Obrigado, {snapshot?.employee_name}. A ficha assinada foi encaminhada ao responsável pelo controle de equipamentos.</p><small>Este link não poderá ser usado novamente.</small></div>
+        : success ? <div className="public-term-success" role="status"><Check size={38} aria-hidden="true" /><h1>{isPreDelivery ? "Recebimento registrado" : "Assinatura registrada"}</h1><p>{isPreDelivery ? `Obrigado, ${snapshot?.employee_name}. O recebimento dos materiais foi registrado e o responsável pelo controle foi informado.` : `Obrigado, ${snapshot?.employee_name}. A ficha assinada foi encaminhada ao responsável pelo controle de equipamentos.`}</p><small>Este link não poderá ser usado novamente.</small></div>
           : error && !snapshot ? <div className="public-term-error" role="alert"><X size={18} aria-hidden="true" /><span>{error}</span></div>
             : snapshot && <>
-              <header className="public-term-heading"><p className="eyebrow">CONFIRMAÇÃO DO COLABORADOR</p><h1>{isDelivery ? "Assinatura da ficha de entrega" : "Assinatura da ficha de devolução"}</h1><p>Confira os dados abaixo antes de assinar.</p></header>
+              <header className="public-term-heading"><p className="eyebrow">CONFIRMAÇÃO DO COLABORADOR</p><h1>{isPreDelivery ? "Recibo de entrega e responsabilidade" : isDelivery ? "Assinatura da ficha de entrega" : "Assinatura da ficha de devolução"}</h1><p>{isPreDelivery ? "Confira os itens e assine somente no ato em que estiver recebendo os materiais." : "Confira os dados abaixo antes de assinar."}</p></header>
               <div className="public-term-expiry">Link de uso único · expira em {formatDateTime(expiresAt)}</div>
+              {isPreDelivery && <div className="public-term-expiry">Sua assinatura confirma o recebimento descrito nesta ficha. O sistema registrará a entrega e atualizará o estoque após a confirmação.</div>}
               <section className="public-term-summary" aria-label="Resumo da ficha">
-                <div className="public-term-meta"><div><small>Colaborador</small><strong>{snapshot.employee_name}</strong></div>{snapshot.employee_registration && <div><small>Matrícula</small><strong>{snapshot.employee_registration}</strong></div>}<div><small>Data</small><strong>{formatDate(snapshot.date)}</strong></div><div><small>Motivo</small><strong>{reasonLabels[snapshot.reason] || snapshot.reason}</strong></div></div>
-                <h2>{isDelivery ? "Materiais entregues" : "Materiais devolvidos"}</h2>
+                <div className="public-term-meta"><div><small>Colaborador</small><strong>{snapshot.employee_name}</strong></div>{snapshot.employee_registration && <div><small>Matrícula</small><strong>{snapshot.employee_registration}</strong></div>}{snapshot.employee_function && <div><small>Cargo / função</small><strong>{snapshot.employee_function}</strong></div>}{snapshot.employee_department && <div><small>Setor</small><strong>{snapshot.employee_department}</strong></div>}{snapshot.employee_admission_date && <div><small>Admissão</small><strong>{formatDate(snapshot.employee_admission_date)}</strong></div>}{snapshot.employee_termination_date && <div><small>Desligamento</small><strong>{formatDate(snapshot.employee_termination_date)}</strong></div>}<div><small>Data da entrega</small><strong>{formatDate(snapshot.date)}</strong></div><div><small>Motivo</small><strong>{reasonLabels[snapshot.reason] || snapshot.reason}</strong></div></div>
+                <h2>{isPreDelivery ? "Materiais recebidos nesta entrega" : isDelivery ? "Materiais entregues" : "Materiais devolvidos"}</h2>
                 <ul className="public-term-items">{snapshot.items.map((item, index) => <li key={`${item.material}-${index}`}>
                   <div className="public-term-item-heading"><strong>{item.material}</strong><span>{item.quantity} {item.unit}{item.size ? ` · Tamanho ${item.size}` : ""}</span></div>
                   {isDelivery && <>
@@ -203,16 +215,22 @@ export function PublicTermSignature({ token }: { token: string }) {
                   </>}
                 </li>)}</ul>
               </section>
+              {isPreDelivery && <section className="public-term-responsibilities" aria-labelledby="public-term-responsibilities-title">
+                <h2 id="public-term-responsibilities-title">Uso, cuidado e devolução</h2>
+                <p>Comprometo-me a utilizar os equipamentos somente para a finalidade indicada, seguir as orientações recebidas, cuidar da guarda e conservação e comunicar prontamente qualquer dano, alteração ou extravio. Devolverei os materiais quando solicitado, na substituição, transferência ou desligamento, conforme os procedimentos da organização.</p>
+                <p>Estou ciente de que perda, extravio, dano ou mau uso poderá ser apurado individualmente. Eventual ressarcimento ou desconto dependerá da apuração e dos requisitos legais aplicáveis; esta assinatura, por si só, não autoriza desconto automático.</p>
+              </section>}
               <form className="public-term-form" onSubmit={(event) => void submit(event)}>
                 <label>Nome completo<input value={signerName} onChange={(event) => setSignerName(event.target.value)} autoComplete="name" required maxLength={160} /></label>
                 <label>CPF do colaborador<input value={cpf} onChange={(event) => setCpf(formatCpf(event.target.value))} inputMode="numeric" autoComplete="off" placeholder="000.000.000-00" required /></label>
                 <div className="public-term-signature-label"><strong>Assinatura</strong><button type="button" onClick={clearSignature}><Eraser size={14} aria-hidden="true" /> Limpar</button></div>
                 <canvas ref={canvasRef} width={640} height={180} className="signature-pad public-term-signature-pad" aria-label="Campo para assinar com o dedo ou mouse" tabIndex={0} onPointerDown={startDrawing} onPointerMove={draw} onPointerUp={stopDrawing} onPointerCancel={stopDrawing} />
-                <label className="public-term-acceptance"><input type="checkbox" checked={accepted} onChange={(event) => setAccepted(event.target.checked)} />Confirmo que li e conferi os materiais e as informações desta ficha.</label>
+                <label className="public-term-acceptance"><input type="checkbox" checked={accepted} onChange={(event) => setAccepted(event.target.checked)} />{isPreDelivery ? "Confirmo que li e compreendi as condições acima, conferi os itens e estou recebendo os materiais listados nesta ficha." : "Confirmo que li e conferi os materiais e as informações desta ficha."}</label>
                 <p className="public-term-legal-note">A assinatura será registrada com data e hora do servidor. Este é um registro eletrônico por link de uso único; não utiliza certificado ICP-Brasil.</p>
                 {error && <div className="public-term-error" role="alert"><X size={16} aria-hidden="true" /><span>{error}</span></div>}
                 <button type="submit" className="primary-button public-term-submit" disabled={saving || !hasSignature || !accepted} aria-busy={saving}>{saving ? <><LoaderCircle className="spin" size={16} aria-hidden="true" /> Registrando assinatura...</> : <>Confirmar assinatura<Check size={16} aria-hidden="true" /></>}</button>
               </form>
+              {isPreDelivery && (snapshot.organization_cnpj || snapshot.organization_address || snapshot.organization_phone) && <footer className="public-term-org-footer">{snapshot.organization_cnpj && <span>CNPJ {snapshot.organization_cnpj}</span>}{snapshot.organization_address && <span>{snapshot.organization_address}</span>}{snapshot.organization_phone && <span>{snapshot.organization_phone}</span>}</footer>}
             </>}
     </section>
   </main>;
