@@ -222,8 +222,8 @@ async function createPreDeliverySignedPdf(snapshot: Snapshot, signatureBytes: Ui
   }
 
   function drawTableHeader() {
-    const labels = ["DATA", "DESCRIÇÃO DO EQUIPAMENTO", "QUANT.", "TAM.", "Nº CA / ENSAIO", "ASSINATURA"];
-    const widths = [54, 160, 48, 40, 130, 79];
+    const labels = ["DATA", "DESCRIÇÃO DO EQUIPAMENTO", "QUANT.", "TAM.", "Nº CA / ENSAIO"];
+    const widths = [52, 180, 48, 40, 191];
     const height = 27;
     let x = margin;
     labels.forEach((label, index) => {
@@ -235,7 +235,7 @@ async function createPreDeliverySignedPdf(snapshot: Snapshot, signatureBytes: Ui
   }
 
   function drawTableRow(values: string[]) {
-    const widths = [54, 160, 48, 40, 130, 79];
+    const widths = [52, 180, 48, 40, 191];
     const cellLines = values.map((value, index) => wrappedLines(value, regular, 6.5, widths[index] - 8));
     const rowHeight = Math.max(32, ...cellLines.map((lines) => lines.length * 8 + 10));
     if (y - rowHeight < 58) { addPage(); drawTableHeader(); }
@@ -280,16 +280,16 @@ async function createPreDeliverySignedPdf(snapshot: Snapshot, signatureBytes: Ui
   y -= declarationHeight + 9;
 
   const signatureBoxWidth = 250;
-  const signatureBoxHeight = 76;
+  const signatureBoxHeight = 80;
   if (y - signatureBoxHeight < 58) { addPage(); }
   const signatureTop = y;
-  page.drawLine({ start: { x: margin + 4, y: signatureTop - 48 }, end: { x: margin + signatureBoxWidth - 4, y: signatureTop - 48 }, thickness: 0.75, color: muted });
-  const signatureScale = Math.min(220 / signature.width, 39 / signature.height);
+  page.drawLine({ start: { x: margin + 4, y: signatureTop - 46 }, end: { x: margin + signatureBoxWidth - 4, y: signatureTop - 46 }, thickness: 0.75, color: muted });
+  const signatureScale = Math.min(220 / signature.width, 34 / signature.height);
   const signatureWidth = signature.width * signatureScale;
   const signatureHeight = signature.height * signatureScale;
-  page.drawImage(signature, { x: margin + (signatureBoxWidth - signatureWidth) / 2, y: signatureTop - signatureHeight - 45, width: signatureWidth, height: signatureHeight });
-  page.drawText(pdfText(renderText(signerName)), { x: margin + 4, y: signatureTop - 61, size: 8, font: bold, color: ink });
-  page.drawText(pdfText(`CPF ${maskedCpf(signerCpf)} · Assinado em ${new Intl.DateTimeFormat("pt-BR", { dateStyle: "short", timeStyle: "short", timeZone: "America/Cuiaba" }).format(signedAt)}`), { x: margin + 4, y: signatureTop - 72, size: 6.5, font: regular, color: muted });
+  page.drawImage(signature, { x: margin + (signatureBoxWidth - signatureWidth) / 2, y: signatureTop - signatureHeight - 7, width: signatureWidth, height: signatureHeight });
+  page.drawText(pdfText(renderText(signerName)), { x: margin + 4, y: signatureTop - 59, size: 8, font: bold, color: ink });
+  page.drawText(pdfText(`CPF ${maskedCpf(signerCpf)} · Assinado em ${new Intl.DateTimeFormat("pt-BR", { dateStyle: "short", timeStyle: "short", timeZone: "America/Cuiaba" }).format(signedAt)}`), { x: margin + 4, y: signatureTop - 70, size: 6.5, font: regular, color: muted });
   page.drawText(pdfText("ASSINATURA ELETRÔNICA DO COLABORADOR"), { x: margin + signatureBoxWidth + 14, y: signatureTop - 30, size: 7.2, font: bold, color: ink, maxWidth: width - signatureBoxWidth - 14 });
   drawWrapped("A assinatura confirma o recebimento e a ciência sobre todos os itens listados nesta ficha.", margin + signatureBoxWidth + 14, signatureTop - 44, width - signatureBoxWidth - 14, 7, regular, muted, 9);
   y = signatureTop - signatureBoxHeight - 9;
@@ -315,7 +315,6 @@ async function createPreDeliverySignedPdf(snapshot: Snapshot, signatureBytes: Ui
       `${Number(item.quantity) || 0} ${renderText(item.unit) || "un."}`,
       renderText(item.size) || "—",
       compliance || "—",
-      "ASSINADO NESTA FICHA",
     ]);
   }
 

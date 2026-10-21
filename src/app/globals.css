@@ -4924,12 +4924,10 @@ html,body{max-width:100%;overflow-x:hidden}
   .pending-delivery-print th,.pending-delivery-print td{padding:5px 6px;border:1px solid #9da2a5;text-align:left;vertical-align:middle;overflow-wrap:anywhere;font-size:7pt;}
   .pending-delivery-print th{background:#f2efca;text-align:center;font-size:6.8pt;font-weight:800;}
   .pending-delivery-print th:nth-child(1){width:11%;}
-  .pending-delivery-print th:nth-child(2){width:30%;}
-  .pending-delivery-print th:nth-child(3){width:10%;}
-  .pending-delivery-print th:nth-child(4){width:8%;}
-  .pending-delivery-print th:nth-child(5){width:24%;}
-  .pending-delivery-print th:nth-child(6){width:17%;}
-  .pending-item-signature-line{display:block;min-height:27px;border-bottom:1px solid #7d8590;}
+  .pending-delivery-print th:nth-child(2){width:37%;}
+  .pending-delivery-print th:nth-child(3){width:11%;}
+  .pending-delivery-print th:nth-child(4){width:9%;}
+  .pending-delivery-print th:nth-child(5){width:32%;}
   .pending-print-notes{margin:8px 0;font-size:7.5pt;}
   .pending-delivery-print footer{display:grid;gap:3px;margin-top:auto;padding-top:9px;border-top:3px solid #d2cc00;color:#48556b;font-size:7pt;text-align:center;}
   .pending-delivery-print footer>div{display:flex;justify-content:center;flex-wrap:wrap;gap:4px 14px;}
