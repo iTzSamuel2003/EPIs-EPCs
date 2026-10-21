@@ -84,6 +84,7 @@ function mapDeliveryItem(value: unknown) {
   const item = object(value);
   const material = object(item.material);
   const variant = object(item.variant);
+  const lot = object(item.lot);
   const units = Array.isArray(item.material_units) ? item.material_units.map((value) => {
     const unit = object(value);
     return {
@@ -104,8 +105,8 @@ function mapDeliveryItem(value: unknown) {
     quantity: Number(item.quantity) || 0,
     size: text(variant.size) || text(variant.name) || null,
     expected_replacement_at: text(item.expected_replacement_at) || null,
-    ca_number: text(material.ca_number) || null,
-    ca_expires_at: text(material.ca_expires_at) || null,
+    ca_number: text(lot.ca_number) || null,
+    ca_expires_at: text(lot.ca_expires_at) || null,
     units,
   };
 }
@@ -178,7 +179,7 @@ Deno.serve(async (request) => {
 
   const table = recordType === "delivery" ? "deliveries" : "returns";
   const select = recordType === "delivery"
-    ? "id,organization_id,employee_id,delivered_at,reason,notes,term_signed_at,employee:employees(full_name,registration,phone),delivery_items(quantity,expected_replacement_at,material:materials(name,unit,internal_code,ca_number,ca_expires_at),variant:material_variants(name,size),material_units(unit_identifier,valid_until,test_performed_at,test_expires_at,test_number,test_report_number,ca_number,ca_expires_at))"
+    ? "id,organization_id,employee_id,delivered_at,reason,notes,term_signed_at,employee:employees(full_name,registration,phone),delivery_items(quantity,expected_replacement_at,material:materials(name,unit,internal_code),lot:material_lots(ca_number,ca_expires_at),variant:material_variants(name,size),material_units(unit_identifier,valid_until,test_performed_at,test_expires_at,test_number,test_report_number,ca_number,ca_expires_at))"
     : "id,organization_id,employee_id,returned_at,reason,notes,term_signed_at,employee:employees(full_name,registration,phone),return_items(quantity,equipment_condition,destination,incident_type,incident_description,deduction_requested,deduction_amount,material:materials(name,unit),delivery_item:delivery_items(variant:material_variants(name,size)))";
   const { data: transaction, error: transactionError } = await userClient.from(table).select(select).eq("id", recordId).maybeSingle();
   if (transactionError || !transaction || transaction.organization_id !== profile.organization_id) return respond({ error: "A ficha não foi encontrada nesta organização." }, 404, origin);

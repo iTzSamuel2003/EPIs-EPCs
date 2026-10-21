@@ -117,7 +117,7 @@ export default function FunctionTemplatesPage() {
       const materialByName = new Map(materials.map((material) => [material.name.trim().toLocaleLowerCase("pt-BR"), material.id]));
       const missingCatalogItems = atomicItems.filter((item) => !materialByName.has(item.material_name.toLocaleLowerCase("pt-BR"))).map((item) => ({
         organization_id: profile.organization_id, internal_code: null, name: item.material_name.toLocaleUpperCase("pt-BR"), type: item.item_type, unit: "un.",
-        ca_number: item.item_type === "EPI" ? "PENDENTE" : null, minimum_stock: 0, status: "active",
+        minimum_stock: 0, status: "active",
         notes: "Cadastro criado a partir de Lista por função. Conferir CA, marca, modelo, custos e estoque mínimo.",
       }));
       if (missingCatalogItems.length) {
@@ -175,7 +175,7 @@ export default function FunctionTemplatesPage() {
     const knownNames = new Set(materials.map((item) => item.name.trim().toLocaleLowerCase("pt-BR")));
     const missingCatalogItems = validItems.filter((item) => !knownNames.has(item.material_name.toLocaleLowerCase("pt-BR"))).map((item) => ({
       organization_id: profile.organization_id, internal_code: null, name: item.material_name, type: item.item_type, unit: "un.",
-      ca_number: item.item_type === "EPI" ? "PENDENTE" : null, minimum_stock: 0, status: "active",
+      minimum_stock: 0, status: "active",
       notes: "Cadastro criado a partir de Lista por função. Conferir CA, marca, modelo, custos e estoque mínimo.",
     }));
     if (missingCatalogItems.length) {

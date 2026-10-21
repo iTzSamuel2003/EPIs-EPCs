@@ -1,27 +1,97 @@
 "use client";
 
 import { ChangeEvent, FormEvent, useEffect, useRef, useState } from "react";
-import { ArrowLeft, ClipboardList, FileImage, Plus, Trash2 } from "lucide-react";
+import {
+  ArrowLeft,
+  ClipboardList,
+  FileImage,
+  Plus,
+  Trash2,
+} from "lucide-react";
 import Link from "next/link";
 import { RecentStockEntries } from "@/components/recent-stock-entries";
 import { FeedbackMessage } from "@/components/feedback-message";
 import { createClient } from "@/lib/supabase/client";
 import { friendlyError } from "@/lib/ui-feedback";
 
-type MaterialOption = { id: string; name: string; internal_code: string; unit: string; test_required: boolean; report_required: boolean };
-type MaterialVariant = { id: string; material_id: string; name: string; size: string | null; active: boolean };
-type EntryItem = { material_id: string; materialQuery: string; variant_id: string; custom_variant_size: string; quantity: string; unit_cost: string; manufactured_at: string; expires_at: string; test_performed_at: string; test_expires_at: string; test_report_number: string };
+type MaterialOption = {
+  id: string;
+  name: string;
+  internal_code: string;
+  unit: string;
+  type: "EPI" | "EPC" | "FERRAMENTAL";
+  ca_required: boolean;
+  test_required: boolean;
+  report_required: boolean;
+};
+type MaterialVariant = {
+  id: string;
+  material_id: string;
+  name: string;
+  size: string | null;
+  active: boolean;
+};
+type EntryItem = {
+  material_id: string;
+  materialQuery: string;
+  variant_id: string;
+  custom_variant_size: string;
+  quantity: string;
+  unit_cost: string;
+  manufactured_at: string;
+  expires_at: string;
+  ca_number: string;
+  ca_expires_at: string;
+  test_performed_at: string;
+  test_expires_at: string;
+  test_report_number: string;
+};
+type CaLookupStatus = "loading" | "found" | "not-found" | "error";
 const NEW_NUMBER_VARIANT = "__new_number_variant__";
-const newItem = (): EntryItem => ({ material_id: "", materialQuery: "", variant_id: "", custom_variant_size: "", quantity: "1", unit_cost: "0", manufactured_at: "", expires_at: "", test_performed_at: "", test_expires_at: "", test_report_number: "" });
-const localDateValue = (value = new Date()) => `${value.getFullYear()}-${String(value.getMonth() + 1).padStart(2, "0")}-${String(value.getDate()).padStart(2, "0")}`;
-function isValidDateValue(value: string) { if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) return false; const [year, month, day] = value.split("-").map(Number); const date = new Date(year, month - 1, day); return date.getFullYear() === year && date.getMonth() === month - 1 && date.getDate() === day; }
-function normalizedNumber(value: string) { const trimmed = value.trim(); if (!/^\d+$/.test(trimmed)) return ""; const parsed = Number(trimmed); return Number.isSafeInteger(parsed) && parsed > 0 ? String(parsed) : ""; }
+const newItem = (): EntryItem => ({
+  material_id: "",
+  materialQuery: "",
+  variant_id: "",
+  custom_variant_size: "",
+  quantity: "1",
+  unit_cost: "0",
+  manufactured_at: "",
+  expires_at: "",
+  ca_number: "",
+  ca_expires_at: "",
+  test_performed_at: "",
+  test_expires_at: "",
+  test_report_number: "",
+});
+const localDateValue = (value = new Date()) =>
+  `${value.getFullYear()}-${String(value.getMonth() + 1).padStart(2, "0")}-${String(value.getDate()).padStart(2, "0")}`;
+function isValidDateValue(value: string) {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) return false;
+  const [year, month, day] = value.split("-").map(Number);
+  const date = new Date(year, month - 1, day);
+  return (
+    date.getFullYear() === year &&
+    date.getMonth() === month - 1 &&
+    date.getDate() === day
+  );
+}
+function normalizedNumber(value: string) {
+  const trimmed = value.trim();
+  if (!/^\d+$/.test(trimmed)) return "";
+  const parsed = Number(trimmed);
+  return Number.isSafeInteger(parsed) && parsed > 0 ? String(parsed) : "";
+}
 
 export default function EntriesPage() {
   const [materials, setMaterials] = useState<MaterialOption[]>([]);
   const [variants, setVariants] = useState<MaterialVariant[]>([]);
   const [items, setItems] = useState<EntryItem[]>([newItem()]);
-  const [materialSuggestionsOpen, setMaterialSuggestionsOpen] = useState<number | null>(null);
+  const [caLookupStatus, setCaLookupStatus] = useState<
+    Record<number, CaLookupStatus>
+  >({});
+  const [materialSuggestionsOpen, setMaterialSuggestionsOpen] = useState<
+    number | null
+  >(null);
   const [invoiceNumber, setInvoiceNumber] = useState("");
   const [entryDate, setEntryDate] = useState(localDateValue());
   const [invoiceFile, setInvoiceFile] = useState<File | null>(null);
@@ -33,6 +103,7 @@ export default function EntriesPage() {
   const [canRetryMaterials, setCanRetryMaterials] = useState(false);
   const [entriesRefreshKey, setEntriesRefreshKey] = useState(0);
   const loadRequestRef = useRef(0);
+  const caLookupRequestRef = useRef<Record<number, number>>({});
   const submitLockRef = useRef(false);
   const mountedRef = useRef(true);
 
@@ -43,23 +114,45 @@ export default function EntriesPage() {
     setCanRetryMaterials(false);
     try {
       const supabase = createClient();
-      const [{ data, error: loadError }, { data: variantData, error: variantError }] = await Promise.all([
-        supabase.from("materials").select("id, name, internal_code, unit, test_required, report_required").eq("status", "active").order("name"),
-        supabase.from("material_variants").select("id, material_id, name, size, active").eq("active", true).order("size"),
+      const [
+        { data, error: loadError },
+        { data: variantData, error: variantError },
+      ] = await Promise.all([
+        supabase
+          .from("materials")
+          .select(
+            "id, name, internal_code, unit, type, ca_required, test_required, report_required",
+          )
+          .eq("status", "active")
+          .order("name"),
+        supabase
+          .from("material_variants")
+          .select("id, material_id, name, size, active")
+          .eq("active", true)
+          .order("size"),
       ]);
       if (requestId !== loadRequestRef.current) return;
       if (loadError || variantError) {
         setMaterials([]);
         setVariants([]);
-        setError(friendlyError(loadError ?? variantError, "Não foi possível carregar os materiais."));
+        setError(
+          friendlyError(
+            loadError ?? variantError,
+            "Não foi possível carregar os materiais.",
+          ),
+        );
         setCanRetryMaterials(true);
+      } else {
+        setMaterials((data ?? []) as MaterialOption[]);
+        setVariants((variantData ?? []) as MaterialVariant[]);
       }
-      else { setMaterials((data ?? []) as MaterialOption[]); setVariants((variantData ?? []) as MaterialVariant[]); }
     } catch (caught) {
       if (requestId === loadRequestRef.current) {
         setMaterials([]);
         setVariants([]);
-        setError(friendlyError(caught, "Não foi possível carregar os materiais."));
+        setError(
+          friendlyError(caught, "Não foi possível carregar os materiais."),
+        );
         setCanRetryMaterials(true);
       }
     } finally {
@@ -67,16 +160,84 @@ export default function EntriesPage() {
     }
   }
 
-  useEffect(() => { mountedRef.current = true; void loadMaterials(); return () => { mountedRef.current = false; loadRequestRef.current += 1; }; }, []);
-  useEffect(() => { if (!success) return; const timer = window.setTimeout(() => setSuccess(""), 4500); return () => window.clearTimeout(timer); }, [success]);
+  useEffect(() => {
+    mountedRef.current = true;
+    void loadMaterials();
+    return () => {
+      mountedRef.current = false;
+      loadRequestRef.current += 1;
+    };
+  }, []);
+  useEffect(() => {
+    if (!success) return;
+    const timer = window.setTimeout(() => setSuccess(""), 4500);
+    return () => window.clearTimeout(timer);
+  }, [success]);
 
   function updateItem(index: number, field: keyof EntryItem, value: string) {
-    setItems((current) => current.map((item, itemIndex) => itemIndex === index ? { ...item, [field]: value } : item));
+    setItems((current) =>
+      current.map((item, itemIndex) =>
+        itemIndex === index ? { ...item, [field]: value } : item,
+      ),
+    );
+  }
+
+  function updateCaNumber(index: number, value: string) {
+    caLookupRequestRef.current[index] =
+      (caLookupRequestRef.current[index] ?? 0) + 1;
+    setCaLookupStatus((current) => {
+      const next = { ...current };
+      delete next[index];
+      return next;
+    });
+    setItems((current) =>
+      current.map((item, itemIndex) =>
+        itemIndex === index
+          ? { ...item, ca_number: value, ca_expires_at: "" }
+          : item,
+      ),
+    );
+  }
+
+  async function lookupCa(index: number) {
+    const caNumber = items[index]?.ca_number.trim();
+    if (!caNumber) return;
+    const requestId = (caLookupRequestRef.current[index] ?? 0) + 1;
+    caLookupRequestRef.current[index] = requestId;
+    setCaLookupStatus((current) => ({ ...current, [index]: "loading" }));
+    try {
+      const { data, error: lookupError } = await createClient()
+        .from("ca_certificates")
+        .select("valid_until")
+        .eq("ca_number", caNumber)
+        .maybeSingle();
+      if (caLookupRequestRef.current[index] !== requestId) return;
+      if (lookupError) throw lookupError;
+      if (!data) {
+        setCaLookupStatus((current) => ({ ...current, [index]: "not-found" }));
+        return;
+      }
+      setItems((current) =>
+        current.map((item, itemIndex) =>
+          itemIndex === index && item.ca_number.trim() === caNumber
+            ? { ...item, ca_expires_at: data.valid_until ?? "" }
+            : item,
+        ),
+      );
+      setCaLookupStatus((current) => ({ ...current, [index]: "found" }));
+    } catch {
+      if (caLookupRequestRef.current[index] === requestId)
+        setCaLookupStatus((current) => ({ ...current, [index]: "error" }));
+    }
   }
 
   function filteredMaterials(value: string) {
     const normalized = value.trim().toLowerCase();
-    return materials.filter((material) => `${material.name} ${material.internal_code}`.toLowerCase().includes(normalized));
+    return materials.filter((material) =>
+      `${material.name} ${material.internal_code}`
+        .toLowerCase()
+        .includes(normalized),
+    );
   }
 
   function variantsFor(materialId: string) {
@@ -85,11 +246,42 @@ export default function EntriesPage() {
 
   function isNumberedMaterial(materialId: string) {
     const materialVariants = variantsFor(materialId);
-    return materialVariants.length > 0 && materialVariants.every((variant) => /^\d+$/.test((variant.size || variant.name).trim()));
+    return (
+      materialVariants.length > 0 &&
+      materialVariants.every((variant) =>
+        /^\d+$/.test((variant.size || variant.name).trim()),
+      )
+    );
   }
 
   function selectMaterial(index: number, material: MaterialOption) {
-    setItems((current) => current.map((item, itemIndex) => itemIndex === index ? { ...item, material_id: material.id, materialQuery: material.name, variant_id: "", custom_variant_size: "", manufactured_at: "", expires_at: "", test_performed_at: "", test_expires_at: "", test_report_number: "" } : item));
+    setItems((current) =>
+      current.map((item, itemIndex) =>
+        itemIndex === index
+          ? {
+              ...item,
+              material_id: material.id,
+              materialQuery: material.name,
+              variant_id: "",
+              custom_variant_size: "",
+              manufactured_at: "",
+              expires_at: "",
+              ca_number: "",
+              ca_expires_at: "",
+              test_performed_at: "",
+              test_expires_at: "",
+              test_report_number: "",
+            }
+          : item,
+      ),
+    );
+    caLookupRequestRef.current[index] =
+      (caLookupRequestRef.current[index] ?? 0) + 1;
+    setCaLookupStatus((current) => {
+      const next = { ...current };
+      delete next[index];
+      return next;
+    });
     setMaterialSuggestionsOpen(null);
   }
 
@@ -97,92 +289,324 @@ export default function EntriesPage() {
     const file = event.target.files?.[0] ?? null;
     event.target.value = "";
     setError("");
-    if (file && !["application/pdf", "image/jpeg", "image/png", "image/webp"].includes(file.type)) { setError("Anexe a nota em PDF, JPG, PNG ou WEBP."); setInvoiceFile(null); return; }
-    if (file && file.size > 10 * 1024 * 1024) { setError("A nota fiscal deve ter no máximo 10 MB."); setInvoiceFile(null); return; }
+    if (
+      file &&
+      !["application/pdf", "image/jpeg", "image/png", "image/webp"].includes(
+        file.type,
+      )
+    ) {
+      setError("Anexe a nota em PDF, JPG, PNG ou WEBP.");
+      setInvoiceFile(null);
+      return;
+    }
+    if (file && file.size > 10 * 1024 * 1024) {
+      setError("A nota fiscal deve ter no máximo 10 MB.");
+      setInvoiceFile(null);
+      return;
+    }
     setInvoiceFile(file);
   }
 
   async function submit(event: FormEvent) {
     event.preventDefault();
     if (saving || submitLockRef.current) return;
-    setError(""); setSuccess(""); setCanRetryMaterials(false);
-    if (!isValidDateValue(entryDate)) { setError("Informe uma data de entrada válida."); return; }
+    setError("");
+    setSuccess("");
+    setCanRetryMaterials(false);
+    if (!isValidDateValue(entryDate)) {
+      setError("Informe uma data de entrada válida.");
+      return;
+    }
     const hasInvalidItem = items.some((item) => {
-      const material = materials.find((candidate) => candidate.id === item.material_id);
+      const material = materials.find(
+        (candidate) => candidate.id === item.material_id,
+      );
       const quantity = Number(item.quantity);
       const unitCost = Number(item.unit_cost);
-      const invalidTestDates = Boolean(material?.test_required && (!isValidDateValue(item.test_performed_at) || !isValidDateValue(item.test_expires_at) || item.test_performed_at > entryDate || item.test_expires_at < item.test_performed_at));
-      const missingTestReport = Boolean(material?.test_required && material.report_required && !item.test_report_number.trim());
-      const invalidMaterialDates = Boolean((item.manufactured_at && !isValidDateValue(item.manufactured_at)) || (item.expires_at && !isValidDateValue(item.expires_at)) || (item.manufactured_at && item.expires_at && item.expires_at < item.manufactured_at));
-      const invalidCustomNumber = item.variant_id === NEW_NUMBER_VARIANT && (!isNumberedMaterial(item.material_id) || !normalizedNumber(item.custom_variant_size));
-      return !item.material_id || !Number.isInteger(quantity) || quantity <= 0 || !item.unit_cost.trim() || !Number.isFinite(unitCost) || unitCost < 0
-        || (variantsFor(item.material_id).length > 0 && !item.variant_id)
-        || invalidCustomNumber || invalidTestDates || missingTestReport || invalidMaterialDates;
+      const invalidTestDates = Boolean(
+        material?.test_required &&
+          (!isValidDateValue(item.test_performed_at) ||
+            !isValidDateValue(item.test_expires_at) ||
+            item.test_performed_at > entryDate ||
+            item.test_expires_at < item.test_performed_at),
+      );
+      const missingRequiredCa = Boolean(
+        material?.ca_required && !item.ca_number.trim(),
+      );
+      const missingRequiredCaExpiry = Boolean(
+        material?.ca_required && !isValidDateValue(item.ca_expires_at),
+      );
+      const invalidCaExpiry = Boolean(
+        item.ca_expires_at && !isValidDateValue(item.ca_expires_at),
+      );
+      const missingTestReport = Boolean(
+        material?.test_required &&
+          material.report_required &&
+          !item.test_report_number.trim(),
+      );
+      const invalidMaterialDates = Boolean(
+        (item.manufactured_at && !isValidDateValue(item.manufactured_at)) ||
+          (item.expires_at && !isValidDateValue(item.expires_at)) ||
+          (item.manufactured_at &&
+            item.expires_at &&
+            item.expires_at < item.manufactured_at),
+      );
+      const invalidCustomNumber =
+        item.variant_id === NEW_NUMBER_VARIANT &&
+        (!isNumberedMaterial(item.material_id) ||
+          !normalizedNumber(item.custom_variant_size));
+      return (
+        !item.material_id ||
+        !Number.isInteger(quantity) ||
+        quantity <= 0 ||
+        !item.unit_cost.trim() ||
+        !Number.isFinite(unitCost) ||
+        unitCost < 0 ||
+        (variantsFor(item.material_id).length > 0 && !item.variant_id) ||
+        invalidCustomNumber ||
+        invalidTestDates ||
+        missingTestReport ||
+        invalidMaterialDates ||
+        missingRequiredCa ||
+        missingRequiredCaExpiry ||
+        invalidCaExpiry
+      );
     });
-    if (hasInvalidItem) { setError("Preencha material, tamanho ou numeração, quantidade inteira e custo. Confira também se as datas e a validade do ensaio estão corretas e não informe ensaio posterior à entrada."); return; }
+    if (hasInvalidItem) {
+      setError(
+        "Preencha material, tamanho ou numeração, CA obrigatório, quantidade e custo. Confira as datas e a validade do ensaio.",
+      );
+      return;
+    }
     submitLockRef.current = true;
-    setSaving(true); const supabase = createClient(); let uploadedPath = ""; try {
-    const entryItems: { material_id: string; variant_id: string | null; quantity: number; unit_cost: number; manufactured_at: string | null; expires_at: string | null; test_performed_at: string | null; test_expires_at: string | null; test_report_number: string | null }[] = [];
-    const resolvedVariants = [...variants];
-    let organizationId: string | null = null;
-    for (const item of items) {
-      let variantId = item.variant_id;
-      if (variantId === NEW_NUMBER_VARIANT) {
-        const number = normalizedNumber(item.custom_variant_size);
-        let matchingVariant = resolvedVariants.find((variant) => variant.material_id === item.material_id && normalizedNumber(variant.size || variant.name) === number);
-        if (!matchingVariant) {
-          const { data: existingVariant, error: lookupError } = await supabase.from("material_variants").select("id,material_id,name,size,active").eq("material_id", item.material_id).eq("size", number).maybeSingle();
-          if (lookupError) throw lookupError;
-          matchingVariant = existingVariant as MaterialVariant | null ?? undefined;
+    setSaving(true);
+    const supabase = createClient();
+    let uploadedPath = "";
+    try {
+      const entryItems: {
+        material_id: string;
+        variant_id: string | null;
+        quantity: number;
+        unit_cost: number;
+        manufactured_at: string | null;
+        expires_at: string | null;
+        ca_number: string | null;
+        ca_expires_at: string | null;
+        test_performed_at: string | null;
+        test_expires_at: string | null;
+        test_report_number: string | null;
+      }[] = [];
+      const resolvedVariants = [...variants];
+      let organizationId: string | null = null;
+      for (const item of items) {
+        let variantId = item.variant_id;
+        if (variantId === NEW_NUMBER_VARIANT) {
+          const number = normalizedNumber(item.custom_variant_size);
+          let matchingVariant = resolvedVariants.find(
+            (variant) =>
+              variant.material_id === item.material_id &&
+              normalizedNumber(variant.size || variant.name) === number,
+          );
+          if (!matchingVariant) {
+            const { data: existingVariant, error: lookupError } = await supabase
+              .from("material_variants")
+              .select("id,material_id,name,size,active")
+              .eq("material_id", item.material_id)
+              .eq("size", number)
+              .maybeSingle();
+            if (lookupError) throw lookupError;
+            matchingVariant =
+              (existingVariant as MaterialVariant | null) ?? undefined;
+          }
+          if (matchingVariant) {
+            if (!matchingVariant.active) {
+              const { error: activateError } = await supabase
+                .from("material_variants")
+                .update({ active: true })
+                .eq("id", matchingVariant.id);
+              if (activateError) throw activateError;
+              matchingVariant = { ...matchingVariant, active: true };
+            }
+            variantId = matchingVariant.id;
+            if (
+              !resolvedVariants.some(
+                (variant) => variant.id === matchingVariant?.id,
+              )
+            )
+              resolvedVariants.push(matchingVariant);
+          } else {
+            if (!organizationId) {
+              const { data: auth, error: authError } =
+                await supabase.auth.getUser();
+              if (authError || !auth.user) {
+                setError(
+                  friendlyError(
+                    authError,
+                    "Sua sessão expirou. Entre novamente.",
+                  ),
+                );
+                return;
+              }
+              const { data: profile, error: profileError } = await supabase
+                .from("profiles")
+                .select("organization_id")
+                .eq("id", auth.user.id)
+                .single();
+              if (profileError || !profile?.organization_id) {
+                setError(
+                  friendlyError(
+                    profileError,
+                    "Não foi possível identificar a organização do usuário.",
+                  ),
+                );
+                return;
+              }
+              organizationId = profile.organization_id;
+            }
+            const { data: createdVariant, error: createVariantError } =
+              await supabase
+                .from("material_variants")
+                .insert({
+                  organization_id: organizationId,
+                  material_id: item.material_id,
+                  name: number,
+                  size: number,
+                  active: true,
+                })
+                .select("id,material_id,name,size,active")
+                .single();
+            if (createVariantError || !createdVariant)
+              throw (
+                createVariantError ??
+                new Error("Não foi possível cadastrar a numeração.")
+              );
+            matchingVariant = createdVariant as MaterialVariant;
+            variantId = matchingVariant.id;
+            resolvedVariants.push(matchingVariant);
+          }
         }
-        if (matchingVariant) {
-          if (!matchingVariant.active) {
-            const { error: activateError } = await supabase.from("material_variants").update({ active: true }).eq("id", matchingVariant.id);
-            if (activateError) throw activateError;
-            matchingVariant = { ...matchingVariant, active: true };
+        entryItems.push({
+          material_id: item.material_id,
+          variant_id: variantId || null,
+          quantity: Number(item.quantity),
+          unit_cost: Number(item.unit_cost) || 0,
+          manufactured_at: item.manufactured_at || null,
+          expires_at: item.expires_at || null,
+          ca_number: item.ca_number.trim() || null,
+          ca_expires_at: item.ca_expires_at || null,
+          test_performed_at: item.test_performed_at || null,
+          test_expires_at: item.test_expires_at || null,
+          test_report_number: item.test_report_number.trim() || null,
+        });
+      }
+      if (
+        resolvedVariants.length !== variants.length ||
+        resolvedVariants.some(
+          (variant, index) => variant.active !== variants[index]?.active,
+        )
+      )
+        setVariants(resolvedVariants);
+      if (invoiceFile) {
+        const { data: auth, error: authError } = await supabase.auth.getUser();
+        if (authError || !auth.user) {
+          setError(
+            friendlyError(authError, "Sua sessão expirou. Entre novamente."),
+          );
+          return;
+        }
+        const { data: profile, error: profileError } = await supabase
+          .from("profiles")
+          .select("organization_id")
+          .eq("id", auth.user.id)
+          .single();
+        if (profileError) {
+          setError(
+            friendlyError(
+              profileError,
+              "Não foi possível concluir a operação.",
+            ),
+          );
+          return;
+        }
+        if (!profile?.organization_id) {
+          setError("Não foi possível identificar a organização do usuário.");
+          return;
+        }
+        uploadedPath = `${profile.organization_id}/${crypto.randomUUID()}-${invoiceFile.name.replace(/[^a-zA-Z0-9._-]/g, "_")}`;
+        const { error: uploadError } = await supabase.storage
+          .from("invoice-attachments")
+          .upload(uploadedPath, invoiceFile, {
+            contentType: invoiceFile.type,
+            upsert: false,
+          });
+        if (uploadError) {
+          setError(
+            friendlyError(
+              uploadError,
+              "Não foi possível anexar a nota fiscal.",
+            ),
+          );
+          if (uploadedPath) {
+            try {
+              await supabase.storage
+                .from("invoice-attachments")
+                .remove([uploadedPath]);
+            } catch {}
           }
-          variantId = matchingVariant.id;
-          if (!resolvedVariants.some((variant) => variant.id === matchingVariant?.id)) resolvedVariants.push(matchingVariant);
-        } else {
-          if (!organizationId) {
-            const { data: auth, error: authError } = await supabase.auth.getUser();
-            if (authError || !auth.user) { setError(friendlyError(authError, "Sua sessão expirou. Entre novamente.")); return; }
-            const { data: profile, error: profileError } = await supabase.from("profiles").select("organization_id").eq("id", auth.user.id).single();
-            if (profileError || !profile?.organization_id) { setError(friendlyError(profileError, "Não foi possível identificar a organização do usuário.")); return; }
-            organizationId = profile.organization_id;
-          }
-          const { data: createdVariant, error: createVariantError } = await supabase.from("material_variants").insert({ organization_id: organizationId, material_id: item.material_id, name: number, size: number, active: true }).select("id,material_id,name,size,active").single();
-          if (createVariantError || !createdVariant) throw createVariantError ?? new Error("Não foi possível cadastrar a numeração.");
-          matchingVariant = createdVariant as MaterialVariant;
-          variantId = matchingVariant.id;
-          resolvedVariants.push(matchingVariant);
+          uploadedPath = "";
+          return;
         }
       }
-      entryItems.push({ material_id: item.material_id, variant_id: variantId || null, quantity: Number(item.quantity), unit_cost: Number(item.unit_cost) || 0, manufactured_at: item.manufactured_at || null, expires_at: item.expires_at || null, test_performed_at: item.test_performed_at || null, test_expires_at: item.test_expires_at || null, test_report_number: item.test_report_number.trim() || null });
-    }
-    if (resolvedVariants.length !== variants.length || resolvedVariants.some((variant, index) => variant.active !== variants[index]?.active)) setVariants(resolvedVariants);
-    if (invoiceFile) {
-      const { data: auth, error: authError } = await supabase.auth.getUser();
-      if (authError || !auth.user) { setError(friendlyError(authError, "Sua sessão expirou. Entre novamente.")); return; }
-      const { data: profile, error: profileError } = await supabase.from("profiles").select("organization_id").eq("id", auth.user.id).single();
-      if (profileError) { setError(friendlyError(profileError, "Não foi possível concluir a operação.")); return; }
-      if (!profile?.organization_id) { setError("Não foi possível identificar a organização do usuário."); return; }
-      uploadedPath = `${profile.organization_id}/${crypto.randomUUID()}-${invoiceFile.name.replace(/[^a-zA-Z0-9._-]/g, "_")}`;
-      const { error: uploadError } = await supabase.storage.from("invoice-attachments").upload(uploadedPath, invoiceFile, { contentType: invoiceFile.type, upsert: false });
-if (uploadError) { setError(friendlyError(uploadError, "Não foi possível anexar a nota fiscal.")); if (uploadedPath) { try { await supabase.storage.from("invoice-attachments").remove([uploadedPath]); } catch {} } uploadedPath = ""; return; }
-    }
-    const { error: entryError } = await supabase.rpc("register_stock_entry_batch", { p_invoice_number: invoiceNumber || null, p_entry_date: entryDate || null, p_items: entryItems, p_invoice_file_path: uploadedPath || null, p_notes: notes || null });
-    if (entryError) {
-      if (uploadedPath) { try { await supabase.storage.from("invoice-attachments").remove([uploadedPath]); } catch {} }
-      uploadedPath = "";
-      setError(friendlyError(entryError, "Não foi possível concluir a operação."));
-    } else {
-      uploadedPath = "";
-      setSuccess(invoiceFile ? (items.length > 1 ? "Nota fiscal e itens registrados com sucesso." : "Entrada registrada e nota fiscal anexada com sucesso.") : invoiceNumber.trim() ? "Entrada registrada com a nota fiscal informada." : "Entrada registrada sem nota fiscal. O lançamento foi marcado para identificação posterior.");
-      window.dispatchEvent(new Event("stock-entry-created")); setEntriesRefreshKey((value) => value + 1); setItems([newItem()]); setMaterialSuggestionsOpen(null); setInvoiceNumber(""); setEntryDate(localDateValue()); setInvoiceFile(null); setNotes("");
-    }
+      const { error: entryError } = await supabase.rpc(
+        "register_stock_entry_batch",
+        {
+          p_invoice_number: invoiceNumber || null,
+          p_entry_date: entryDate || null,
+          p_items: entryItems,
+          p_invoice_file_path: uploadedPath || null,
+          p_notes: notes || null,
+        },
+      );
+      if (entryError) {
+        if (uploadedPath) {
+          try {
+            await supabase.storage
+              .from("invoice-attachments")
+              .remove([uploadedPath]);
+          } catch {}
+        }
+        uploadedPath = "";
+        setError(
+          friendlyError(entryError, "Não foi possível concluir a operação."),
+        );
+      } else {
+        uploadedPath = "";
+        setSuccess(
+          invoiceFile
+            ? items.length > 1
+              ? "Nota fiscal e itens registrados com sucesso."
+              : "Entrada registrada e nota fiscal anexada com sucesso."
+            : invoiceNumber.trim()
+              ? "Entrada registrada com a nota fiscal informada."
+              : "Entrada registrada sem nota fiscal. O lançamento foi marcado para identificação posterior.",
+        );
+        window.dispatchEvent(new Event("stock-entry-created"));
+        setEntriesRefreshKey((value) => value + 1);
+        setItems([newItem()]);
+        setMaterialSuggestionsOpen(null);
+        setInvoiceNumber("");
+        setEntryDate(localDateValue());
+        setInvoiceFile(null);
+        setNotes("");
+      }
     } catch (caught) {
-      if (uploadedPath) { try { await supabase.storage.from("invoice-attachments").remove([uploadedPath]); } catch {} }
+      if (uploadedPath) {
+        try {
+          await supabase.storage
+            .from("invoice-attachments")
+            .remove([uploadedPath]);
+        } catch {}
+      }
       setError(friendlyError(caught, "Não foi possível concluir a operação."));
     } finally {
       submitLockRef.current = false;
@@ -190,25 +614,481 @@ if (uploadError) { setError(friendlyError(uploadError, "Não foi possível anexa
     }
   }
 
-  return <main className="module-shell">
-    <header className="module-header"><div><p className="eyebrow">MOVIMENTAÇÃO DE ESTOQUE</p><h1>Entrada de materiais</h1><p className="module-subtitle">Registre vários produtos da mesma nota fiscal em uma única operação.</p></div><Link className="secondary-button" href="/stock"><ArrowLeft size={16} /> Ver estoque</Link></header>
-    {success && <FeedbackMessage kind="success">{success}</FeedbackMessage>}{error && <FeedbackMessage onRetry={canRetryMaterials ? () => void loadMaterials() : undefined}>{error}</FeedbackMessage>}
-    <section className="panel entry-card"><div className="entry-intro"><div className="entry-icon"><ClipboardList size={22} /></div><div><h2>Nota fiscal e itens recebidos</h2><p>Informe a nota uma vez e adicione todos os produtos e lotes relacionados.</p></div></div>
-      <form className="material-form" onSubmit={submit} aria-busy={loading || saving}>
-        <div className="form-grid two"><label>Número da nota fiscal (opcional)<input value={invoiceNumber} onChange={(event) => setInvoiceNumber(event.target.value)} placeholder="Deixe em branco se não houver" /></label><label>Data da entrada<input type="date" value={entryDate} onChange={(event) => setEntryDate(event.target.value)} required /></label></div>
-        <label className="file-upload">Foto ou PDF da nota fiscal<input type="file" accept="image/jpeg,image/png,image/webp,application/pdf" onChange={chooseFile} /><span><FileImage size={18} /> {invoiceFile ? invoiceFile.name : "Selecionar arquivo (máx. 10 MB)"}</span></label>
-        <div className="delivery-items-header"><div><h3>Produtos da nota</h3><p>Uma linha para cada material, tamanho ou lote recebido.</p></div><button type="button" className="secondary-button" onClick={() => setItems((current) => [...current, newItem()])}><Plus size={15} /> Adicionar produto</button></div>
-        <div className="delivery-items">{items.map((item, index) => { const selectedMaterial = materials.find((material) => material.id === item.material_id); const materialVariants = variantsFor(item.material_id); const numberedMaterial = isNumberedMaterial(item.material_id); return <div className={`delivery-item-row entry-item-row ${materialVariants.length > 0 ? "entry-item-row-with-size" : ""}`} key={index}><span className="item-index">{index + 1}</span>
-            <label className="material-picker">Material<div className="material-picker-control"><input id={`entry-material-${index}`} role="combobox" aria-autocomplete="list" aria-expanded={materialSuggestionsOpen === index && Boolean(item.materialQuery)} aria-controls={`entry-material-suggestions-${index}`} value={item.materialQuery} onChange={(event) => { setItems((current) => current.map((currentItem, itemIndex) => itemIndex === index ? { ...currentItem, materialQuery: event.target.value, material_id: "", variant_id: "" } : currentItem)); setMaterialSuggestionsOpen(index); }} onFocus={() => setMaterialSuggestionsOpen(index)} placeholder="Digite o nome do material" required disabled={loading} autoComplete="off" />{materialSuggestionsOpen === index && item.materialQuery && <div id={`entry-material-suggestions-${index}`} className="employee-suggestions" role="listbox" aria-label="Materiais encontrados">{filteredMaterials(item.materialQuery).map((material) => <button type="button" role="option" aria-selected={false} key={material.id} onMouseDown={() => selectMaterial(index, material)}><strong>{material.name}</strong></button>)}{!filteredMaterials(item.materialQuery).length && <span role="status">Nenhum material encontrado.</span>}</div>}</div></label>
-          {materialVariants.length > 0 && <label>{numberedMaterial ? "Numeração" : "Tamanho"}<select value={item.variant_id} onChange={(event) => { const value = event.target.value; setItems((current) => current.map((currentItem, itemIndex) => itemIndex === index ? { ...currentItem, variant_id: value, custom_variant_size: "" } : currentItem)); }} required><option value="">Selecione {numberedMaterial ? "a numeração" : "o tamanho"}</option>{materialVariants.map((variant) => <option value={variant.id} key={variant.id}>{variant.size || variant.name}</option>)}{numberedMaterial && <option value={NEW_NUMBER_VARIANT}>Adicionar outra numeração…</option>}</select>{item.variant_id === NEW_NUMBER_VARIANT && <><input type="number" min="1" step="1" inputMode="numeric" aria-label={`Nova numeração para ${selectedMaterial?.name || "o material"}`} placeholder="Ex.: 10" value={item.custom_variant_size} onChange={(event) => updateItem(index, "custom_variant_size", event.target.value)} required /><small>Essa numeração ficará disponível nas próximas entradas.</small></>}</label>}
-          <label>Quantidade<input type="number" min="1" value={item.quantity} onChange={(event) => updateItem(index, "quantity", event.target.value)} required /></label><label>Custo unitário (R$)<input type="number" min="0" step="0.01" value={item.unit_cost} onChange={(event) => updateItem(index, "unit_cost", event.target.value)} required /></label>
-          {selectedMaterial?.test_required ? <><label>Data do ensaio<input type="date" value={item.test_performed_at} onChange={(event) => updateItem(index, "test_performed_at", event.target.value)} required /></label><label>Validade do ensaio<input type="date" value={item.test_expires_at} onChange={(event) => updateItem(index, "test_expires_at", event.target.value)} required /></label></> : <><label>Fabricação<input type="date" value={item.manufactured_at} onChange={(event) => updateItem(index, "manufactured_at", event.target.value)} /></label><label>Validade<input type="date" value={item.expires_at} onChange={(event) => updateItem(index, "expires_at", event.target.value)} /></label></>}{items.length > 1 && <button type="button" className="remove-item" aria-label={`Remover produto ${index + 1}`} onClick={() => setItems((current) => current.filter((_, itemIndex) => itemIndex !== index))}><Trash2 size={17} /></button>}
-        </div>; })}</div>
-        {items.some((item) => materials.find((material) => material.id === item.material_id)?.test_required) && <div className="entry-test-report-fields">{items.map((item, index) => { const selectedMaterial = materials.find((material) => material.id === item.material_id); return selectedMaterial?.test_required ? <label key={index}>Numero do laudo/ensaio{selectedMaterial.report_required && <em> obrigatorio</em>}<input value={item.test_report_number} onChange={(event) => updateItem(index, "test_report_number", event.target.value)} placeholder="Ex.: LAUDO-2026-001" required={selectedMaterial.report_required} /></label> : null; })}</div>}
-        <label>Observações da nota<textarea value={notes} onChange={(event) => setNotes(event.target.value)} placeholder="Fornecedor, conferência ou outras observações" rows={3} /></label>
-        <div className="modal-actions"><button type="reset" className="secondary-button" onClick={() => { setItems([newItem()]); setMaterialSuggestionsOpen(null); setInvoiceNumber(""); setEntryDate(localDateValue()); setInvoiceFile(null); setNotes(""); setError(""); setSuccess(""); setCanRetryMaterials(false); }}>Limpar</button><button className="primary-button" disabled={saving || loading || !materials.length}>{saving ? "Registrando..." : "Registrar entrada"}<Plus size={16} /></button></div>
-      </form>
-    </section>
-    <RecentStockEntries refreshKey={entriesRefreshKey} />
-  </main>;
+  return (
+    <main className="module-shell">
+      <header className="module-header">
+        <div>
+          <p className="eyebrow">MOVIMENTAÇÃO DE ESTOQUE</p>
+          <h1>Entrada de materiais</h1>
+          <p className="module-subtitle">
+            Registre vários produtos da mesma nota fiscal em uma única operação.
+          </p>
+        </div>
+        <Link className="secondary-button" href="/stock">
+          <ArrowLeft size={16} /> Ver estoque
+        </Link>
+      </header>
+      {success && <FeedbackMessage kind="success">{success}</FeedbackMessage>}
+      {error && (
+        <FeedbackMessage
+          onRetry={canRetryMaterials ? () => void loadMaterials() : undefined}
+        >
+          {error}
+        </FeedbackMessage>
+      )}
+      <section className="panel entry-card">
+        <div className="entry-intro">
+          <div className="entry-icon">
+            <ClipboardList size={22} />
+          </div>
+          <div>
+            <h2>Nota fiscal e itens recebidos</h2>
+            <p>
+              Informe a nota uma vez e adicione todos os produtos e lotes
+              relacionados.
+            </p>
+          </div>
+        </div>
+        <form
+          className="material-form"
+          onSubmit={submit}
+          aria-busy={loading || saving}
+        >
+          <div className="form-grid two">
+            <label>
+              Número da nota fiscal (opcional)
+              <input
+                value={invoiceNumber}
+                onChange={(event) => setInvoiceNumber(event.target.value)}
+                placeholder="Deixe em branco se não houver"
+              />
+            </label>
+            <label>
+              Data da entrada
+              <input
+                type="date"
+                value={entryDate}
+                onChange={(event) => setEntryDate(event.target.value)}
+                required
+              />
+            </label>
+          </div>
+          <label className="file-upload">
+            Foto ou PDF da nota fiscal
+            <input
+              type="file"
+              accept="image/jpeg,image/png,image/webp,application/pdf"
+              onChange={chooseFile}
+            />
+            <span>
+              <FileImage size={18} />{" "}
+              {invoiceFile
+                ? invoiceFile.name
+                : "Selecionar arquivo (máx. 10 MB)"}
+            </span>
+          </label>
+          <div className="delivery-items-header">
+            <div>
+              <h3>Produtos da nota</h3>
+              <p>Uma linha para cada material, tamanho ou lote recebido.</p>
+            </div>
+            <button
+              type="button"
+              className="secondary-button"
+              onClick={() => setItems((current) => [...current, newItem()])}
+            >
+              <Plus size={15} /> Adicionar produto
+            </button>
+          </div>
+          <div className="delivery-items">
+            {items.map((item, index) => {
+              const selectedMaterial = materials.find(
+                (material) => material.id === item.material_id,
+              );
+              const materialVariants = variantsFor(item.material_id);
+              const numberedMaterial = isNumberedMaterial(item.material_id);
+              return (
+                <div
+                  className={`delivery-item-row entry-item-row ${materialVariants.length > 0 ? "entry-item-row-with-size" : ""}`}
+                  key={index}
+                >
+                  <span className="item-index">{index + 1}</span>
+                  <label className="material-picker">
+                    Material
+                    <div className="material-picker-control">
+                      <input
+                        id={`entry-material-${index}`}
+                        role="combobox"
+                        aria-autocomplete="list"
+                        aria-expanded={
+                          materialSuggestionsOpen === index &&
+                          Boolean(item.materialQuery)
+                        }
+                        aria-controls={`entry-material-suggestions-${index}`}
+                        value={item.materialQuery}
+                        onChange={(event) => {
+                          setItems((current) =>
+                            current.map((currentItem, itemIndex) =>
+                              itemIndex === index
+                                ? {
+                                    ...currentItem,
+                                    materialQuery: event.target.value,
+                                    material_id: "",
+                                    variant_id: "",
+                                  }
+                                : currentItem,
+                            ),
+                          );
+                          setMaterialSuggestionsOpen(index);
+                        }}
+                        onFocus={() => setMaterialSuggestionsOpen(index)}
+                        placeholder="Digite o nome do material"
+                        required
+                        disabled={loading}
+                        autoComplete="off"
+                      />
+                      {materialSuggestionsOpen === index &&
+                        item.materialQuery && (
+                          <div
+                            id={`entry-material-suggestions-${index}`}
+                            className="employee-suggestions"
+                            role="listbox"
+                            aria-label="Materiais encontrados"
+                          >
+                            {filteredMaterials(item.materialQuery).map(
+                              (material) => (
+                                <button
+                                  type="button"
+                                  role="option"
+                                  aria-selected={false}
+                                  key={material.id}
+                                  onMouseDown={() =>
+                                    selectMaterial(index, material)
+                                  }
+                                >
+                                  <strong>{material.name}</strong>
+                                </button>
+                              ),
+                            )}
+                            {!filteredMaterials(item.materialQuery).length && (
+                              <span role="status">
+                                Nenhum material encontrado.
+                              </span>
+                            )}
+                          </div>
+                        )}
+                    </div>
+                  </label>
+                  {materialVariants.length > 0 && (
+                    <label>
+                      {numberedMaterial ? "Numeração" : "Tamanho"}
+                      <select
+                        value={item.variant_id}
+                        onChange={(event) => {
+                          const value = event.target.value;
+                          setItems((current) =>
+                            current.map((currentItem, itemIndex) =>
+                              itemIndex === index
+                                ? {
+                                    ...currentItem,
+                                    variant_id: value,
+                                    custom_variant_size: "",
+                                  }
+                                : currentItem,
+                            ),
+                          );
+                        }}
+                        required
+                      >
+                        <option value="">
+                          Selecione{" "}
+                          {numberedMaterial ? "a numeração" : "o tamanho"}
+                        </option>
+                        {materialVariants.map((variant) => (
+                          <option value={variant.id} key={variant.id}>
+                            {variant.size || variant.name}
+                          </option>
+                        ))}
+                        {numberedMaterial && (
+                          <option value={NEW_NUMBER_VARIANT}>
+                            Adicionar outra numeração…
+                          </option>
+                        )}
+                      </select>
+                      {item.variant_id === NEW_NUMBER_VARIANT && (
+                        <>
+                          <input
+                            type="number"
+                            min="1"
+                            step="1"
+                            inputMode="numeric"
+                            aria-label={`Nova numeração para ${selectedMaterial?.name || "o material"}`}
+                            placeholder="Ex.: 10"
+                            value={item.custom_variant_size}
+                            onChange={(event) =>
+                              updateItem(
+                                index,
+                                "custom_variant_size",
+                                event.target.value,
+                              )
+                            }
+                            required
+                          />
+                          <small>
+                            Essa numeração ficará disponível nas próximas
+                            entradas.
+                          </small>
+                        </>
+                      )}
+                    </label>
+                  )}
+                  <label>
+                    Quantidade
+                    <input
+                      type="number"
+                      min="1"
+                      value={item.quantity}
+                      onChange={(event) =>
+                        updateItem(index, "quantity", event.target.value)
+                      }
+                      required
+                    />
+                  </label>
+                  <label>
+                    Custo unitário (R$)
+                    <input
+                      type="number"
+                      min="0"
+                      step="0.01"
+                      value={item.unit_cost}
+                      onChange={(event) =>
+                        updateItem(index, "unit_cost", event.target.value)
+                      }
+                      required
+                    />
+                  </label>
+                  {selectedMaterial?.test_required ? (
+                    <>
+                      <label>
+                        Data do ensaio
+                        <input
+                          type="date"
+                          value={item.test_performed_at}
+                          onChange={(event) =>
+                            updateItem(
+                              index,
+                              "test_performed_at",
+                              event.target.value,
+                            )
+                          }
+                          required
+                        />
+                      </label>
+                      <label>
+                        Validade do ensaio
+                        <input
+                          type="date"
+                          value={item.test_expires_at}
+                          onChange={(event) =>
+                            updateItem(
+                              index,
+                              "test_expires_at",
+                              event.target.value,
+                            )
+                          }
+                          required
+                        />
+                      </label>
+                    </>
+                  ) : (
+                    <>
+                      <label>
+                        Fabricação
+                        <input
+                          type="date"
+                          value={item.manufactured_at}
+                          onChange={(event) =>
+                            updateItem(
+                              index,
+                              "manufactured_at",
+                              event.target.value,
+                            )
+                          }
+                        />
+                      </label>
+                      <label>
+                        Validade
+                        <input
+                          type="date"
+                          value={item.expires_at}
+                          onChange={(event) =>
+                            updateItem(index, "expires_at", event.target.value)
+                          }
+                        />
+                      </label>
+                    </>
+                  )}
+                  {items.length > 1 && (
+                    <button
+                      type="button"
+                      className="remove-item"
+                      aria-label={`Remover produto ${index + 1}`}
+                      onClick={() =>
+                        setItems((current) =>
+                          current.filter((_, itemIndex) => itemIndex !== index),
+                        )
+                      }
+                    >
+                      <Trash2 size={17} />
+                    </button>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+          {items.some((item) => {
+            const material = materials.find(
+              (candidate) => candidate.id === item.material_id,
+            );
+            return material?.type === "EPI" || material?.ca_required;
+          }) && (
+            <section className="entry-ca-fields">
+              <div className="entry-ca-fields-intro">
+                <strong>Certificado de Aprovação por lote</strong>
+                <span>
+                  O CA e sua validade ficam vinculados somente aos produtos
+                  deste recebimento.
+                </span>
+              </div>
+              <div className="entry-ca-fields-grid">
+                {items.map((item, index) => {
+                  const selectedMaterial = materials.find(
+                    (material) => material.id === item.material_id,
+                  );
+                  return (selectedMaterial?.type === "EPI" ||
+                    selectedMaterial?.ca_required) ? (
+                    <div className="entry-ca-lot-card" key={index}>
+                      <strong>
+                        {index + 1}. {selectedMaterial.name}
+                      </strong>
+                      <label>
+                        Número do CA
+                        {selectedMaterial.ca_required ? (
+                          <em>obrigatório</em>
+                        ) : (
+                          <em>opcional</em>
+                        )}
+                        <input
+                          value={item.ca_number}
+                          onChange={(event) =>
+                            updateCaNumber(index, event.target.value)
+                          }
+                          onBlur={() => void lookupCa(index)}
+                          placeholder="Digite o CA"
+                          required={selectedMaterial.ca_required}
+                        />
+                      </label>
+                      <label>
+                        Validade oficial do CA
+                        <input
+                          type="date"
+                          value={item.ca_expires_at}
+                          onChange={(event) =>
+                            updateItem(
+                              index,
+                              "ca_expires_at",
+                              event.target.value,
+                            )
+                          }
+                          required={selectedMaterial.ca_required}
+                        />
+                      </label>
+                      <small role="status">
+                        {caLookupStatus[index] === "loading"
+                          ? "Consultando base sincronizada…"
+                          : caLookupStatus[index] === "found"
+                            ? "CA encontrado; validade oficial preenchida."
+                            : caLookupStatus[index] === "not-found"
+                              ? "CA não encontrado na base; você pode informar a validade manualmente."
+                              : caLookupStatus[index] === "error"
+                                ? "Consulta indisponível; você pode informar a validade manualmente."
+                                : "Ao sair do campo do CA, o sistema consulta a validade oficial."}
+                      </small>
+                    </div>
+                  ) : null;
+                })}
+              </div>
+            </section>
+          )}
+          {items.some(
+            (item) =>
+              materials.find((material) => material.id === item.material_id)
+                ?.test_required,
+          ) && (
+            <div className="entry-test-report-fields">
+              {items.map((item, index) => {
+                const selectedMaterial = materials.find(
+                  (material) => material.id === item.material_id,
+                );
+                return selectedMaterial?.test_required ? (
+                  <label key={index}>
+                    Número do laudo/ensaio
+                    {selectedMaterial.report_required && <em> obrigatório</em>}
+                    <input
+                      value={item.test_report_number}
+                      onChange={(event) =>
+                        updateItem(
+                          index,
+                          "test_report_number",
+                          event.target.value,
+                        )
+                      }
+                      placeholder="Ex.: LAUDO-2026-001"
+                      required={selectedMaterial.report_required}
+                    />
+                  </label>
+                ) : null;
+              })}
+            </div>
+          )}
+          <label>
+            Observações da nota
+            <textarea
+              value={notes}
+              onChange={(event) => setNotes(event.target.value)}
+              placeholder="Fornecedor, conferência ou outras observações"
+              rows={3}
+            />
+          </label>
+          <div className="modal-actions">
+            <button
+              type="reset"
+              className="secondary-button"
+              onClick={() => {
+                setItems([newItem()]);
+                setMaterialSuggestionsOpen(null);
+                setInvoiceNumber("");
+                setEntryDate(localDateValue());
+                setInvoiceFile(null);
+                setNotes("");
+                setError("");
+                setSuccess("");
+                setCanRetryMaterials(false);
+              }}
+            >
+              Limpar
+            </button>
+            <button
+              className="primary-button"
+              disabled={saving || loading || !materials.length}
+            >
+              {saving ? "Registrando..." : "Registrar entrada"}
+              <Plus size={16} />
+            </button>
+          </div>
+        </form>
+      </section>
+      <RecentStockEntries refreshKey={entriesRefreshKey} />
+    </main>
+  );
 }

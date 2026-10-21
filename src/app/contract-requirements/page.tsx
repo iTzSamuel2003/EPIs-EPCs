@@ -7,8 +7,8 @@ import { FeedbackMessage } from "@/components/feedback-message";
 import { friendlyError } from "@/lib/ui-feedback";
 
 type Scenario = { id: string; code: string; name: string; source_annex: string; team_size: number | null; composition: string | null; active: boolean };
-type Requirement = { id: string; scenario_id: string; source_annex: string; quantity: number; unit: string; usage_scope: "individual" | "coletivo"; notes: string | null; materials: { id: string; name: string; type: "EPI" | "EPC" | "FERRAMENTAL"; contract_item_code: string | null; contract_category: string; contract_specification: string | null; ca_required: boolean; ca_number: string | null; ca_expires_at: string | null; test_required: boolean } | null };
-type Lot = { material_id: string; available_quantity: number };
+type Requirement = { id: string; scenario_id: string; source_annex: string; quantity: number; unit: string; usage_scope: "individual" | "coletivo"; notes: string | null; materials: { id: string; name: string; type: "EPI" | "EPC" | "FERRAMENTAL"; contract_item_code: string | null; contract_category: string; contract_specification: string | null; ca_required: boolean; test_required: boolean } | null };
+type Lot = { material_id: string; available_quantity: number; ca_number: string | null; ca_expires_at: string | null };
 
 const categoryLabel: Record<string, string> = { EPI: "EPI", EPC: "EPC", FERRAMENTAL: "Ferramental", EQUIPAMENTO: "Equipamento", ACESSORIO: "Acessório", TI: "Tecnologia" };
 
@@ -16,6 +16,7 @@ export default function ContractRequirementsPage() {
   const [scenarios, setScenarios] = useState<Scenario[]>([]);
   const [requirements, setRequirements] = useState<Requirement[]>([]);
   const [stock, setStock] = useState<Record<string, number>>({});
+  const [caAvailable, setCaAvailable] = useState<Record<string, boolean>>({});
   const [scenarioId, setScenarioId] = useState("");
   const [teamMembers, setTeamMembers] = useState(0);
   const [loading, setLoading] = useState(true);
@@ -31,12 +32,13 @@ export default function ContractRequirementsPage() {
       setScenarios([]);
       setRequirements([]);
       setStock({});
+      setCaAvailable({});
       try {
         const supabase = createClient();
         const [{ data: scenarioData, error: scenarioError }, { data: requirementData, error: requirementError }, { data: lotData, error: lotError }] = await Promise.all([
           supabase.from("contract_scenarios").select("id, code, name, source_annex, team_size, composition, active").eq("active", true).order("name"),
-          supabase.from("contract_requirements").select("id, scenario_id, source_annex, quantity, unit, usage_scope, notes, materials(id, name, type, contract_item_code, contract_category, contract_specification, ca_required, ca_number, ca_expires_at, test_required)"),
-          supabase.from("material_lots").select("material_id, available_quantity"),
+          supabase.from("contract_requirements").select("id, scenario_id, source_annex, quantity, unit, usage_scope, notes, materials(id, name, type, contract_item_code, contract_category, contract_specification, ca_required, test_required)"),
+          supabase.from("material_lots").select("material_id, available_quantity, ca_number, ca_expires_at"),
         ]);
         if (version !== loadVersion.current) return;
         const loadError = scenarioError ?? requirementError ?? lotError;
@@ -46,6 +48,11 @@ export default function ContractRequirementsPage() {
         setScenarios(rows);
         setRequirements((requirementData ?? []) as unknown as Requirement[]);
         setStock(lots.reduce<Record<string, number>>((total, lot) => ({ ...total, [lot.material_id]: (total[lot.material_id] ?? 0) + Number(lot.available_quantity ?? 0) }), {}));
+        const today = new Date().toISOString().slice(0, 10);
+        setCaAvailable(lots.reduce<Record<string, boolean>>((total, lot) => {
+          if (Number(lot.available_quantity) > 0 && lot.ca_number?.trim() && lot.ca_expires_at && lot.ca_expires_at >= today) total[lot.material_id] = true;
+          return total;
+        }, {}));
         setScenarioId((current) => rows.some((row) => row.id === current) ? current : rows[0]?.id ?? "");
         setTeamMembers((current) => current > 0 ? current : rows[0]?.team_size ?? 0);
       } catch (caught) {
@@ -63,7 +70,7 @@ export default function ContractRequirementsPage() {
   const selected = scenarios.find((item) => item.id === scenarioId);
   function requiredQuantity(item: Requirement) { const base = selected?.team_size ?? 0; return base > 0 && teamMembers > 0 ? Math.ceil(Number(item.quantity) * teamMembers / base) : Number(item.quantity); }
   const deficitCount = visible.filter((item) => (stock[item.materials?.id ?? ""] ?? 0) < requiredQuantity(item)).length;
-  const complianceCount = visible.filter((item) => item.materials?.ca_required && (!item.materials.ca_number || item.materials.ca_number === "PENDENTE") || item.materials?.test_required).length;
+  const complianceCount = visible.filter((item) => item.materials?.ca_required && !caAvailable[item.materials.id] || item.materials?.test_required).length;
   const totalRequired = visible.reduce((total, item) => total + requiredQuantity(item), 0);
 
   return <main className="module-shell contract-requirements-page">
@@ -72,7 +79,7 @@ export default function ContractRequirementsPage() {
     {loading ? <div className="module-loading"><LoaderCircle className="spin" size={22} /> Carregando requisitos...</div> : <>
       <section className="module-toolbar"><label className="contract-scenario-select">Cenário contratual<select value={scenarioId} onChange={(event) => { const next = scenarios.find((scenario) => scenario.id === event.target.value); setScenarioId(event.target.value); setTeamMembers(next?.team_size ?? 0); }}>{scenarios.map((scenario) => <option key={scenario.id} value={scenario.id}>{scenario.name} · {scenario.source_annex}</option>)}</select></label><label className="contract-scenario-select">Efetivo real da equipe<input type="number" min="1" step="1" value={teamMembers || ""} onChange={(event) => { const value = Number(event.target.value); setTeamMembers(Number.isInteger(value) && value > 0 ? value : 0); }} placeholder="Ex.: 7" /></label>{selected && <div className="contract-composition"><strong>Base: {selected.team_size ?? "—"} integrantes</strong><span>{selected.composition}</span></div>}</section>
       {!loading && (<section className="module-summary"><div><ClipboardCheck size={18} /><strong>{visible.length}</strong><span>itens exigidos</span></div><div><PackageCheck size={18} /><strong>{totalRequired}</strong><span>quantidade mínima</span></div><div><ShieldAlert size={18} /><strong>{deficitCount}</strong><span>com saldo insuficiente</span></div><div><FileText size={18} /><strong>{complianceCount}</strong><span>pendências de CA/ensaio</span></div></section>)}
-      <section className="panel module-table-card"><div className="panel-header"><div><h2>Materiais mínimos do cenário</h2><p>Quantidades ajustadas proporcionalmente ao efetivo informado.</p></div></div>{visible.length ? <div className="table-wrap"><table aria-label="Materiais mínimos do cenário"><thead><tr><th scope="col">ITEM CONTRATUAL</th><th scope="col">CATEGORIA</th><th scope="col">USO</th><th scope="col">REQUERIDO</th><th scope="col">DISPONÍVEL</th><th scope="col">CONFORMIDADE</th></tr></thead><tbody>{visible.map((item) => { const required = requiredQuantity(item); const available = stock[item.materials?.id ?? ""] ?? 0; const enough = available >= required; const caPending = Boolean(item.materials?.ca_required && (!item.materials.ca_number || item.materials.ca_number === "PENDENTE")); const hasTechnicalControl = Boolean(item.materials?.test_required); const status = !enough ? "Repor estoque" : caPending ? "CA pendente" : hasTechnicalControl ? "Ensaio requerido" : "Conforme"; const statusClass = !enough || caPending ? "danger" : hasTechnicalControl ? "warning" : "success"; return <tr key={item.id}><td><div className="material-cell"><div className="material-type-icon epi"><ClipboardCheck size={15} /></div><div><strong>{item.materials?.name ?? "Material não encontrado"}</strong><small>{item.materials?.contract_item_code ?? "Sem código"}</small></div></div></td><td><span className="type-badge epi">{categoryLabel[item.materials?.contract_category ?? ""] ?? item.materials?.type ?? "—"}</span></td><td>{item.usage_scope === "individual" ? "Individual" : "Coletivo"}</td><td><strong>{required} {item.unit}</strong><small className="muted-cell">Base: {item.quantity}</small></td><td><strong className={enough ? "history-positive" : "history-negative"}>{available} {item.unit}</strong></td><td><span className={`status-pill ${statusClass}`}>{status}</span></td></tr>})}</tbody></table></div> : <div className="empty-state"><ClipboardCheck size={27} /><strong>Nenhum requisito cadastrado</strong><span>Selecione outro cenário ou importe os itens do anexo contratual.</span></div>}</section>
+      <section className="panel module-table-card"><div className="panel-header"><div><h2>Materiais mínimos do cenário</h2><p>Quantidades ajustadas proporcionalmente ao efetivo informado.</p></div></div>{visible.length ? <div className="table-wrap"><table aria-label="Materiais mínimos do cenário"><thead><tr><th scope="col">ITEM CONTRATUAL</th><th scope="col">CATEGORIA</th><th scope="col">USO</th><th scope="col">REQUERIDO</th><th scope="col">DISPONÍVEL</th><th scope="col">CONFORMIDADE</th></tr></thead><tbody>{visible.map((item) => { const required = requiredQuantity(item); const available = stock[item.materials?.id ?? ""] ?? 0; const enough = available >= required; const caPending = Boolean(item.materials?.ca_required && !caAvailable[item.materials.id]); const hasTechnicalControl = Boolean(item.materials?.test_required); const status = !enough ? "Repor estoque" : caPending ? "CA pendente" : hasTechnicalControl ? "Ensaio requerido" : "Conforme"; const statusClass = !enough || caPending ? "danger" : hasTechnicalControl ? "warning" : "success"; return <tr key={item.id}><td><div className="material-cell"><div className="material-type-icon epi"><ClipboardCheck size={15} /></div><div><strong>{item.materials?.name ?? "Material não encontrado"}</strong><small>{item.materials?.contract_item_code ?? "Sem código"}</small></div></div></td><td><span className="type-badge epi">{categoryLabel[item.materials?.contract_category ?? ""] ?? item.materials?.type ?? "—"}</span></td><td>{item.usage_scope === "individual" ? "Individual" : "Coletivo"}</td><td><strong>{required} {item.unit}</strong><small className="muted-cell">Base: {item.quantity}</small></td><td><strong className={enough ? "history-positive" : "history-negative"}>{available} {item.unit}</strong></td><td><span className={`status-pill ${statusClass}`}>{status}</span></td></tr>})}</tbody></table></div> : <div className="empty-state"><ClipboardCheck size={27} /><strong>Nenhum requisito cadastrado</strong><span>Selecione outro cenário ou importe os itens do anexo contratual.</span></div>}</section>
     </>}
   </main>;
 }
