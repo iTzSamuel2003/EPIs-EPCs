@@ -13,6 +13,7 @@ import { RecentStockEntries } from "@/components/recent-stock-entries";
 import { FeedbackMessage } from "@/components/feedback-message";
 import { createClient } from "@/lib/supabase/client";
 import { friendlyError } from "@/lib/ui-feedback";
+import { getContractAnnexNumber } from "@/lib/contract-annex";
 
 type MaterialOption = {
   id: string;
@@ -23,7 +24,10 @@ type MaterialOption = {
   ca_required: boolean;
   test_required: boolean;
   report_required: boolean;
+  contract_item_code: string | null;
+  contract_source: string | null;
 };
+type AnnexSetting = { annex_number: string; active: boolean };
 type MaterialVariant = {
   id: string;
   material_id: string;
@@ -46,7 +50,6 @@ type EntryItem = {
   test_expires_at: string;
   test_report_number: string;
 };
-type CaLookupStatus = "loading" | "found" | "not-found" | "error";
 const NEW_NUMBER_VARIANT = "__new_number_variant__";
 const newItem = (): EntryItem => ({
   material_id: "",
@@ -87,7 +90,7 @@ export default function EntriesPage() {
   const [variants, setVariants] = useState<MaterialVariant[]>([]);
   const [items, setItems] = useState<EntryItem[]>([newItem()]);
   const [caLookupStatus, setCaLookupStatus] = useState<
-    Record<number, CaLookupStatus>
+    Record<number, "loading" | "found" | "not-found" | "error">
   >({});
   const [materialSuggestionsOpen, setMaterialSuggestionsOpen] = useState<
     number | null
@@ -103,7 +106,6 @@ export default function EntriesPage() {
   const [canRetryMaterials, setCanRetryMaterials] = useState(false);
   const [entriesRefreshKey, setEntriesRefreshKey] = useState(0);
   const loadRequestRef = useRef(0);
-  const caLookupRequestRef = useRef<Record<number, number>>({});
   const submitLockRef = useRef(false);
   const mountedRef = useRef(true);
 
@@ -117,11 +119,12 @@ export default function EntriesPage() {
       const [
         { data, error: loadError },
         { data: variantData, error: variantError },
+        { data: annexSettings, error: annexSettingsError },
       ] = await Promise.all([
         supabase
           .from("materials")
           .select(
-            "id, name, internal_code, unit, type, ca_required, test_required, report_required",
+            "id, name, internal_code, unit, type, ca_required, test_required, report_required, contract_item_code, contract_source",
           )
           .eq("status", "active")
           .order("name"),
@@ -130,20 +133,29 @@ export default function EntriesPage() {
           .select("id, material_id, name, size, active")
           .eq("active", true)
           .order("size"),
+        supabase.from("organization_annex_settings").select("annex_number,active"),
       ]);
       if (requestId !== loadRequestRef.current) return;
-      if (loadError || variantError) {
+      if (loadError || variantError || annexSettingsError) {
         setMaterials([]);
         setVariants([]);
         setError(
           friendlyError(
-            loadError ?? variantError,
+            loadError ?? variantError ?? annexSettingsError,
             "Não foi possível carregar os materiais.",
           ),
         );
         setCanRetryMaterials(true);
       } else {
-        setMaterials((data ?? []) as MaterialOption[]);
+        const disabledAnnexes = new Set(
+          ((annexSettings ?? []) as AnnexSetting[])
+            .filter((setting) => !setting.active)
+            .map((setting) => setting.annex_number),
+        );
+        setMaterials(((data ?? []) as MaterialOption[]).filter((material) => {
+          const annexNumber = getContractAnnexNumber(material);
+          return !annexNumber || !disabledAnnexes.has(annexNumber);
+        }));
         setVariants((variantData ?? []) as MaterialVariant[]);
       }
     } catch (caught) {
@@ -183,13 +195,6 @@ export default function EntriesPage() {
   }
 
   function updateCaNumber(index: number, value: string) {
-    caLookupRequestRef.current[index] =
-      (caLookupRequestRef.current[index] ?? 0) + 1;
-    setCaLookupStatus((current) => {
-      const next = { ...current };
-      delete next[index];
-      return next;
-    });
     setItems((current) =>
       current.map((item, itemIndex) =>
         itemIndex === index
@@ -197,13 +202,16 @@ export default function EntriesPage() {
           : item,
       ),
     );
+    setCaLookupStatus((current) => {
+      const next = { ...current };
+      delete next[index];
+      return next;
+    });
   }
 
   async function lookupCa(index: number) {
     const caNumber = items[index]?.ca_number.trim();
     if (!caNumber) return;
-    const requestId = (caLookupRequestRef.current[index] ?? 0) + 1;
-    caLookupRequestRef.current[index] = requestId;
     setCaLookupStatus((current) => ({ ...current, [index]: "loading" }));
     try {
       const { data, error: lookupError } = await createClient()
@@ -211,23 +219,20 @@ export default function EntriesPage() {
         .select("valid_until")
         .eq("ca_number", caNumber)
         .maybeSingle();
-      if (caLookupRequestRef.current[index] !== requestId) return;
       if (lookupError) throw lookupError;
-      if (!data) {
+      if (data?.valid_until) {
+        setItems((current) =>
+          current.map((item, itemIndex) =>
+            itemIndex === index && item.ca_number.trim() === caNumber
+              ? { ...item, ca_expires_at: data.valid_until ?? "" }
+              : item,
+          ),
+        );
+        setCaLookupStatus((current) => ({ ...current, [index]: "found" }));
+      } else
         setCaLookupStatus((current) => ({ ...current, [index]: "not-found" }));
-        return;
-      }
-      setItems((current) =>
-        current.map((item, itemIndex) =>
-          itemIndex === index && item.ca_number.trim() === caNumber
-            ? { ...item, ca_expires_at: data.valid_until ?? "" }
-            : item,
-        ),
-      );
-      setCaLookupStatus((current) => ({ ...current, [index]: "found" }));
     } catch {
-      if (caLookupRequestRef.current[index] === requestId)
-        setCaLookupStatus((current) => ({ ...current, [index]: "error" }));
+      setCaLookupStatus((current) => ({ ...current, [index]: "error" }));
     }
   }
 
@@ -275,8 +280,6 @@ export default function EntriesPage() {
           : item,
       ),
     );
-    caLookupRequestRef.current[index] =
-      (caLookupRequestRef.current[index] ?? 0) + 1;
     setCaLookupStatus((current) => {
       const next = { ...current };
       delete next[index];
@@ -323,21 +326,15 @@ export default function EntriesPage() {
       );
       const quantity = Number(item.quantity);
       const unitCost = Number(item.unit_cost);
+      const invalidCa =
+        Boolean(material?.ca_required && (!item.ca_number.trim() || !isValidDateValue(item.ca_expires_at))) ||
+        Boolean(item.ca_expires_at && !isValidDateValue(item.ca_expires_at));
       const invalidTestDates = Boolean(
         material?.test_required &&
           (!isValidDateValue(item.test_performed_at) ||
             !isValidDateValue(item.test_expires_at) ||
             item.test_performed_at > entryDate ||
             item.test_expires_at < item.test_performed_at),
-      );
-      const missingRequiredCa = Boolean(
-        material?.ca_required && !item.ca_number.trim(),
-      );
-      const missingRequiredCaExpiry = Boolean(
-        material?.ca_required && !isValidDateValue(item.ca_expires_at),
-      );
-      const invalidCaExpiry = Boolean(
-        item.ca_expires_at && !isValidDateValue(item.ca_expires_at),
       );
       const missingTestReport = Boolean(
         material?.test_required &&
@@ -364,17 +361,15 @@ export default function EntriesPage() {
         unitCost < 0 ||
         (variantsFor(item.material_id).length > 0 && !item.variant_id) ||
         invalidCustomNumber ||
+        invalidCa ||
         invalidTestDates ||
         missingTestReport ||
-        invalidMaterialDates ||
-        missingRequiredCa ||
-        missingRequiredCaExpiry ||
-        invalidCaExpiry
+        invalidMaterialDates
       );
     });
     if (hasInvalidItem) {
       setError(
-        "Preencha material, tamanho ou numeração, CA obrigatório, quantidade e custo. Confira as datas e a validade do ensaio.",
+        "Preencha material, tamanho ou numeração, quantidade inteira e custo. Confira também se as datas e a validade do ensaio estão corretas e não informe ensaio posterior à entrada.",
       );
       return;
     }
@@ -690,7 +685,7 @@ export default function EntriesPage() {
           <div className="delivery-items-header">
             <div>
               <h3>Produtos da nota</h3>
-              <p>Uma linha para cada material, tamanho ou lote recebido.</p>
+              <p>Uma linha para cada material, tamanho ou lote recebido. Anexos desativados não aparecem nesta lista.</p>
             </div>
             <button
               type="button"
@@ -956,8 +951,8 @@ export default function EntriesPage() {
               <div className="entry-ca-fields-intro">
                 <strong>Certificado de Aprovação por lote</strong>
                 <span>
-                  O CA e sua validade ficam vinculados somente aos produtos
-                  deste recebimento.
+                  Informe o CA de cada lote recebido; a validade oficial é
+                  consultada automaticamente quando houver dados sincronizados.
                 </span>
               </div>
               <div className="entry-ca-fields-grid">
@@ -972,7 +967,7 @@ export default function EntriesPage() {
                         {index + 1}. {selectedMaterial.name}
                       </strong>
                       <label>
-                        Número do CA
+                        Número do CA{" "}
                         {selectedMaterial.ca_required ? (
                           <em>obrigatório</em>
                         ) : (
@@ -1009,7 +1004,7 @@ export default function EntriesPage() {
                           : caLookupStatus[index] === "found"
                             ? "CA encontrado; validade oficial preenchida."
                             : caLookupStatus[index] === "not-found"
-                              ? "CA não encontrado na base; você pode informar a validade manualmente."
+                              ? "CA não encontrado; você pode informar a validade manualmente."
                               : caLookupStatus[index] === "error"
                                 ? "Consulta indisponível; você pode informar a validade manualmente."
                                 : "Ao sair do campo do CA, o sistema consulta a validade oficial."}
@@ -1032,8 +1027,8 @@ export default function EntriesPage() {
                 );
                 return selectedMaterial?.test_required ? (
                   <label key={index}>
-                    Número do laudo/ensaio
-                    {selectedMaterial.report_required && <em> obrigatório</em>}
+                    Numero do laudo/ensaio
+                    {selectedMaterial.report_required && <em> obrigatorio</em>}
                     <input
                       value={item.test_report_number}
                       onChange={(event) =>

@@ -5,6 +5,7 @@ import { ArrowDownAZ, ArrowUpAZ, Check, LoaderCircle, Pencil, Plus, Search, Shie
 import { useSearchParams } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import { friendlyError } from "@/lib/ui-feedback";
+import { contractAnnexLabel } from "@/lib/contract-annex";
 import type { MaterialType } from "@/types/domain";
 import { FeedbackMessage } from "@/components/feedback-message";
 
@@ -18,6 +19,7 @@ type MaterialRow = {
 };
 type VariationType = "none" | "size" | "number" | "custom";
 type MaterialVariant = { id: string; material_id: string; name: string; size: string | null; active: boolean };
+type AnnexSetting = { annex_number: string; active: boolean };
 type MaterialForm = {
   name: string; type: MaterialType; unit: string; size: string; legacySize: string; description: string;
   variationType: VariationType; selectedVariations: string[];
@@ -126,6 +128,10 @@ export default function MaterialsPage() {
   const searchParams = useSearchParams();
   const [materials, setMaterials] = useState<MaterialRow[]>([]);
   const [materialVariants, setMaterialVariants] = useState<MaterialVariant[]>([]);
+  const [annexSettings, setAnnexSettings] = useState<AnnexSetting[]>([]);
+  const [annexSettingsLoaded, setAnnexSettingsLoaded] = useState(false);
+  const [annexSettingsError, setAnnexSettingsError] = useState("");
+  const [savingAnnex, setSavingAnnex] = useState<string | null>(null);
   const [form, setForm] = useState<MaterialForm>(emptyForm);
   const [query, setQuery] = useState("");
   const [typeFilter, setTypeFilter] = useState("all");
@@ -148,41 +154,61 @@ export default function MaterialsPage() {
     if (initialSearch) setQuery(initialSearch);
   }, [searchParams]);
 
+
   async function loadMaterials() {
     const version = ++loadVersion.current;
     setLoading(true);
     setError("");
+    setAnnexSettingsError("");
+    setAnnexSettingsLoaded(false);
     setMaterials([]);
     setMaterialVariants([]);
     try {
-    const supabase = createClient();
-    const [{ data, error: materialsError }, { data: variants, error: variantsError }] = await Promise.all([
-      supabase.from("materials").select("id,internal_code,name,type,unit,size,contract_item_code,contract_source,description,brand,manufacturer,model,useful_life_months,replacement_interval_days,minimum_stock,location,notes,status,ca_required,test_required,test_type,test_interval_months,report_required,art_required").order("name"),
-      supabase.from("material_variants").select("id,material_id,name,size,active"),
-    ]);
-    if (!mountedRef.current || version !== loadVersion.current) return;
-    if (materialsError || variantsError) setError(friendlyError(materialsError ?? variantsError, "Falha ao carregar materiais e variações."));
-    else {
-      const loadedMaterials = (data ?? []) as MaterialRow[];
-      setMaterials(loadedMaterials);
+      const supabase = createClient();
+      const [
+        { data, error: materialsError },
+        { data: variants, error: variantsError },
+        { data: settings, error: settingsError },
+      ] = await Promise.all([
+        supabase.from("materials").select("id,internal_code,name,type,unit,size,contract_item_code,contract_source,description,brand,manufacturer,model,useful_life_months,replacement_interval_days,minimum_stock,location,notes,status,ca_required,test_required,test_type,test_interval_months,report_required,art_required").order("name"),
+        supabase.from("material_variants").select("id,material_id,name,size,active"),
+        supabase.from("organization_annex_settings").select("annex_number,active"),
+      ]);
+      if (!mountedRef.current || version !== loadVersion.current) return;
+      if (materialsError || variantsError) {
+        setAnnexSettingsError("Falha ao carregar o catálogo e os anexos. Tente novamente.");
+        setError(friendlyError(materialsError ?? variantsError, "Falha ao carregar materiais e variações."));
+        return;
+      }
+      setMaterials((data ?? []) as MaterialRow[]);
       setMaterialVariants((variants ?? []) as MaterialVariant[]);
-    }
+      if (settingsError) {
+        setAnnexSettings([]);
+        setAnnexSettingsError(friendlyError(settingsError, "Não foi possível carregar a situação dos anexos."));
+      } else {
+        setAnnexSettings((settings ?? []) as AnnexSetting[]);
+        setAnnexSettingsLoaded(true);
+      }
     } catch (caught) {
-      if (mountedRef.current && version === loadVersion.current) setError(friendlyError(caught, "Falha ao carregar materiais."));
+      if (mountedRef.current && version === loadVersion.current) {
+        setError(friendlyError(caught, "Falha ao carregar materiais."));
+        setAnnexSettingsError(friendlyError(caught, "Não foi possível carregar a situação dos anexos."));
+      }
     } finally {
       if (mountedRef.current && version === loadVersion.current) setLoading(false);
     }
   }
-
   useEffect(() => {
     mountedRef.current = true;
     void loadMaterials();
     return () => { mountedRef.current = false; loadVersion.current += 1; };
   }, []);
 
-  const annexOptions = useMemo(() => [...new Set(materials
-    .map(materialAnnexNumber)
-    .filter((annex): annex is string => Boolean(annex)))].sort((a, b) => Number(a) - Number(b)), [materials]);
+  const annexOptions = useMemo(() => [...new Set([
+    ...Object.keys(CONTRACT_ANNEX_LABELS),
+    ...materials.map(materialAnnexNumber).filter((annex): annex is string => Boolean(annex)),
+    ...annexSettings.map((setting) => setting.annex_number),
+  ])].sort((a, b) => Number(a) - Number(b)), [materials, annexSettings]);
 
   const filtered = useMemo(() => materials
     .filter((material) => {
@@ -199,6 +225,38 @@ export default function MaterialsPage() {
 
   useEffect(() => { setPage(1); }, [query, typeFilter, statusFilter, annexFilter, ascending]);
   useEffect(() => { if (page > pageCount) setPage(pageCount); }, [page, pageCount]);
+
+  async function updateAnnexStatus(annexNumber: string, active: boolean) {
+    if (savingAnnex || !annexSettingsLoaded) return;
+    setSavingAnnex(annexNumber);
+    setAnnexSettingsError("");
+    try {
+      const supabase = createClient();
+      const { data: { user }, error: userError } = await supabase.auth.getUser();
+      if (userError || !user) throw userError ?? new Error("Sessão expirada. Entre novamente.");
+      const { data: profile, error: profileError } = await supabase
+        .from("profiles")
+        .select("organization_id")
+        .eq("id", user.id)
+        .single();
+      if (profileError || !profile?.organization_id) throw profileError ?? new Error("Usuário sem organização vinculada.");
+
+      const { error: saveError } = await supabase
+        .from("organization_annex_settings")
+        .upsert({ organization_id: profile.organization_id, annex_number: annexNumber, active, updated_at: new Date().toISOString() }, { onConflict: "organization_id,annex_number" });
+      if (saveError) throw saveError;
+
+      setAnnexSettings((current) => [
+        ...current.filter((setting) => setting.annex_number !== annexNumber),
+        { annex_number: annexNumber, active },
+      ]);
+      setSuccess(`${contractAnnexLabel(annexNumber)} ${active ? "ativado" : "desativado"}.`);
+    } catch (caught) {
+      setAnnexSettingsError(friendlyError(caught, "Não foi possível atualizar este anexo."));
+    } finally {
+      setSavingAnnex(null);
+    }
+  }
 
   const sizeOptions = useMemo(() => form.variationType === "custom"
     ? [...getMaterialSizeOptions(), VARIATION_TYPE_LABELS.custom]
@@ -338,6 +396,21 @@ export default function MaterialsPage() {
     <header className="module-header"><div><p className="eyebrow">CADASTRO E CONTROLE</p><h1>Materiais</h1><p className="module-subtitle">Cadastre EPIs, EPCs e ferramentais. Quantidade, localização e situação atual ficam em Estoque.</p></div><button type="button" className="primary-button" onClick={openNew}><Plus size={17} /> Novo material</button></header>
     {success && <div className="feedback success-feedback" role="status"><Check size={17} /> {success}</div>}
     {error && !showForm && <FeedbackMessage onRetry={() => void loadMaterials()}>{error}</FeedbackMessage>}
+    <section className="panel annex-settings-panel" aria-labelledby="annex-settings-title">
+      <div className="panel-header"><div><h2 id="annex-settings-title">Anexos contratuais</h2><p>Desative um anexo para impedir que seus materiais sejam selecionados em Entrada de materiais.</p></div><span className="annex-settings-count">{annexOptions.length} anexos</span></div>
+      {annexSettingsError && <FeedbackMessage onRetry={() => void loadMaterials()}>{annexSettingsError}</FeedbackMessage>}
+      {!annexSettingsLoaded && !annexSettingsError ? <p className="annex-settings-loading">Carregando situação dos anexos...</p> : null}
+      {annexSettingsLoaded && <div className="annex-settings-grid">{annexOptions.map((annex) => {
+        const active = annexSettings.find((setting) => setting.annex_number === annex)?.active ?? true;
+        const count = materials.filter((material) => materialAnnexNumber(material) === annex).length;
+        const saving = savingAnnex === annex;
+        return <label className={`annex-setting-card ${active ? "is-active" : "is-inactive"}`} key={annex}>
+          <input type="checkbox" checked={active} disabled={Boolean(savingAnnex)} onChange={(event) => void updateAnnexStatus(annex, event.target.checked)} aria-label={`${active ? "Desativar" : "Ativar"} ${contractAnnexLabel(annex)}`} />
+          <span className="annex-setting-copy"><strong>{contractAnnexLabel(annex)}</strong><small>{count} material(is) no catálogo</small></span>
+          <span className={`status-pill ${active ? "success" : "danger"}`}>{saving ? "Salvando..." : active ? "Ativo" : "Desativado"}</span>
+        </label>;
+      })}</div>}
+    </section>
     <section className="module-toolbar"><div className="module-search"><Search size={17} /><input aria-label="Buscar material por nome" value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Buscar material por nome" /></div><select aria-label="Filtrar por grupo de materiais" value={typeFilter} onChange={(event) => setTypeFilter(event.target.value)}><option value="all">Todos os tipos</option><option value="EPI_EPC">EPIs e EPCs</option><option value="FERRAMENTAL">Ferramentais</option></select><select aria-label="Filtrar situação do cadastro" value={statusFilter} onChange={(event) => setStatusFilter(event.target.value)}><option value="all">Todos os cadastros</option><option value="active">Ativos</option><option value="inactive">Inativos</option></select><select aria-label="Filtrar materiais por anexo" value={annexFilter} onChange={(event) => setAnnexFilter(event.target.value)}><option value="all">Todos os anexos</option>{annexOptions.map((annex) => <option key={annex} value={annex}>{CONTRACT_ANNEX_LABELS[annex] ? `${CONTRACT_ANNEX_LABELS[annex]} · Anexo ${annex}` : `Anexo ${annex}`}</option>)}</select></section>
     <section className="module-summary"><div><strong>{materials.filter((item) => item.status === "active").length}</strong><span>materiais ativos</span></div><div><strong>{materials.filter((item) => item.status === "active" && item.type === "EPI").length}</strong><span>EPIs ativos</span></div><div><strong>{materials.filter((item) => item.status === "active" && item.type === "EPC").length}</strong><span>EPCs ativos</span></div><div><strong>{materials.filter((item) => item.status === "active" && item.type === "FERRAMENTAL").length}</strong><span>ferramentais ativos</span></div></section>
     {!showForm && <>
@@ -350,7 +423,7 @@ export default function MaterialsPage() {
       })}</tbody></table>{!filtered.length && <div className="empty-state"><ShieldCheck size={27} /><strong>Nenhum material encontrado</strong><span>Ajuste os filtros ou cadastre o primeiro material.</span></div>}</div>}</section>
       {filtered.length > pageSize && <nav className="pagination-controls" aria-label="Paginação"><button className="secondary-button" onClick={() => setPage((current) => Math.max(1, current - 1))} disabled={page === 1}>Anterior</button><span>Mostrando {(page - 1) * pageSize + 1}–{Math.min(page * pageSize, filtered.length)} de {filtered.length} · Página {page} de {pageCount}</span><button className="secondary-button" onClick={() => setPage((current) => Math.min(pageCount, current + 1))} disabled={page === pageCount}>Próxima</button></nav>}
     </>}
-    {showForm && <div className="modal-backdrop"><section className="modal-card material-edit-modal" role="dialog" aria-modal="true" aria-label="Cadastro de material"><div className="modal-header"><div><p className="eyebrow">{editingId ? "ATUALIZAR CADASTRO" : "NOVO CADASTRO"}</p><h2>{editingId ? "Editar material" : "Cadastrar material"}</h2></div><button type="button" className="close-modal" onClick={() => setShowForm(false)} aria-label="Fechar"><X size={19} /></button></div><form className="material-form" onSubmit={saveMaterial}><div className="form-grid"><label>Nome do material<input value={form.name} onChange={(event) => updateMaterialName(event.target.value)} placeholder="Ex.: Capacete Classe B" required /></label></div><div className="form-grid three"><label>Tipo<select value={form.type} onChange={(event) => updateField("type", event.target.value)}><option value="EPI">EPI</option><option value="EPC">EPC</option><option value="FERRAMENTAL">Ferramental</option></select></label><label>Unidade<select value={form.unit} onChange={(event) => updateField("unit", event.target.value)} required>{form.unit && !STANDARD_UNITS.some((unit) => unit.value === form.unit) && <option value={form.unit}>{form.unit} (cadastro atual)</option>}{STANDARD_UNITS.map((unit) => <option key={unit.value} value={unit.value}>{unit.label}</option>)}</select></label><label>Tamanho / numeração<select value={form.size} onChange={(event) => updateField("size", event.target.value)}>{sizeOptions.map((size) => <option key={size || "not-applicable"} value={size}>{size || "N/A"}{size && !getMaterialSizeOptions(form.name).includes(size) ? " (cadastro atual)" : ""}</option>)}</select></label><label>Estoque mínimo<input type="number" min="0" value={form.minimum_stock} onChange={(event) => updateField("minimum_stock", event.target.value)} required /></label></div><div className="form-grid three"><label>Vida útil (meses)<input type="number" min="0" value={form.useful_life_months} onChange={(event) => updateField("useful_life_months", event.target.value)} /></label><label>Troca prevista<select value={form.replacement_interval_days} onChange={(event) => updateField("replacement_interval_days", event.target.value)}><option value="">Não definida</option><option value="30">30 dias</option><option value="60">60 dias</option><option value="90">90 dias</option></select></label></div>
+    {showForm && <div className="modal-backdrop"><section className="modal-card material-edit-modal" role="dialog" aria-modal="true" aria-label="Cadastro de material"><div className="modal-header"><div><p className="eyebrow">{editingId ? "ATUALIZAR CADASTRO" : "NOVO CADASTRO"}</p><h2>{editingId ? "Editar material" : "Cadastrar material"}</h2></div><button type="button" className="close-modal" onClick={() => setShowForm(false)} aria-label="Fechar"><X size={19} /></button></div><form className="material-form" onSubmit={saveMaterial}><div className="form-grid"><label>Nome do material<input value={form.name} onChange={(event) => updateMaterialName(event.target.value)} placeholder="Ex.: Capacete Classe B" required /></label></div><div className="form-grid three"><label>Tipo<select value={form.type} onChange={(event) => updateField("type", event.target.value)}><option value="EPI">EPI</option><option value="EPC">EPC</option><option value="FERRAMENTAL">Ferramental</option></select></label><label>Unidade<select value={form.unit} onChange={(event) => updateField("unit", event.target.value)} required>{form.unit && !STANDARD_UNITS.some((unit) => unit.value === form.unit) && <option value={form.unit}>{form.unit} (cadastro atual)</option>}{STANDARD_UNITS.map((unit) => <option key={unit.value} value={unit.value}>{unit.label}</option>)}</select></label><label>Tamanho / numeração<select value={form.size} onChange={(event) => updateField("size", event.target.value)}>{sizeOptions.map((size) => <option key={size || "not-applicable"} value={size}>{size || "N/A"}{size && !getMaterialSizeOptions(form.name).includes(size) ? " (cadastro atual)" : ""}</option>)}</select></label><label>Estoque mínimo<input type="number" min="0" value={form.minimum_stock} onChange={(event) => updateField("minimum_stock", event.target.value)} required /></label></div><div className="form-grid two"><label>Vida útil (meses)<input type="number" min="0" value={form.useful_life_months} onChange={(event) => updateField("useful_life_months", event.target.value)} /></label><label>Troca prevista<select value={form.replacement_interval_days} onChange={(event) => updateField("replacement_interval_days", event.target.value)}><option value="">Não definida</option><option value="30">30 dias</option><option value="60">60 dias</option><option value="90">90 dias</option></select></label></div>
 <div className="material-compliance-fields"><label className="checkbox-field"><input type="checkbox" checked={form.ca_required} onChange={(event) => updateField("ca_required", event.target.checked)} disabled={form.type !== "EPI"} /> Controle de CA obrigatório</label><label className="checkbox-field"><input type="checkbox" checked={form.test_required} onChange={(event) => updateField("test_required", event.target.checked)} /> Material ensaiável</label>{form.test_required && <><label>Tipo de ensaio<select value={form.test_type} onChange={(event) => updateField("test_type", event.target.value)}><option value="dielectric">Elétrico/dielétrico</option><option value="calibration">Calibração</option><option value="operational">Operacional</option><option value="inspection">Inspeção</option><option value="other">Outro</option></select></label><label>Periodicidade<select value={form.test_interval_months} onChange={(event) => updateField("test_interval_months", event.target.value)}><option value="6">A cada 6 meses</option><option value="12">A cada 12 meses</option></select></label><label className="checkbox-field"><input type="checkbox" checked={form.report_required} onChange={(event) => updateField("report_required", event.target.checked)} /> Exigir número do laudo</label><label className="checkbox-field"><input type="checkbox" checked={form.art_required} onChange={(event) => updateField("art_required", event.target.checked)} /> Exigir ART</label></>}</div><p className="muted-cell">Número e validade do CA são registrados por lote na Entrada de materiais.</p><div className="form-grid three"><label>Marca<input value={form.brand} onChange={(event) => updateField("brand", event.target.value)} /></label><label>Fabricante<input value={form.manufacturer} onChange={(event) => updateField("manufacturer", event.target.value)} /></label><label>Modelo<input value={form.model} onChange={(event) => updateField("model", event.target.value)} /></label></div><label>Localização no estoque<input value={form.location} onChange={(event) => updateField("location", event.target.value)} placeholder="Ex.: Almoxarifado A" /></label><label>Descrição<textarea value={form.description} onChange={(event) => updateField("description", event.target.value)} rows={2} /></label><label>Observações<textarea value={form.notes} onChange={(event) => updateField("notes", event.target.value)} rows={2} /></label>{editingId && <label>Status<select value={form.status} onChange={(event) => updateField("status", event.target.value)}><option value="active">Ativo</option><option value="inactive">Inativo</option></select></label>}{error && <p className="login-error">{error}</p>}<div className="modal-actions"><button type="button" className="secondary-button" onClick={() => setShowForm(false)}>Cancelar</button><button className="primary-button" disabled={saving}>{saving ? "Salvando..." : editingId ? "Salvar alterações" : "Cadastrar material"}<Check size={16} /></button></div></form></section></div>}
   </main>;
 }
