@@ -2193,11 +2193,15 @@ body{max-width:100%;overflow-x:hidden;}
 .material-ca-lookup{display:grid;gap:11px;padding:13px 14px;border:1px solid #e2e7f0;border-radius:10px;background:#f8f9fc;color:#65728a;font-size:11px;line-height:1.45;}
 .material-ca-lookup.found{border-color:#cfe7d8;background:#f6fcf8;}
 .material-ca-lookup.not-found,.material-ca-lookup.error{border-color:#f0d8c2;background:#fffaf4;}
+.material-ca-lookup.found.danger{border-color:#f0d8d5;background:#fffaf9;}
+.material-ca-lookup.found.warning{border-color:#f0e0c3;background:#fffdf8;}
 .material-ca-lookup-heading{display:flex;align-items:center;gap:8px;color:#344057;}
 .material-ca-lookup-heading svg{flex:0 0 auto;color:#7762d6;}
 .material-ca-lookup.found .material-ca-lookup-heading svg{color:#27805a;}
 .material-ca-lookup-heading strong{font-size:11px;}
 .material-ca-status{margin-left:auto;padding:4px 8px;border-radius:999px;background:#e5f5eb;color:#27805a;font-size:10px;font-weight:700;}
+.material-ca-status.danger{background:#ffefed;color:#c64c43;}
+.material-ca-status.warning{background:#fff3df;color:#a96a10;}
 .material-ca-lookup-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px 14px;margin:0;}
 .material-ca-lookup-grid>div{min-width:0;}
 .material-ca-lookup-grid dt{color:#929db0;font-size:9px;font-weight:700;letter-spacing:.35px;text-transform:uppercase;}
@@ -4675,7 +4679,9 @@ html,body{max-width:100%;overflow-x:hidden}
 .entry-ca-fields-intro strong{color:#354159;font-size:12px}
 .entry-ca-fields-intro span,.entry-ca-lot-card small{color:#8994a8;font-size:10px;line-height:1.45}
 .entry-ca-fields-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:10px}
-.entry-ca-lot-card{display:grid;align-content:start;gap:9px;padding:12px;border:1px solid #e8ebf2;border-radius:8px;background:#fff}
+.entry-ca-lot-card{display:grid;grid-column:1/-1;align-content:start;gap:9px;padding:12px;border:1px solid #e8ebf2;border-radius:8px;background:#fff}
+.entry-ca-certificate{margin-top:2px}
+.entry-ca-certificate .material-ca-lookup-heading{flex-wrap:wrap}
 .entry-ca-lot-card>strong{font-size:11px;color:#354159}
 .entry-ca-lot-card label{display:grid;gap:6px;color:#536078;font-size:11px;font-weight:600}
 .entry-ca-lot-card input{width:100%;min-width:0;border:1px solid #e2e6ee;border-radius:8px;padding:10px 11px;background:#fff;color:var(--ink)}

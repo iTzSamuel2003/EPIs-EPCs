@@ -51,6 +51,22 @@ type EntryItem = {
   test_expires_at: string;
   test_report_number: string;
 };
+type CaCertificate = {
+  ca_number: string;
+  status: string | null;
+  valid_until: string | null;
+  process_number: string | null;
+  manufacturer_document: string | null;
+  manufacturer_name: string | null;
+  equipment_name: string | null;
+  equipment_description: string | null;
+  brand: string | null;
+  reference: string | null;
+  standard: string | null;
+  color: string | null;
+  synced_at: string;
+};
+type CaLookupStatus = "loading" | "found" | "not-found" | "error";
 const NEW_NUMBER_VARIANT = "__new_number_variant__";
 const newItem = (): EntryItem => ({
   material_id: "",
@@ -85,13 +101,48 @@ function normalizedNumber(value: string) {
   const parsed = Number(trimmed);
   return Number.isSafeInteger(parsed) && parsed > 0 ? String(parsed) : "";
 }
+function formatCertificateDate(value: string | null) {
+  return value
+    ? new Date(`${value}T00:00:00`).toLocaleDateString("pt-BR")
+    : "Não informada";
+}
+function certificateSituation(certificate: CaCertificate) {
+  const normalizedStatus = (certificate.status ?? "")
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLocaleLowerCase("pt-BR");
+  if (
+    normalizedStatus.includes("cancel") ||
+    normalizedStatus.includes("suspens") ||
+    normalizedStatus.includes("revog") ||
+    normalizedStatus.includes("inval")
+  )
+    return { label: certificate.status || "Cancelado ou suspenso", tone: "danger" };
+  if (certificate.valid_until && certificate.valid_until < localDateValue())
+    return { label: "Vencido", tone: "danger" };
+  if (normalizedStatus.includes("venc"))
+    return { label: certificate.status || "Vencido", tone: "danger" };
+  if (
+    certificate.valid_until ||
+    normalizedStatus.includes("valid") ||
+    normalizedStatus.includes("ativ")
+  )
+    return { label: "Válido", tone: "success" };
+  return {
+    label: certificate.status || "Situação não informada",
+    tone: "warning",
+  };
+}
 
 export default function EntriesPage() {
   const [materials, setMaterials] = useState<MaterialOption[]>([]);
   const [variants, setVariants] = useState<MaterialVariant[]>([]);
   const [items, setItems] = useState<EntryItem[]>([newItem()]);
   const [caLookupStatus, setCaLookupStatus] = useState<
-    Record<number, "loading" | "found" | "not-found" | "error">
+    Record<string, CaLookupStatus>
+  >({});
+  const [caCertificates, setCaCertificates] = useState<
+    Record<string, CaCertificate>
   >({});
   const [materialSuggestionsOpen, setMaterialSuggestionsOpen] = useState<
     number | null
@@ -216,37 +267,44 @@ export default function EntriesPage() {
           : item,
       ),
     );
-    setCaLookupStatus((current) => {
-      const next = { ...current };
-      delete next[index];
-      return next;
-    });
   }
 
   async function lookupCa(index: number) {
     const caNumber = items[index]?.ca_number.trim();
     if (!caNumber) return;
-    setCaLookupStatus((current) => ({ ...current, [index]: "loading" }));
+    setCaLookupStatus((current) => ({ ...current, [caNumber]: "loading" }));
+    setCaCertificates((current) => {
+      const next = { ...current };
+      delete next[caNumber];
+      return next;
+    });
     try {
       const { data, error: lookupError } = await createClient()
         .from("ca_certificates")
-        .select("valid_until")
+        .select(
+          "ca_number,status,valid_until,process_number,manufacturer_document,manufacturer_name,equipment_name,equipment_description,brand,reference,standard,color,synced_at",
+        )
         .eq("ca_number", caNumber)
         .maybeSingle();
       if (lookupError) throw lookupError;
-      if (data?.valid_until) {
+      if (!data) {
+        setCaLookupStatus((current) => ({ ...current, [caNumber]: "not-found" }));
+        return;
+      }
+      const certificate = data as CaCertificate;
+      setCaCertificates((current) => ({ ...current, [caNumber]: certificate }));
+      if (certificate.valid_until) {
         setItems((current) =>
           current.map((item, itemIndex) =>
             itemIndex === index && item.ca_number.trim() === caNumber
-              ? { ...item, ca_expires_at: data.valid_until ?? "" }
+              ? { ...item, ca_expires_at: certificate.valid_until ?? "" }
               : item,
           ),
         );
-        setCaLookupStatus((current) => ({ ...current, [index]: "found" }));
-      } else
-        setCaLookupStatus((current) => ({ ...current, [index]: "not-found" }));
+      }
+      setCaLookupStatus((current) => ({ ...current, [caNumber]: "found" }));
     } catch {
-      setCaLookupStatus((current) => ({ ...current, [index]: "error" }));
+      setCaLookupStatus((current) => ({ ...current, [caNumber]: "error" }));
     }
   }
 
@@ -974,6 +1032,12 @@ export default function EntriesPage() {
                   const selectedMaterial = materials.find(
                     (material) => material.id === item.material_id,
                   );
+                  const caNumber = item.ca_number.trim();
+                  const lookupStatus = caLookupStatus[caNumber];
+                  const certificate = caCertificates[caNumber];
+                  const certificateState = certificate
+                    ? certificateSituation(certificate)
+                    : null;
                   return (selectedMaterial?.type === "EPI" ||
                     selectedMaterial?.ca_required) ? (
                     <div className="entry-ca-lot-card" key={index}>
@@ -1013,16 +1077,47 @@ export default function EntriesPage() {
                         />
                       </label>
                       <small role="status">
-                        {caLookupStatus[index] === "loading"
+                        {lookupStatus === "loading"
                           ? "Consultando base sincronizada…"
-                          : caLookupStatus[index] === "found"
-                            ? "CA encontrado; validade oficial preenchida."
-                            : caLookupStatus[index] === "not-found"
+                          : lookupStatus === "found"
+                            ? certificate?.valid_until
+                              ? "CA localizado; dados do certificado carregados abaixo."
+                              : "CA localizado, mas sem validade oficial na base. Informe-a manualmente."
+                            : lookupStatus === "not-found"
                               ? "CA não encontrado; você pode informar a validade manualmente."
-                              : caLookupStatus[index] === "error"
+                              : lookupStatus === "error"
                                 ? "Consulta indisponível; você pode informar a validade manualmente."
-                                : "Ao sair do campo do CA, o sistema consulta a validade oficial."}
+                                : "Ao sair do campo, o sistema consulta o certificado e carrega os dados oficiais disponíveis."}
                       </small>
+                      {certificate && certificateState && (
+                        <div className={`material-ca-lookup found entry-ca-certificate ${certificateState.tone}`}>
+                          <div className="material-ca-lookup-heading">
+                            <strong>Dados do Certificado de Aprovação</strong>
+                            <span className={`material-ca-status ${certificateState.tone}`}>
+                              {certificateState.label}
+                            </span>
+                          </div>
+                          <dl className="material-ca-lookup-grid">
+                            <div><dt>Equipamento</dt><dd>{certificate.equipment_name || "Não informado"}</dd></div>
+                            <div><dt>Fabricante / CNPJ</dt><dd>
+                              {certificate.manufacturer_name || "Não informado"}
+                              {certificate.manufacturer_document ? ` · ${certificate.manufacturer_document}` : ""}
+                            </dd></div>
+                            <div><dt>Marca</dt><dd>{certificate.brand || "Não informada"}</dd></div>
+                            <div><dt>Referência</dt><dd>{certificate.reference || "Não informada"}</dd></div>
+                            <div><dt>Norma</dt><dd>{certificate.standard || "Não informada"}</dd></div>
+                            <div><dt>Processo</dt><dd>{certificate.process_number || "Não informado"}</dd></div>
+                            <div><dt>Validade oficial do CA</dt><dd>{formatCertificateDate(certificate.valid_until)}</dd></div>
+                            {certificate.color && <div><dt>Cor</dt><dd>{certificate.color}</dd></div>}
+                            <div className="material-ca-description">
+                              <dt>Descrição</dt><dd>{certificate.equipment_description || "Não informada."}</dd>
+                            </div>
+                          </dl>
+                          <small>
+                            Dados da base sincronizada em {new Date(certificate.synced_at).toLocaleString("pt-BR")}.
+                          </small>
+                        </div>
+                      )}
                     </div>
                   ) : null;
                 })}
