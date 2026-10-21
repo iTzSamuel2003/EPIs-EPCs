@@ -280,7 +280,7 @@ async function createPreDeliverySignedPdf(snapshot: Snapshot, signatureBytes: Ui
   y -= declarationHeight + 9;
 
   const signatureBoxWidth = 250;
-  const signatureBoxHeight = 80;
+  const signatureBoxHeight = 100;
   if (y - signatureBoxHeight < 58) { addPage(); }
   const signatureTop = y;
   page.drawLine({ start: { x: margin + 4, y: signatureTop - 46 }, end: { x: margin + signatureBoxWidth - 4, y: signatureTop - 46 }, thickness: 0.75, color: muted });
@@ -292,6 +292,7 @@ async function createPreDeliverySignedPdf(snapshot: Snapshot, signatureBytes: Ui
   page.drawText(pdfText(`CPF ${maskedCpf(signerCpf)} · Assinado em ${new Intl.DateTimeFormat("pt-BR", { dateStyle: "short", timeStyle: "short", timeZone: "America/Cuiaba" }).format(signedAt)}`), { x: margin + 4, y: signatureTop - 70, size: 6.5, font: regular, color: muted });
   page.drawText(pdfText("ASSINATURA ELETRÔNICA DO COLABORADOR"), { x: margin + signatureBoxWidth + 14, y: signatureTop - 30, size: 7.2, font: bold, color: ink, maxWidth: width - signatureBoxWidth - 14 });
   drawWrapped("A assinatura confirma o recebimento e a ciência sobre todos os itens listados nesta ficha.", margin + signatureBoxWidth + 14, signatureTop - 44, width - signatureBoxWidth - 14, 7, regular, muted, 9);
+  drawWrapped("O sistema registra o aceite, a identificação informada, a data/hora e os itens desta ficha para rastreabilidade do fornecimento de EPI, conforme NR-06, item 6.5.1(d). Esta assinatura eletrônica por link individual não utiliza certificado ICP-Brasil.", margin + signatureBoxWidth + 14, signatureTop - 64, width - signatureBoxWidth - 14, 6.1, regular, muted, 7.2);
   y = signatureTop - signatureBoxHeight - 9;
 
   page.drawText("MATERIAIS ENTREGUES", { x: margin, y, size: 9, font: bold, color: ink });
@@ -357,7 +358,7 @@ async function createSignedPdf(snapshot: Snapshot, signatureBytes: Uint8Array, s
     y = 794;
   }
 
-  function line(text: string, size = 10, isBold = false, gap = 14) {
+  function wrapPdfText(text: string, size: number, isBold = false) {
     const font = isBold ? bold : regular;
     const clean = renderText(text);
     const words = clean.split(" ").filter(Boolean);
@@ -371,6 +372,12 @@ async function createSignedPdf(snapshot: Snapshot, signatureBytes: Uint8Array, s
       } else current = candidate;
     }
     if (current) lines.push(current);
+    return lines;
+  }
+
+  function line(text: string, size = 10, isBold = false, gap = 14) {
+    const font = isBold ? bold : regular;
+    const lines = wrapPdfText(text, size, isBold);
     for (const value of lines) {
       if (y < 58) newPage();
       page.drawText(value, { x: margin, y, size, font, color: rgb(0.17, 0.22, 0.31), maxWidth: pageSize[0] - margin * 2 });
@@ -461,7 +468,7 @@ async function createSignedPdf(snapshot: Snapshot, signatureBytes: Uint8Array, s
     : "Declaro que acompanhei a devolução dos materiais relacionados e conferi as informações desta ficha. Eventual ocorrência ou solicitação de desconto será analisada separadamente e não implica desconto automático.";
   line(statement, 9, false, 14);
   y -= 10;
-  if (y < 178) newPage();
+  if (y < 220) newPage();
   page.drawLine({ start: { x: margin, y: y - 62 }, end: { x: margin + 238, y: y - 62 }, thickness: 0.8, color: rgb(0.4, 0.45, 0.53) });
   const imageScale = Math.min(220 / signature.width, 58 / signature.height);
   const imageWidth = signature.width * imageScale;
@@ -471,8 +478,19 @@ async function createSignedPdf(snapshot: Snapshot, signatureBytes: Uint8Array, s
   page.drawText(signerName, { x: margin, y: y - 92, size: 9, font: bold, color: rgb(0.17, 0.22, 0.31) });
   page.drawText(`CPF ${maskedCpf(signerCpf)}`, { x: margin, y: y - 106, size: 8, font: regular, color: rgb(0.38, 0.43, 0.5) });
   page.drawText(`Assinado em ${new Intl.DateTimeFormat("pt-BR", { dateStyle: "short", timeStyle: "short", timeZone: "America/Cuiaba" }).format(signedAt)}`, { x: margin, y: y - 119, size: 8, font: regular, color: rgb(0.38, 0.43, 0.5) });
-  page.drawText(`Responsável que enviou o link: ${renderText(snapshot.responsible_name)}`, { x: margin, y: y - 134, size: 8, font: regular, color: rgb(0.38, 0.43, 0.5), maxWidth: pageSize[0] - margin * 2 });
-  page.drawText(`Registro EPIS+ ${linkId} - assinatura eletrônica por link de uso único; não é certificado ICP-Brasil.`, { x: margin, y: y - 149, size: 7, font: regular, color: rgb(0.45, 0.49, 0.55), maxWidth: pageSize[0] - margin * 2 });
+  const signatureNotice = snapshot.type === "delivery"
+    ? `Registro EPIS+ ${linkId}. O aceite, a identificação informada, a data/hora e os itens desta ficha ficam registrados para rastreabilidade do fornecimento de EPI, conforme NR-06, item 6.5.1(d). Assinatura eletrônica por link individual de uso único; não utiliza certificado ICP-Brasil.`
+    : `Registro EPIS+ ${linkId}. O aceite, a identificação informada, a data/hora e os itens desta ficha ficam registrados para rastreabilidade da devolução. Assinatura eletrônica por link individual de uso único; não utiliza certificado ICP-Brasil.`;
+  let footerY = y - 134;
+  for (const value of wrapPdfText(`Responsável que enviou o link: ${renderText(snapshot.responsible_name)}`, 8)) {
+    page.drawText(value, { x: margin, y: footerY, size: 8, font: regular, color: rgb(0.38, 0.43, 0.5) });
+    footerY -= 10;
+  }
+  footerY -= 4;
+  for (const value of wrapPdfText(signatureNotice, 7)) {
+    page.drawText(value, { x: margin, y: footerY, size: 7, font: regular, color: rgb(0.45, 0.49, 0.55) });
+    footerY -= 9;
+  }
   return document.save();
 }
 
