@@ -1,6 +1,6 @@
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 import { createClient } from "@supabase/supabase-js";
-import { PDFDocument, StandardFonts, rgb } from "pdf-lib";
+import { PDFDocument, PDFImage, StandardFonts, rgb } from "pdf-lib";
 
 const productionOrigin = "https://epis-epcs.vercel.app";
 const allowedOrigins = new Set([productionOrigin, "http://localhost:3000", "http://127.0.0.1:3000"]);
@@ -118,7 +118,213 @@ function renderText(value: unknown) {
   return String(value ?? "").replace(/[\r\n]+/g, " ").replace(/\s+/g, " ").trim();
 }
 
+async function createPreDeliverySignedPdf(snapshot: Snapshot, signatureBytes: Uint8Array, signerName: string, signerCpf: string, signedAt: Date, linkId: string) {
+  const document = await PDFDocument.create();
+  document.setTitle(`Ficha de EPI - ${snapshot.employee_name}`);
+  document.setSubject(`Recebimento de EPI com assinatura eletrônica. Registro ${linkId}.`);
+  document.setCreator("EPIS+ Gestão inteligente");
+  const regular = await document.embedFont(StandardFonts.Helvetica);
+  const bold = await document.embedFont(StandardFonts.HelveticaBold);
+  const signature = await document.embedPng(signatureBytes);
+  const pageSize: [number, number] = [595.28, 841.89];
+  const margin = 42;
+  const width = pageSize[0] - margin * 2;
+  const gold = rgb(0.82, 0.79, 0.03);
+  const ink = rgb(0.14, 0.18, 0.25);
+  const muted = rgb(0.36, 0.4, 0.47);
+  const border = rgb(0.55, 0.58, 0.6);
+  let page = document.addPage(pageSize);
+  let y = 0;
+  let logo: PDFImage | null = null;
+
+  try {
+    if (snapshot.organization_id && snapshot.organization_logo_url) {
+      const logoUrl = new URL(snapshot.organization_logo_url);
+      const expectedPath = `/storage/v1/object/public/organization-logos/${snapshot.organization_id}/logo`;
+      if (logoUrl.origin === new URL(supabaseUrl).origin && logoUrl.pathname === expectedPath) {
+        const { data: file, error } = await admin.storage.from("organization-logos").download(`${snapshot.organization_id}/logo`);
+        if (!error && file && file.size <= 2 * 1024 * 1024) {
+          const bytes = new Uint8Array(await file.arrayBuffer());
+          const mime = file.type.split(";")[0].trim().toLowerCase();
+          logo = mime === "image/png" ? await document.embedPng(bytes) : mime === "image/jpeg" ? await document.embedJpg(bytes) : null;
+        }
+      }
+    }
+  } catch { /* A logo indisponível não impede a emissão do documento. */ }
+
+  function drawHeader(target: typeof page) {
+    const top = pageSize[1];
+    target.drawRectangle({ x: 0, y: top - 97, width: pageSize[0], height: 97, color: rgb(1, 0.998, 0.96) });
+    target.drawRectangle({ x: 0, y: top - 101, width: pageSize[0], height: 5, color: gold });
+    target.drawText(renderText(snapshot.organization_name).toUpperCase(), { x: margin, y: top - 35, size: 11, font: bold, color: ink, maxWidth: width - 160 });
+    target.drawText("FICHA DE EPI - EQUIPAMENTO DE PROTEÇÃO INDIVIDUAL", { x: margin, y: top - 60, size: 12, font: bold, color: ink, maxWidth: width - 160 });
+    target.drawText("RECIBO DE ENTREGA E RESPONSABILIDADE", { x: margin, y: top - 78, size: 8, font: regular, color: muted });
+    if (logo) {
+      const scale = Math.min(138 / logo.width, 57 / logo.height);
+      const imageWidth = logo.width * scale;
+      const imageHeight = logo.height * scale;
+      target.drawImage(logo, { x: pageSize[0] - margin - imageWidth, y: top - 75 + (57 - imageHeight) / 2, width: imageWidth, height: imageHeight });
+    }
+  }
+
+  function addPage() {
+    page = document.addPage(pageSize);
+    drawHeader(page);
+    y = pageSize[1] - 116;
+  }
+
+  function wrappedLines(text: string, font: typeof regular, size: number, maxWidth: number) {
+    const result: string[] = [];
+    for (const paragraph of String(text ?? "").replace(/\r/g, "").split("\n")) {
+      const words = paragraph.trim().split(/\s+/).filter(Boolean);
+      if (!words.length) { result.push(""); continue; }
+      let current = "";
+      for (const word of words) {
+        const candidate = current ? `${current} ${word}` : word;
+        if (current && font.widthOfTextAtSize(candidate, size) > maxWidth) {
+          result.push(current);
+          current = word;
+        } else current = candidate;
+      }
+      if (current) result.push(current);
+    }
+    return result;
+  }
+
+  function drawWrapped(text: string, x: number, top: number, maxWidth: number, size: number, font: typeof regular, color = ink, lineHeight = size + 2) {
+    const lines = wrappedLines(text, font, size, maxWidth);
+    lines.forEach((value, index) => {
+      if (value) page.drawText(value, { x, y: top - index * lineHeight, size, font, color, maxWidth });
+    });
+    return lines.length * lineHeight;
+  }
+
+  function drawMetaCell(label: string, value: string, x: number, top: number, cellWidth: number) {
+    page.drawText(label.toUpperCase(), { x, y: top - 7, size: 6.2, font: bold, color: muted, maxWidth: cellWidth });
+    const valueHeight = drawWrapped(value || "Não informada", x, top - 20, cellWidth, 8, bold, ink, 9.5);
+    return Math.max(31, 23 + valueHeight);
+  }
+
+  function drawTableHeader() {
+    const labels = ["DATA", "DESCRIÇÃO DO EQUIPAMENTO", "QUANT.", "TAM.", "Nº CA / ENSAIO", "ASSINATURA"];
+    const widths = [54, 160, 48, 40, 130, 79];
+    const height = 27;
+    let x = margin;
+    labels.forEach((label, index) => {
+      page.drawRectangle({ x, y: y - height, width: widths[index], height, color: rgb(0.95, 0.94, 0.8), borderColor: border, borderWidth: 0.65 });
+      drawWrapped(label, x + 4, y - 9, widths[index] - 8, 6.4, bold, ink, 7.2);
+      x += widths[index];
+    });
+    y -= height;
+  }
+
+  function drawTableRow(values: string[]) {
+    const widths = [54, 160, 48, 40, 130, 79];
+    const cellLines = values.map((value, index) => wrappedLines(value, regular, 6.5, widths[index] - 8));
+    const rowHeight = Math.max(32, ...cellLines.map((lines) => lines.length * 8 + 10));
+    if (y - rowHeight < 58) { addPage(); drawTableHeader(); }
+    let x = margin;
+    values.forEach((value, index) => {
+      page.drawRectangle({ x, y: y - rowHeight, width: widths[index], height: rowHeight, color: rgb(1, 1, 1), borderColor: border, borderWidth: 0.55 });
+      drawWrapped(value, x + 4, y - 10, widths[index] - 8, 6.5, regular, ink, 8);
+      x += widths[index];
+    });
+    y -= rowHeight;
+  }
+
+  drawHeader(page);
+  y = pageSize[1] - 116;
+  const metadata = [
+    ["Nº DE REGISTRO / MATRÍCULA", snapshot.employee_registration || "Não informada"],
+    ["COLABORADOR", snapshot.employee_name],
+    ["DATA DE ADMISSÃO", dateLabel(snapshot.employee_admission_date)],
+    ...(snapshot.employee_termination_date ? [["DATA DE DESLIGAMENTO", dateLabel(snapshot.employee_termination_date)]] : []),
+    ["CARGO / FUNÇÃO", snapshot.employee_function || "Não informada"],
+    ["SETOR", snapshot.employee_department || "Não informado"],
+    ["DATA DA ENTREGA", dateLabel(snapshot.date)],
+    ["MOTIVO", formatReason(snapshot.reason)],
+    ["RESPONSÁVEL PELO CONTROLE", snapshot.responsible_name],
+  ];
+  const columns = 3;
+  const cellGap = 10;
+  const cellWidth = (width - cellGap * (columns - 1)) / columns;
+  for (let index = 0; index < metadata.length; index += columns) {
+    const row = metadata.slice(index, index + columns);
+    const rowHeights = row.map(([label, value], column) => drawMetaCell(label, value, margin + column * (cellWidth + cellGap), y, cellWidth));
+    y -= Math.max(...rowHeights) + 3;
+  }
+  y -= 5;
+
+  const declaration = "Declaro que recebi os equipamentos de proteção relacionados nesta ficha e que fui orientado(a) sobre seu uso, finalidade, limitações, guarda e conservação, conforme as medidas de prevenção da organização e as NR-06 e NR-01. Comprometo-me a utilizar corretamente os equipamentos, seguir as orientações recebidas, comunicar danos ou alterações e devolvê-los quando solicitado, inclusive em caso de substituição, mudança de função ou desligamento.\nEstou ciente de que situações de perda, extravio, dano ou uso inadequado serão apuradas individualmente. Qualquer ressarcimento ou desconto dependerá da apuração e dos requisitos legais aplicáveis; esta declaração, por si só, não autoriza desconto automático.";
+  const declarationLines = wrappedLines(declaration, regular, 7.2, width - 18);
+  const declarationHeight = declarationLines.length * 9.5 + 26;
+  page.drawRectangle({ x: margin, y: y - declarationHeight, width, height: declarationHeight, color: rgb(0.985, 0.985, 0.975), borderColor: border, borderWidth: 0.7 });
+  page.drawText("DECLARAÇÃO DE RECEBIMENTO E RESPONSABILIDADE", { x: margin + 9, y: y - 13, size: 7.3, font: bold, color: ink });
+  drawWrapped(declaration, margin + 9, y - 26, width - 18, 7.2, regular, ink, 9.5);
+  y -= declarationHeight + 9;
+
+  const signatureBoxWidth = 250;
+  const signatureBoxHeight = 76;
+  if (y - signatureBoxHeight < 58) { addPage(); }
+  const signatureTop = y;
+  page.drawLine({ start: { x: margin + 4, y: signatureTop - 48 }, end: { x: margin + signatureBoxWidth - 4, y: signatureTop - 48 }, thickness: 0.75, color: muted });
+  const signatureScale = Math.min(220 / signature.width, 39 / signature.height);
+  const signatureWidth = signature.width * signatureScale;
+  const signatureHeight = signature.height * signatureScale;
+  page.drawImage(signature, { x: margin + (signatureBoxWidth - signatureWidth) / 2, y: signatureTop - signatureHeight - 45, width: signatureWidth, height: signatureHeight });
+  page.drawText(renderText(signerName), { x: margin + 4, y: signatureTop - 61, size: 8, font: bold, color: ink });
+  page.drawText(`CPF ${maskedCpf(signerCpf)} · Assinado em ${new Intl.DateTimeFormat("pt-BR", { dateStyle: "short", timeStyle: "short", timeZone: "America/Cuiaba" }).format(signedAt)}`, { x: margin + 4, y: signatureTop - 72, size: 6.5, font: regular, color: muted });
+  page.drawText("ASSINATURA ELETRÔNICA DO COLABORADOR", { x: margin + signatureBoxWidth + 14, y: signatureTop - 30, size: 7.2, font: bold, color: ink, maxWidth: width - signatureBoxWidth - 14 });
+  drawWrapped("A assinatura confirma o recebimento e a ciência sobre todos os itens listados nesta ficha.", margin + signatureBoxWidth + 14, signatureTop - 44, width - signatureBoxWidth - 14, 7, regular, muted, 9);
+  y = signatureTop - signatureBoxHeight - 9;
+
+  page.drawText("MATERIAIS ENTREGUES", { x: margin, y, size: 9, font: bold, color: ink });
+  y -= 10;
+  drawTableHeader();
+  for (const value of snapshot.items) {
+    const item = object(value);
+    const units = Array.isArray(item.units) ? item.units.map(object) : [];
+    const compliance = [
+      item.ca_number ? `CA ${renderText(item.ca_number)}${item.ca_expires_at ? ` · validade ${dateLabel(item.ca_expires_at)}` : ""}` : "",
+      ...units.flatMap((unit) => [
+        unit.test_number ? `Ensaio ${renderText(unit.test_number)}` : "",
+        unit.test_report_number ? `Laudo ${renderText(unit.test_report_number)}` : "",
+        unit.test_performed_at ? `Realizado ${dateLabel(unit.test_performed_at)}` : "",
+        unit.test_expires_at ? `Ensaio válido até ${dateLabel(unit.test_expires_at)}` : unit.valid_until ? `Válido até ${dateLabel(unit.valid_until)}` : "",
+      ]),
+    ].filter(Boolean).join("\n");
+    drawTableRow([
+      dateLabel(snapshot.date),
+      renderText(item.material) || "Material",
+      `${Number(item.quantity) || 0} ${renderText(item.unit) || "un."}`,
+      renderText(item.size) || "—",
+      compliance || "—",
+      "ASSINADO NESTA FICHA",
+    ]);
+  }
+
+  if (snapshot.notes) {
+    y -= 8;
+    page.drawText("OBSERVAÇÕES", { x: margin, y, size: 7, font: bold, color: ink });
+    y -= 11;
+    y -= drawWrapped(String(snapshot.notes), margin, y, width, 7, regular, ink, 9) + 4;
+  }
+
+  const isDsx = normalizeName(snapshot.organization_name).includes("dsx");
+  const address = snapshot.organization_address || (isDsx ? "Rua Harrison de Figueiredo, 132, Jd. Sta. Maria, 79833-552, Dourados-MS" : "");
+  const phone = snapshot.organization_phone || (isDsx ? "+55 67 3425-2324" : "");
+  const website = isDsx ? "www.dsxenergia.com.br" : "";
+  const footer = [snapshot.organization_cnpj ? `CNPJ ${snapshot.organization_cnpj}` : "", address, phone, website].filter(Boolean).join("  |  ");
+  for (const [index, currentPage] of document.getPages().entries()) {
+    currentPage.drawLine({ start: { x: margin, y: 38 }, end: { x: pageSize[0] - margin, y: 38 }, thickness: 2.5, color: gold });
+    if (footer) currentPage.drawText(footer, { x: margin, y: 25, size: 6.1, font: regular, color: muted, maxWidth: width });
+    currentPage.drawText(`Registro ${linkId} · ${index + 1}/${document.getPageCount()} · assinatura por link de uso único; não utiliza certificado ICP-Brasil.`, { x: margin, y: 13, size: 5.5, font: regular, color: muted, maxWidth: width });
+  }
+  return document.save();
+}
+
 async function createSignedPdf(snapshot: Snapshot, signatureBytes: Uint8Array, signerName: string, signerCpf: string, signedAt: Date, linkId: string) {
+  if (snapshot.pre_delivery_signature) return createPreDeliverySignedPdf(snapshot, signatureBytes, signerName, signerCpf, signedAt, linkId);
   const document = await PDFDocument.create();
   document.setTitle(`${snapshot.pre_delivery_signature ? "Recibo de entrega e responsabilidade" : snapshot.type === "delivery" ? "Termo de entrega" : "Termo de devolução"} - ${snapshot.employee_name}`);
   document.setSubject(`Assinatura eletrônica por link de uso único. Registro ${linkId}.`);
@@ -354,10 +560,14 @@ Deno.serve(async (request) => {
   if (completeError || !completedAt) {
     await admin.storage.from("delivery-terms").remove([path]);
     const completionMessage = completeError?.message ?? "A ficha já foi assinada ou o link deixou de ser válido.";
+    console.error("Delivery signature finalization failed", { code: completeError?.code ?? null, message: completionMessage.slice(0, 240), link_id: link.id });
     if (/lote.*saldo|saldo.*lote|estoque insuficiente|plano de lotes/i.test(completionMessage)) {
       return respond({ error: "O saldo de um dos lotes mudou desde a criação da ficha. Nenhuma entrega foi registrada; solicite uma nova ficha ao responsável." }, 409, origin);
     }
-    return respond({ error: "A ficha já foi assinada ou o link deixou de ser válido. Atualize a página." }, 409, origin);
+    if (/link de assinatura inválido|link.*expirado|link.*utilizado|ficha.*não está mais pendente|ficha.*já foi assinada/i.test(completionMessage)) {
+      return respond({ error: "Esta ficha não está mais disponível para assinatura. Se você ainda não assinou, solicite ao responsável um novo link." }, 410, origin);
+    }
+    return respond({ error: "Não foi possível registrar a assinatura agora. Ela não foi salva e o estoque não foi baixado. Tente novamente em instantes; se o erro continuar, avise o responsável pelo controle." }, 500, origin);
   }
 
   return respond({ success: true, signed_at: completedAt }, 200, origin);
