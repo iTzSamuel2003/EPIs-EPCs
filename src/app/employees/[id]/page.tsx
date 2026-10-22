@@ -19,8 +19,8 @@ import { TermDocumentActions } from "@/components/term-document-actions";
 
 type Organization = { name: string; cnpj: string | null; logo_url: string | null; address: string | null; phone: string | null };
 type Employee = { id: string; registration: string | null; full_name: string; cpf: string; job_title: string | null; function_name: string | null; function_classification: string | null; department: string | null; unit: string | null; admission_date: string | null; termination_date: string | null; status: "active" | "away" | "terminated"; organization: Organization | null };
-type MaterialUnit = { unit_identifier: string; delivered_at: string | null; valid_until: string | null; ca_number: string | null; ca_expires_at: string | null; test_number: string | null; test_report_number: string | null; test_performed_at: string | null; test_expires_at: string | null };
-type Item = { id: string; quantity: number; returned: number; expected_replacement_at: string | null; material: { name: string; internal_code: string | null; unit: string; type: string } | null; variant: { name: string; size: string | null } | null; lot: { lot_number: string; ca_number: string | null; ca_expires_at: string | null } | null; units: MaterialUnit[]; delivery: { id: string; delivered_at: string; reason: string; notes: string | null; term_file_path: string | null; term_uploaded_at: string | null; term_signature_method: string | null; term_signed_at: string | null } | null };
+type MaterialUnit = { unit_identifier: string; delivered_at: string | null; valid_until: string | null; ca_number: string | null; ca_expires_at: string | null; test_number: string | null; test_report_number: string | null; test_performed_at: string | null };
+type Item = { id: string; quantity: number; returned: number; expected_replacement_at: string | null; test_performed_at: string | null; test_expires_at: string | null; material: { name: string; internal_code: string | null; unit: string; type: string } | null; variant: { name: string; size: string | null } | null; lot: { lot_number: string; ca_number: string | null; ca_expires_at: string | null; test_number: string | null; test_report_number: string | null; test_performed_at: string | null; test_expires_at: string | null } | null; units: MaterialUnit[]; delivery: { id: string; delivered_at: string; reason: string; notes: string | null; term_file_path: string | null; term_uploaded_at: string | null; term_signature_method: string | null; term_signed_at: string | null } | null };
 type Course = { id: string; name: string; provider: string | null; expires_at: string | null };
 type ReturnSheet = { id: string; returned_at: string; reason: string; term_file_path: string | null; term_signature_method: string | null; term_signed_at: string | null; items: Array<{ quantity: number; material: { name: string; unit: string } | null; variant: { name: string; size: string | null } | null }> };
 
@@ -36,12 +36,17 @@ function epiCaDetails(item: Item) {
     unit.test_number ? `Ensaio ${unit.test_number}` : "",
     unit.test_report_number ? `Laudo ${unit.test_report_number}` : "",
     unit.test_performed_at ? `realizado ${date(unit.test_performed_at)}` : "",
-    unit.test_expires_at ? `ensaio válido até ${date(unit.test_expires_at)}` : "",
   ].filter(Boolean));
   const certificate = item.lot?.ca_number
     ? `CA ${item.lot.ca_number}${item.lot.ca_expires_at ? ` · validade ${date(item.lot.ca_expires_at)}` : ""}`
     : "";
-  const details = [...new Set([...unitDetails, certificate].filter(Boolean))];
+  const lotTestDetails = [
+    item.lot?.test_number ? `Ensaio ${item.lot.test_number}` : "",
+    item.lot?.test_report_number ? `Laudo ${item.lot.test_report_number}` : "",
+    item.test_performed_at || item.lot?.test_performed_at ? `realizado ${date(item.test_performed_at || item.lot?.test_performed_at || null)}` : "",
+    item.test_expires_at || item.lot?.test_expires_at ? `ensaio válido até ${date(item.test_expires_at || item.lot?.test_expires_at || null)}` : "",
+  ];
+  const details = [...new Set([...unitDetails, ...lotTestDetails, certificate].filter(Boolean))];
   if (details.length) return details.join("; ");
   return item.material?.type === "EPI" ? "Não informado" : "Não se aplica";
 }
@@ -91,7 +96,7 @@ export default function EmployeeMaterialsPage() {
       const supabase = createClient();
       const [{ data: employeeData, error: employeeError }, { data: deliveryData, error: deliveryError }, { data: courseData, error: courseError }, { data: returnData, error: returnError }] = await Promise.all([
         supabase.from("employees").select("id,registration,full_name,cpf,job_title,function_name,function_classification,department,unit,admission_date,termination_date,status,organization:organizations(name,cnpj,logo_url,address,phone)").eq("id", id).single(),
-        supabase.from("delivery_items").select("id,quantity,expected_replacement_at,materials(name,internal_code,unit,type),material_lots(lot_number,ca_number,ca_expires_at),variant:material_variants(name,size),material_units(unit_identifier,delivered_at,valid_until,ca_number,ca_expires_at,test_number,test_report_number,test_performed_at,test_expires_at),deliveries!inner(id,delivered_at,reason,notes,employee_id,term_file_path,term_uploaded_at,term_signature_method,term_signed_at),return_items(quantity)").eq("deliveries.employee_id", id).order("created_at", { ascending: false }),
+        supabase.from("delivery_items").select("id,quantity,expected_replacement_at,test_performed_at,test_expires_at,materials(name,internal_code,unit,type),material_lots(lot_number,ca_number,ca_expires_at,test_number,test_report_number,test_performed_at,test_expires_at),variant:material_variants(name,size),material_units(unit_identifier,delivered_at,valid_until,ca_number,ca_expires_at,test_number,test_report_number,test_performed_at),deliveries!inner(id,delivered_at,reason,notes,employee_id,term_file_path,term_uploaded_at,term_signature_method,term_signed_at),return_items(quantity)").eq("deliveries.employee_id", id).order("created_at", { ascending: false }),
         supabase.from("employee_courses").select("id,name,provider,expires_at").eq("employee_id", id).order("expires_at", { ascending: true, nullsFirst: false }),
         supabase.from("returns").select("id,returned_at,reason,term_file_path,term_signature_method,term_signed_at,return_items(quantity,material:materials(name,unit),delivery_item:delivery_items(variant:material_variants(name,size)))").eq("employee_id", id).order("returned_at", { ascending: false }),
       ]);
@@ -105,7 +110,7 @@ export default function EmployeeMaterialsPage() {
         const units = (value.material_units ?? []) as MaterialUnit[];
         const material = value.materials as Item["material"];
 
-        return { id: String(value.id), quantity: Number(value.quantity), returned: ((value.return_items ?? []) as Array<Record<string, unknown>>).reduce((total, item) => total + Number(item.quantity || 0), 0), expected_replacement_at: value.expected_replacement_at as string | null, material, variant: value.variant as Item["variant"], lot: value.material_lots as Item["lot"], units, delivery: value.deliveries as Item["delivery"] };
+        return { id: String(value.id), quantity: Number(value.quantity), returned: ((value.return_items ?? []) as Array<Record<string, unknown>>).reduce((total, item) => total + Number(item.quantity || 0), 0), expected_replacement_at: value.expected_replacement_at as string | null, test_performed_at: value.test_performed_at as string | null, test_expires_at: value.test_expires_at as string | null, material, variant: value.variant as Item["variant"], lot: value.material_lots as Item["lot"], units, delivery: value.deliveries as Item["delivery"] };
       }));
       } catch (caught) {
         if (!cancelled) setError(friendlyError(caught, "Não foi possível carregar a ficha."));
@@ -179,10 +184,10 @@ export default function EmployeeMaterialsPage() {
           identifier: unit.unit_identifier,
           ca_number: unit.ca_number,
           ca_expires_at: unit.ca_expires_at,
-          test_number: unit.test_number,
-          test_report_number: unit.test_report_number,
-          test_performed_at: unit.test_performed_at,
-          test_expires_at: unit.test_expires_at,
+          test_number: unit.test_number || item.lot?.test_number || null,
+          test_report_number: unit.test_report_number || item.lot?.test_report_number || null,
+          test_performed_at: unit.test_performed_at || item.test_performed_at || item.lot?.test_performed_at || null,
+          test_expires_at: item.test_expires_at || item.lot?.test_expires_at || null,
         })),
       })),
     };

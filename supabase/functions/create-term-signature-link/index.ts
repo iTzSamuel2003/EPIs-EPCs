@@ -90,10 +90,10 @@ function mapDeliveryItem(value: unknown) {
     return {
       identifier: text(unit.unit_identifier),
       valid_until: text(unit.valid_until) || null,
-      test_performed_at: text(unit.test_performed_at) || null,
-      test_expires_at: text(unit.test_expires_at) || null,
-      test_number: text(unit.test_number) || null,
-      test_report_number: text(unit.test_report_number) || null,
+      test_performed_at: text(unit.test_performed_at) || text(item.test_performed_at) || text(lot.test_performed_at) || null,
+      test_expires_at: text(item.test_expires_at) || text(lot.test_expires_at) || null,
+      test_number: text(unit.test_number) || text(lot.test_number) || null,
+      test_report_number: text(unit.test_report_number) || text(lot.test_report_number) || null,
       ca_number: text(unit.ca_number) || null,
       ca_expires_at: text(unit.ca_expires_at) || null,
     };
@@ -237,7 +237,7 @@ Deno.serve(async (request) => {
   const select = recordType === "pending_delivery"
     ? "id,organization_id,employee_id,delivered_at,reason,notes,request_items,lot_plan,status,snapshot,employee:employees(full_name,registration,phone,job_title,function_name,department,admission_date,termination_date,status)"
     : recordType === "delivery"
-      ? "id,organization_id,employee_id,delivered_at,reason,notes,term_signed_at,employee:employees(full_name,registration,phone,job_title,function_name,department,admission_date,termination_date,status),delivery_items(quantity,expected_replacement_at,material:materials(name,unit,internal_code),lot:material_lots(ca_number,ca_expires_at),variant:material_variants(name,size),material_units(unit_identifier,valid_until,test_performed_at,test_expires_at,test_number,test_report_number,ca_number,ca_expires_at))"
+      ? "id,organization_id,employee_id,delivered_at,reason,notes,term_signed_at,employee:employees(full_name,registration,phone,job_title,function_name,department,admission_date,termination_date,status),delivery_items(quantity,test_performed_at,test_expires_at,expected_replacement_at,material:materials(name,unit,internal_code),lot:material_lots(ca_number,ca_expires_at,test_number,test_report_number,test_performed_at,test_expires_at),variant:material_variants(name,size),material_units(unit_identifier,valid_until,test_performed_at,test_number,test_report_number,ca_number,ca_expires_at))"
       : "id,organization_id,employee_id,returned_at,reason,notes,term_signed_at,employee:employees(full_name,registration,phone),return_items(quantity,equipment_condition,destination,incident_type,incident_description,deduction_requested,deduction_amount,material:materials(name,unit),delivery_item:delivery_items(variant:material_variants(name,size)))";
   const { data: transaction, error: transactionError } = await userClient.from(table).select(select).eq("id", recordId).maybeSingle();
   if (transactionError || !transaction || transaction.organization_id !== profile.organization_id) return respond({ error: "A ficha não foi encontrada nesta organização." }, 404, origin);

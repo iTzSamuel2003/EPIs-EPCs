@@ -13,7 +13,6 @@ type DeliveryUnit = {
   unit_identifier: string;
   valid_until: string | null;
   test_performed_at: string | null;
-  test_expires_at: string | null;
   test_number: string | null;
   test_report_number: string | null;
   ca_number: string | null;
@@ -45,10 +44,12 @@ type Delivery = {
   employee: Employee;
   delivery_items: Array<{
     quantity: number;
+    test_performed_at: string | null;
+    test_expires_at: string | null;
     expected_replacement_at: string | null;
     material: { name: string; unit: string; internal_code: string | null } | null;
     variant: { name: string; size: string | null } | null;
-    lot: { ca_number: string | null; ca_expires_at: string | null } | null;
+    lot: { ca_number: string | null; ca_expires_at: string | null; test_number: string | null; test_report_number: string | null; test_performed_at: string | null; test_expires_at: string | null } | null;
     material_units: DeliveryUnit[];
   }>;
 };
@@ -108,10 +109,10 @@ function buildPrintSnapshot(delivery: Delivery, organization: Organization | nul
         expected_replacement_at: item.expected_replacement_at,
         units: item.material_units.map((unit) => ({
           identifier: unit.unit_identifier,
-          test_number: unit.test_number,
-          test_report_number: unit.test_report_number,
-          test_performed_at: unit.test_performed_at,
-          test_expires_at: unit.test_expires_at,
+          test_number: unit.test_number || item.lot?.test_number || null,
+          test_report_number: unit.test_report_number || item.lot?.test_report_number || null,
+          test_performed_at: unit.test_performed_at || item.test_performed_at || item.lot?.test_performed_at || null,
+          test_expires_at: item.test_expires_at || item.lot?.test_expires_at || null,
           ca_number: unit.ca_number,
           ca_expires_at: unit.ca_expires_at,
         })),
@@ -148,7 +149,7 @@ export function RecentDeliveries({ onPrintTerm }: { onPrintTerm: (snapshot: Deli
         if (authError || !auth.user) throw authError ?? new Error("Sua sessão expirou. Entre novamente.");
 
         const [{ data, error: loadError }, { data: profile, error: profileError }] = await Promise.all([
-          supabase.from("deliveries").select("id,delivered_at,reason,notes,term_file_path,term_uploaded_at,term_signature_method,term_signed_at,employee:employees(full_name,registration,cpf,phone,department,job_title,function_name,admission_date,termination_date,status),delivery_items(quantity,expected_replacement_at,material:materials(name,unit,internal_code),variant:material_variants(name,size),lot:material_lots(ca_number,ca_expires_at),material_units(unit_identifier,valid_until,test_performed_at,test_number,test_report_number,ca_number,ca_expires_at,test_expires_at)").order("delivered_at", { ascending: false }).order("created_at", { ascending: false }).limit(10),
+          supabase.from("deliveries").select("id,delivered_at,reason,notes,term_file_path,term_uploaded_at,term_signature_method,term_signed_at,employee:employees(full_name,registration,cpf,phone,department,job_title,function_name,admission_date,termination_date,status),delivery_items(quantity,test_performed_at,test_expires_at,expected_replacement_at,material:materials(name,unit,internal_code),variant:material_variants(name,size),lot:material_lots(ca_number,ca_expires_at,test_number,test_report_number,test_performed_at,test_expires_at),material_units(unit_identifier,valid_until,test_performed_at,test_number,test_report_number,ca_number,ca_expires_at)").order("delivered_at", { ascending: false }).order("created_at", { ascending: false }).limit(10),
           supabase.from("profiles").select("organization_id,full_name").eq("id", auth.user.id).maybeSingle(),
         ]);
 
