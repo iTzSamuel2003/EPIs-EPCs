@@ -3,7 +3,6 @@
 import { ChangeEvent, useEffect, useRef, useState } from "react";
 import { Check, ClipboardList, Download, LoaderCircle, RotateCcw, Upload, UserRound } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
-import { ReturnSignatureModal } from "@/components/return-signature-modal";
 import { TermCopyLinkButton } from "@/components/term-copy-link-button";
 import { friendlyError } from "@/lib/ui-feedback";
 import { FeedbackMessage } from "@/components/feedback-message";
@@ -150,7 +149,7 @@ export function RecentReturns({ organization }: { organization: ReturnTermOrgani
             {returns.map((item) => {
               const pdfItems = item.return_items.map(toTermItem);
               const hasMissingItem = pdfItems.some((returnItem) => returnItem.destination === "not_returned");
-              return <article className="recent-delivery-item" key={item.id} role="listitem">
+              return <article className="recent-delivery-item recent-return-item" key={item.id} role="listitem">
                 <div className="recent-delivery-icon recent-return-icon"><UserRound size={17} aria-hidden="true" /></div>
                 <div className="recent-delivery-main">
                   <strong>{item.employee?.full_name || "Funcionário não informado"}</strong>
@@ -160,20 +159,8 @@ export function RecentReturns({ organization }: { organization: ReturnTermOrgani
                   {hasMissingItem && !item.term_signed_at && <small className="return-line-legal-note">Baixa do material extraviado/furtado aguardando assinatura do termo.</small>}
                 </div>
                 <div className="recent-delivery-actions">
-                  {!item.term_signed_at && <TermCopyLinkButton recordType="return" recordId={item.id} />}
+                  {!item.term_signed_at && <TermCopyLinkButton recordType="return" recordId={item.id} allowRenew />}
                   <button type="button" className="action-button" onClick={() => void downloadTerm(item)} disabled={downloadingId === item.id}><Download size={14} aria-hidden="true" /> {downloadingId === item.id ? "Preparando..." : item.term_signed_at ? "Baixar termo assinado" : "Baixar termo para assinatura"}</button>
-                  {!item.term_signed_at && <ReturnSignatureModal
-                    returnId={item.id}
-                    employee={{ name: item.employee?.full_name || "Colaborador", cpf: item.employee?.cpf || "", registration: item.employee?.registration || null, job_title: item.employee?.job_title || item.employee?.function_name, department: item.employee?.department, admission_date: item.employee?.admission_date, termination_date: item.employee?.status === "terminated" ? item.employee.termination_date : null }}
-                    organization={organization}
-                    responsibleName={item.return_accountability?.responsible_name || null}
-                    returnedAt={item.returned_at}
-                    reason={item.reason}
-                    notes={item.notes}
-                    items={pdfItems}
-                    currentPath={item.term_file_path}
-                    onComplete={(path) => setReturns((current) => current.map((currentItem) => currentItem.id === item.id ? { ...currentItem, term_file_path: path, term_signature_method: "assisted", term_signed_at: new Date().toISOString() } : currentItem))}
-                  />}
                   {!item.term_signed_at && <label className="action-button upload-term-button"><Upload size={14} aria-hidden="true" /> {uploadingId === item.id ? "Enviando..." : "Anexar termo assinado"}<input type="file" accept="application/pdf,image/jpeg,image/png,image/webp" onChange={(event) => void uploadTerm(item, event)} disabled={uploadingId === item.id} /></label>}
                 </div>
                 <ClipboardList size={17} className="recent-delivery-date" aria-hidden="true" />
