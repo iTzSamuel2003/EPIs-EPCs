@@ -4,6 +4,7 @@ import { ChangeEvent, useEffect, useRef, useState } from "react";
 import { Check, ClipboardList, Download, LoaderCircle, RotateCcw, Upload, UserRound } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 import { ReturnSignatureModal } from "@/components/return-signature-modal";
+import { TermCopyLinkButton } from "@/components/term-copy-link-button";
 import { friendlyError } from "@/lib/ui-feedback";
 import { FeedbackMessage } from "@/components/feedback-message";
 import { createReturnTermDocument, ReturnTermOrganization } from "@/lib/return-term-document";
@@ -71,9 +72,10 @@ export function RecentReturns({ organization }: { organization: ReturnTermOrgani
     }
     runLoad();
     const refresh = runLoad;
+    const poll = window.setInterval(() => { if (document.visibilityState === "visible") refresh(); }, 30000);
     window.addEventListener("return-created", refresh);
     window.addEventListener("focus", refresh);
-    return () => { active = false; requestRef.current += 1; window.removeEventListener("return-created", refresh); window.removeEventListener("focus", refresh); };
+    return () => { active = false; requestRef.current += 1; window.clearInterval(poll); window.removeEventListener("return-created", refresh); window.removeEventListener("focus", refresh); };
   }, [retryKey]);
 
   async function downloadTerm(item: ReturnRecord) {
@@ -158,6 +160,7 @@ export function RecentReturns({ organization }: { organization: ReturnTermOrgani
                   {hasMissingItem && !item.term_signed_at && <small className="return-line-legal-note">Baixa do material extraviado/furtado aguardando assinatura do termo.</small>}
                 </div>
                 <div className="recent-delivery-actions">
+                  {!item.term_signed_at && <TermCopyLinkButton recordType="return" recordId={item.id} />}
                   <button type="button" className="action-button" onClick={() => void downloadTerm(item)} disabled={downloadingId === item.id}><Download size={14} aria-hidden="true" /> {downloadingId === item.id ? "Preparando..." : item.term_signed_at ? "Baixar termo assinado" : "Baixar termo para assinatura"}</button>
                   {!item.term_signed_at && <ReturnSignatureModal
                     returnId={item.id}

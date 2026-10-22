@@ -1,32 +1,39 @@
 "use client";
 
 import { ChangeEvent, FormEvent, useEffect, useMemo, useRef, useState } from "react";
-import { ArrowLeft, Check, ClipboardCheck, X } from "lucide-react";
+import { ArrowLeft, Check, ClipboardCheck, ClipboardCopy, X } from "lucide-react";
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/client";
 import { uploadTransactionPhotos } from "@/lib/transaction-attachments";
 import { RecentReturns } from "@/components/recent-returns";
 import { friendlyError } from "@/lib/ui-feedback";
 import { FeedbackMessage } from "@/components/feedback-message";
-import { createReturnTermDocument, ReturnTermOrganization } from "@/lib/return-term-document";
+import { ReturnTermOrganization } from "@/lib/return-term-document";
 
 type Employee = { id: string; full_name: string; registration: string; cpf?: string | null; job_title?: string | null; function_name?: string | null; department?: string | null; admission_date?: string | null; termination_date?: string | null; status?: string | null };
 type DeliveredItem = { id: string; quantity: number; returned: number; pending_return: number; variant_id: string | null; variant: { name: string; size: string | null } | null; material: { name: string; internal_code: string; unit: string } | null; lot: { lot_number: string | null; ca_number: string | null; ca_expires_at: string | null; test_number: string | null; test_report_number: string | null; test_performed_at: string | null; test_expires_at: string | null; unit_cost: number | null } | null; units: Array<{ unit_identifier: string | null; valid_until: string | null; test_number: string | null; test_report_number: string | null; test_performed_at: string | null; ca_number: string | null; ca_expires_at: string | null }> | null; delivery: { employee_id: string; delivered_at: string; employee: { full_name: string; registration: string } | null } | null };
 type ReturnLine = { delivery_item_id: string; quantity: number; equipment_condition: string; destination: string; incident_type: string; incident_description: string; deduction_requested: boolean; deduction_amount: string };
+type ReturnSignatureLink = { url: string; expiresAt: string };
 const reasons = [["replacement", "Substituição"], ["termination", "Desligamento"], ["role_change", "Alteração de função"], ["damaged", "Equipamento danificado"], ["voluntary", "Devolução voluntária"], ["other", "Outro"]];
 const incidentLabels: Record<string, string> = { normal: "Devolução normal", misuse: "Mau uso", loss: "Extravio", theft: "Furto", damage: "Dano", other: "Outro" };
 const date = (value: string) => new Date(`${value}T00:00:00`).toLocaleDateString("pt-BR");
 const localDateValue = (value = new Date()) => `${value.getFullYear()}-${String(value.getMonth() + 1).padStart(2, "0")}-${String(value.getDate()).padStart(2, "0")}`;
 function isValidDateValue(value: string) { if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) return false; const [year, month, day] = value.split("-").map(Number); const parsed = new Date(year, month - 1, day); return parsed.getFullYear() === year && parsed.getMonth() === month - 1 && parsed.getDate() === day; }
-const safeFileName = (value: string) => value.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "");
 
 export default function ReturnsPage() {
   const [retryKey, setRetryKey] = useState(0);
   const [organization, setOrganization] = useState<ReturnTermOrganization>({ name: "EPIS+" });
+  const [activeReturnId, setActiveReturnId] = useState(""); const [activeSignatureLink, setActiveSignatureLink] = useState<ReturnSignatureLink | null>(null); const [signatureLinkLoading, setSignatureLinkLoading] = useState(false); const [signatureLinkError, setSignatureLinkError] = useState(""); const [copyFeedback, setCopyFeedback] = useState("");
   const [employees, setEmployees] = useState<Employee[]>([]); const [items, setItems] = useState<DeliveredItem[]>([]); const [employeeId, setEmployeeId] = useState(""); const [employeeQuery, setEmployeeQuery] = useState(""); const [suggestionsOpen, setSuggestionsOpen] = useState(false); const [selectedIds, setSelectedIds] = useState<string[]>([]); const [lines, setLines] = useState<Record<string, ReturnLine>>({}); const [reason, setReason] = useState("replacement"); const [returnedAt, setReturnedAt] = useState(localDateValue()); const [responsibleName, setResponsibleName] = useState(""); const [notes, setNotes] = useState(""); const [photoFiles, setPhotoFiles] = useState<File[]>([]); const [loading, setLoading] = useState(true); const [saving, setSaving] = useState(false); const [error, setError] = useState(""); const [success, setSuccess] = useState("");
   const loadRequestRef = useRef(0);
   const submitLockRef = useRef(false);
   const mountedRef = useRef(true);
+  const activeSignatureRef = useRef<HTMLElement | null>(null);
+  useEffect(() => {
+    if (!activeReturnId) return;
+    const frame = window.requestAnimationFrame(() => activeSignatureRef.current?.scrollIntoView({ behavior: "smooth", block: "center" }));
+    return () => window.cancelAnimationFrame(frame);
+  }, [activeReturnId, activeSignatureLink, signatureLinkError]);
   async function loadData() {
     mountedRef.current = true;
     const requestId = ++loadRequestRef.current;
@@ -111,33 +118,36 @@ export default function ReturnsPage() {
   }
   function selectAll() { if (selectedIds.length === returnableItems.length) { setSelectedIds([]); return; } setSelectedIds(returnableItems.map((item) => item.id)); setLines((current) => Object.fromEntries(returnableItems.map((item) => [item.id, current[item.id] ?? defaultLine(item)]))); }
   
-  async function generateTerm(employee: Employee, selected: DeliveredItem[], selectedLines: ReturnLine[], returnId: string, actingUserName: string) {
-    const selectedById = new Map(selectedLines.map((line) => [line.delivery_item_id, line]));
-    const term = await createReturnTermDocument({
-      organization,
-      employee: { name: employee.full_name, registration: employee.registration, cpf: employee.cpf, job_title: employee.job_title || employee.function_name, department: employee.department, admission_date: employee.admission_date, termination_date: employee.status === "terminated" ? employee.termination_date : null },
-      responsible_name: actingUserName,
-      return_id: returnId,
-      returned_at: returnedAt,
-      reason,
-      notes: notes.trim() || null,
-      items: selected.flatMap((item) => {
-        const line = selectedById.get(item.id);
-        if (!line) return [];
-        const units = item.units ?? [];
-        const uniqueValues = (key: "test_number" | "test_report_number" | "test_performed_at" | "valid_until") => [...new Set(units.map((unit) => unit[key]).filter(Boolean))].join(", ") || null;
-        return [{
-          material: item.material?.name || "Material", unit: item.material?.unit || "un.", quantity: Number(line.quantity), size: item.variant?.size || item.variant?.name,
-          delivered_at: item.delivery?.delivered_at, lot_number: item.lot?.lot_number, ca_number: item.lot?.ca_number || units.find((unit) => unit.ca_number)?.ca_number,
-          ca_expires_at: item.lot?.ca_expires_at || units.find((unit) => unit.ca_expires_at)?.ca_expires_at,
-          test_number: item.lot?.test_number || uniqueValues("test_number"), test_report_number: item.lot?.test_report_number || uniqueValues("test_report_number"),
-          test_performed_at: item.lot?.test_performed_at || uniqueValues("test_performed_at"), test_expires_at: item.lot?.test_expires_at || uniqueValues("valid_until"),
-          condition: line.equipment_condition, destination: line.destination, incident_type: line.incident_type, incident_description: line.incident_description,
-          deduction_amount: line.deduction_requested ? Number(line.deduction_amount) : null,
-        }];
-      }),
-    });
-    term.save(`termo-devolucao-${safeFileName(employee.full_name) || "colaborador"}.pdf`);
+  async function generateSignatureLink(returnId: string): Promise<string | null> {
+    setSignatureLinkLoading(true);
+    setSignatureLinkError("");
+    setCopyFeedback("");
+    try {
+      const { data, error: invokeError } = await createClient().functions.invoke("create-term-signature-link", { body: { record_type: "return", record_id: returnId } });
+      if (invokeError) throw invokeError;
+      const result = data as { url?: string; expires_at?: string } | null;
+      if (!result?.url || !result.expires_at) throw new Error("O serviço não retornou um link de assinatura válido.");
+      setActiveSignatureLink({ url: result.url, expiresAt: result.expires_at });
+      return result.url;
+    } catch (caught) {
+      setActiveSignatureLink(null);
+      setSignatureLinkError(friendlyError(caught, "Não foi possível gerar o link de assinatura. Tente novamente."));
+      return null;
+    } finally {
+      setSignatureLinkLoading(false);
+    }
+  }
+  async function copySignatureLink() {
+    if (!activeReturnId) return;
+    const isExpired = activeSignatureLink && new Date(activeSignatureLink.expiresAt).getTime() <= Date.now();
+    const url = !activeSignatureLink || isExpired ? await generateSignatureLink(activeReturnId) : activeSignatureLink.url;
+    if (!url) return;
+    try {
+      await navigator.clipboard.writeText(url);
+      setCopyFeedback("Link copiado. Envie ao colaborador para conferir e assinar a ficha.");
+    } catch {
+      setCopyFeedback("Selecione o link no campo acima e copie-o para enviar ao colaborador.");
+    }
   }
   async function submit(event: FormEvent) {
     event.preventDefault();
@@ -157,6 +167,7 @@ export default function ReturnsPage() {
       setError("Confira as quantidades inteiras e os valores de desconto dos materiais selecionados.");
       return;
     }
+    setActiveReturnId(""); setActiveSignatureLink(null); setSignatureLinkError(""); setCopyFeedback("");
     submitLockRef.current = true;
     setSaving(true);
     try {
@@ -200,10 +211,11 @@ export default function ReturnsPage() {
       } catch {
         followUpError = followUpError ? `${followUpError}; as fotos não foram salvas` : "as fotos não foram salvas";
       }
-      const employee = employees.find((item) => item.id === employeeId);
-      if (employee) await generateTerm(employee, selected, selectedLines, returnId, actingUserName);
-      if (followUpError) setError(`Devolução registrada, mas ${followUpError}`);
-      else setSuccess(incidentLines.length ? "Devolução registrada. Foram gerados os termos." : "Devolução registrada e termo gerado.");
+      setActiveReturnId(returnId);
+      const signatureUrl = await generateSignatureLink(returnId);
+      if (followUpError) setError(`Devolução registrada, mas ${followUpError}. ${signatureUrl ? "O link está pronto abaixo." : "Tente gerar o link novamente no painel abaixo."}`);
+      else if (signatureUrl) setSuccess("Devolução registrada. Copie o link abaixo e envie ao colaborador para assinatura.");
+      else setSuccess("Devolução registrada. Não foi possível gerar o link automaticamente; tente novamente no painel abaixo.");
       window.dispatchEvent(new Event("return-created"));
       setEmployeeId(""); setEmployeeQuery(""); setSuggestionsOpen(false); setSelectedIds([]); setLines({}); setNotes(""); setPhotoFiles([]); setReturnedAt(localDateValue());
     } catch (caught) {
@@ -219,6 +231,7 @@ export default function ReturnsPage() {
       <header className="module-header"><div><p className="eyebrow">MOVIMENTAÇÃO DE EQUIPAMENTOS</p><h1>Devoluções</h1><p className="module-subtitle">Confira os dados de entrega e registre a condição de cada material devolvido.</p></div><Link className="secondary-button" href="/deliveries"><ArrowLeft size={16} /> Entregas</Link></header>
       {success && <div className="feedback success-feedback"><Check size={17} /> {success}</div>}
       {error && <div className="feedback error-feedback"><X size={17} /> {error}</div>}
+      {activeReturnId && <section ref={activeSignatureRef} className="panel pending-signature-active" tabIndex={-1} aria-live="polite"><div><p className="eyebrow">FICHA PRONTA PARA ASSINATURA</p><h2>Envie o link ao colaborador</h2><p>O colaborador poderá conferir e assinar a ficha pelo celular. O status será atualizado nas últimas devoluções; a baixa de itens extraviados ou furtados continua pendente até a assinatura.</p></div>{activeSignatureLink && <><label>Link de assinatura<input value={activeSignatureLink.url} readOnly onFocus={(event) => event.currentTarget.select()} aria-label="Link de assinatura da devolução" /></label><small>Link de uso único · válido até {new Date(activeSignatureLink.expiresAt).toLocaleString("pt-BR")}</small></>}<div className="pending-signature-actions"><button type="button" className="primary-button" onClick={() => void copySignatureLink()} disabled={signatureLinkLoading} aria-busy={signatureLinkLoading}><ClipboardCopy size={15} /> {signatureLinkLoading ? "Gerando link..." : signatureLinkError ? "Tentar novamente" : activeSignatureLink ? "Copiar link para o colaborador" : "Gerar link de assinatura"}</button>{copyFeedback && <small role="status">{copyFeedback}</small>}{signatureLinkError && <small className="term-action-feedback error" role="alert">{signatureLinkError}</small>}</div></section>}
       <section className="panel entry-card delivery-card">
         <div className="entry-intro"><div className="entry-icon"><ClipboardCheck size={22} /></div><div><h2>Ficha de devolução</h2><p>Os itens recebidos, pendentes de assinatura e com ocorrência ficam registrados individualmente.</p></div></div>
         <form className="material-form" onSubmit={submit}>
@@ -256,7 +269,7 @@ export default function ReturnsPage() {
           <label className="transaction-photo-picker">Fotos da devolução (opcional)<input type="file" accept="image/jpeg,image/png,image/webp" multiple onChange={selectPhotos} /></label>{photoFiles.length > 0 && <small className="muted-cell">{photoFiles.length} foto(s) selecionada(s).</small>}
           <label>Responsável pelo registro (usuário logado)<input value={responsibleName || (loading ? "Carregando usuário..." : "Não identificado")} readOnly /><small className="employee-function-info">O responsável é identificado automaticamente pela sessão atual.</small></label>
           <label>Observações gerais<textarea value={notes} onChange={(event) => setNotes(event.target.value)} rows={2} /></label>
-          <div className="modal-actions"><Link className="secondary-button" href="/stock">Consultar estoque</Link><button className="primary-button" disabled={saving || loading || !selectedIds.length}>{saving ? "Registrando..." : "Confirmar devolução"}<Check size={16} /></button></div>
+          <div className="modal-actions"><Link className="secondary-button" href="/stock">Consultar estoque</Link><button className="primary-button" disabled={saving || loading || !selectedIds.length}>{saving ? "Registrando..." : "Registrar e gerar link"}<Check size={16} /></button></div>
         </form>
       </section>
       <RecentReturns organization={organization} />
