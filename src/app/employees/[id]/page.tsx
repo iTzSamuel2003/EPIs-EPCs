@@ -34,7 +34,7 @@ type ReturnSheetItem = {
   test_report_number: string | null;
   test_performed_at: string | null;
   test_expires_at: string | null;
-  units?: Array<{ unit_identifier: string | null; ca_number: string | null; ca_expires_at: string | null; test_number: string | null; test_report_number: string | null; test_performed_at: string | null; test_expires_at: string | null }>;
+  units?: Array<{ unit_identifier: string | null; valid_until: string | null; ca_number: string | null; ca_expires_at: string | null; test_number: string | null; test_report_number: string | null; test_performed_at: string | null }>;
   condition: string | null;
   destination: string | null;
   incident_type: string | null;
@@ -44,12 +44,12 @@ type ReturnSheetItem = {
 type ReturnSheet = { id: string; returned_at: string; reason: string; notes: string | null; responsible_name: string | null; term_file_path: string | null; term_signature_method: string | null; term_signed_at: string | null; term_signer_name: string | null; term_signer_cpf: string | null; items: ReturnSheetItem[] };
 
 function toReturnTermItem(item: ReturnSheetItem): ReturnTermItem {
-  const uniqueUnitValue = (key: "ca_number" | "ca_expires_at" | "test_number" | "test_report_number" | "test_performed_at" | "test_expires_at") => [...new Set((item.units ?? []).map((unit) => unit[key]).filter(Boolean))].join(", ") || null;
+  const uniqueUnitValue = (key: "ca_number" | "ca_expires_at" | "test_number" | "test_report_number" | "test_performed_at" | "valid_until") => [...new Set((item.units ?? []).map((unit) => unit[key]).filter(Boolean))].join(", ") || null;
   return {
     material: item.material?.name || "Material", unit: item.material?.unit || "un.", quantity: item.quantity,
     size: item.variant?.size || item.variant?.name, delivered_at: item.delivered_at, lot_number: item.lot_number,
     ca_number: item.ca_number || uniqueUnitValue("ca_number"), ca_expires_at: item.ca_expires_at || uniqueUnitValue("ca_expires_at"), test_number: item.test_number || uniqueUnitValue("test_number"),
-    test_report_number: item.test_report_number || uniqueUnitValue("test_report_number"), test_performed_at: item.test_performed_at || uniqueUnitValue("test_performed_at"), test_expires_at: item.test_expires_at || uniqueUnitValue("test_expires_at"),
+    test_report_number: item.test_report_number || uniqueUnitValue("test_report_number"), test_performed_at: item.test_performed_at || uniqueUnitValue("test_performed_at"), test_expires_at: item.test_expires_at || uniqueUnitValue("valid_until"),
     condition: item.condition, destination: item.destination, incident_type: item.incident_type,
     incident_description: item.incident_description, deduction_amount: item.deduction_amount,
   };
@@ -129,7 +129,7 @@ export default function EmployeeMaterialsPage() {
         supabase.from("employees").select("id,registration,full_name,cpf,job_title,function_name,function_classification,department,unit,admission_date,termination_date,status,organization:organizations(name,cnpj,logo_url,address,phone)").eq("id", id).single(),
         supabase.from("delivery_items").select("id,quantity,expected_replacement_at,test_performed_at,test_expires_at,materials(name,internal_code,unit,type),material_lots(lot_number,ca_number,ca_expires_at,test_number,test_report_number,test_performed_at,test_expires_at),variant:material_variants(name,size),material_units(unit_identifier,delivered_at,valid_until,ca_number,ca_expires_at,test_number,test_report_number,test_performed_at),deliveries!inner(id,delivered_at,reason,notes,employee_id,term_file_path,term_uploaded_at,term_signature_method,term_signed_at),return_items(quantity,destination,return:returns(term_signed_at))").eq("deliveries.employee_id", id).order("created_at", { ascending: false }),
         supabase.from("employee_courses").select("id,name,provider,expires_at").eq("employee_id", id).order("expires_at", { ascending: true, nullsFirst: false }),
-        supabase.from("returns").select("id,returned_at,reason,notes,term_file_path,term_signature_method,term_signed_at,term_signer_name,term_signer_cpf,return_accountability(responsible_name),return_items(quantity,equipment_condition,destination,incident_type,incident_description,deduction_requested,deduction_amount,material:materials(name,unit),delivery_item:delivery_items(variant:material_variants(name,size),delivery:deliveries(delivered_at),lot:material_lots(lot_number,ca_number,ca_expires_at,test_number,test_report_number,test_performed_at,test_expires_at),units:material_units(unit_identifier,ca_number,ca_expires_at,test_number,test_report_number,test_performed_at,test_expires_at)))").eq("employee_id", id).order("returned_at", { ascending: false }),
+        supabase.from("returns").select("id,returned_at,reason,notes,term_file_path,term_signature_method,term_signed_at,term_signer_name,term_signer_cpf,return_accountability(responsible_name),return_items(quantity,equipment_condition,destination,incident_type,incident_description,deduction_requested,deduction_amount,material:materials(name,unit),delivery_item:delivery_items(variant:material_variants(name,size),delivery:deliveries(delivered_at),lot:material_lots(lot_number,ca_number,ca_expires_at,test_number,test_report_number,test_performed_at,test_expires_at),units:material_units(unit_identifier,valid_until,ca_number,ca_expires_at,test_number,test_report_number,test_performed_at)))").eq("employee_id", id).order("returned_at", { ascending: false }),
       ]);
       if (cancelled) return;
       if (employeeError || deliveryError || courseError || returnError) setError(friendlyError(employeeError ?? deliveryError ?? courseError ?? returnError, "Não foi possível carregar a ficha."));
@@ -152,7 +152,7 @@ export default function EmployeeMaterialsPage() {
             delivered_at: delivery?.delivered_at || null, lot_number: (lot?.lot_number as string | null) || null,
             ca_number: (lot?.ca_number as string | null) || null, ca_expires_at: (lot?.ca_expires_at as string | null) || null,
             test_number: (lot?.test_number as string | null) || null, test_report_number: (lot?.test_report_number as string | null) || null,
-            test_performed_at: (lot?.test_performed_at as string | null) || null, test_expires_at: (lot?.test_expires_at as string | null) || null,
+            test_performed_at: (lot?.test_performed_at as string | null) || null, test_expires_at: (lot?.test_expires_at as string | null) || ([...new Set((units ?? []).map((unit) => unit.valid_until).filter(Boolean))].join(", ") || null),
             units,
             condition: String(item.equipment_condition || ""), destination: String(item.destination || ""), incident_type: String(item.incident_type || "normal"),
             incident_description: item.incident_description as string | null, deduction_amount: item.deduction_requested ? Number(item.deduction_amount) : null,
@@ -241,7 +241,7 @@ export default function EmployeeMaterialsPage() {
           test_number: unit.test_number || item.lot?.test_number || null,
           test_report_number: unit.test_report_number || item.lot?.test_report_number || null,
           test_performed_at: unit.test_performed_at || item.test_performed_at || item.lot?.test_performed_at || null,
-          test_expires_at: item.test_expires_at || item.lot?.test_expires_at || null,
+          test_expires_at: unit.valid_until || item.test_expires_at || item.lot?.test_expires_at || null,
         })),
       })),
     };

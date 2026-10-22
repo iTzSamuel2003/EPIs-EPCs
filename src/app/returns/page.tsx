@@ -11,7 +11,7 @@ import { FeedbackMessage } from "@/components/feedback-message";
 import { createReturnTermDocument, ReturnTermOrganization } from "@/lib/return-term-document";
 
 type Employee = { id: string; full_name: string; registration: string; cpf?: string | null; job_title?: string | null; function_name?: string | null; department?: string | null; admission_date?: string | null; termination_date?: string | null; status?: string | null };
-type DeliveredItem = { id: string; quantity: number; returned: number; pending_return: number; variant_id: string | null; variant: { name: string; size: string | null } | null; material: { name: string; internal_code: string; unit: string } | null; lot: { lot_number: string | null; ca_number: string | null; ca_expires_at: string | null; test_number: string | null; test_report_number: string | null; test_performed_at: string | null; test_expires_at: string | null; unit_cost: number | null } | null; units: Array<{ unit_identifier: string | null; test_number: string | null; test_report_number: string | null; test_performed_at: string | null; test_expires_at: string | null; ca_number: string | null; ca_expires_at: string | null }> | null; delivery: { employee_id: string; delivered_at: string; employee: { full_name: string; registration: string } | null } | null };
+type DeliveredItem = { id: string; quantity: number; returned: number; pending_return: number; variant_id: string | null; variant: { name: string; size: string | null } | null; material: { name: string; internal_code: string; unit: string } | null; lot: { lot_number: string | null; ca_number: string | null; ca_expires_at: string | null; test_number: string | null; test_report_number: string | null; test_performed_at: string | null; test_expires_at: string | null; unit_cost: number | null } | null; units: Array<{ unit_identifier: string | null; valid_until: string | null; test_number: string | null; test_report_number: string | null; test_performed_at: string | null; ca_number: string | null; ca_expires_at: string | null }> | null; delivery: { employee_id: string; delivered_at: string; employee: { full_name: string; registration: string } | null } | null };
 type ReturnLine = { delivery_item_id: string; quantity: number; equipment_condition: string; destination: string; incident_type: string; incident_description: string; deduction_requested: boolean; deduction_amount: string };
 const reasons = [["replacement", "Substituição"], ["termination", "Desligamento"], ["role_change", "Alteração de função"], ["damaged", "Equipamento danificado"], ["voluntary", "Devolução voluntária"], ["other", "Outro"]];
 const incidentLabels: Record<string, string> = { normal: "Devolução normal", misuse: "Mau uso", loss: "Extravio", theft: "Furto", damage: "Dano", other: "Outro" };
@@ -35,7 +35,7 @@ export default function ReturnsPage() {
       const supabase = createClient();
       const [{ data: employeeData, error: employeeError }, { data: itemData, error: itemError }, { data: returnData, error: returnError }] = await Promise.all([
         supabase.from("employees").select("id,full_name,registration,cpf,job_title,function_name,department,admission_date,termination_date,status").order("full_name"),
-        supabase.from("delivery_items").select("id,quantity,variant_id,variant:material_variants(name,size),material:materials(name,internal_code,unit),lot:material_lots(lot_number,ca_number,ca_expires_at,test_number,test_report_number,test_performed_at,test_expires_at,unit_cost),units:material_units(unit_identifier,test_number,test_report_number,test_performed_at,test_expires_at,ca_number,ca_expires_at),delivery:deliveries(employee_id,delivered_at,employee:employees(full_name,registration))").order("created_at", { ascending: false }),
+        supabase.from("delivery_items").select("id,quantity,variant_id,variant:material_variants(name,size),material:materials(name,internal_code,unit),lot:material_lots(lot_number,ca_number,ca_expires_at,test_number,test_report_number,test_performed_at,test_expires_at,unit_cost),units:material_units(unit_identifier,valid_until,test_number,test_report_number,test_performed_at,ca_number,ca_expires_at),delivery:deliveries(employee_id,delivered_at,employee:employees(full_name,registration))").order("created_at", { ascending: false }),
         supabase.from("return_items").select("delivery_item_id,quantity,destination,return:returns(term_signed_at)"),
       ]);
       if (!mountedRef.current || requestId !== loadRequestRef.current) return;
@@ -123,13 +123,13 @@ export default function ReturnsPage() {
         const line = selectedById.get(item.id);
         if (!line) return [];
         const units = item.units ?? [];
-        const uniqueValues = (key: "test_number" | "test_report_number" | "test_performed_at" | "test_expires_at") => [...new Set(units.map((unit) => unit[key]).filter(Boolean))].join(", ") || null;
+        const uniqueValues = (key: "test_number" | "test_report_number" | "test_performed_at" | "valid_until") => [...new Set(units.map((unit) => unit[key]).filter(Boolean))].join(", ") || null;
         return [{
           material: item.material?.name || "Material", unit: item.material?.unit || "un.", quantity: Number(line.quantity), size: item.variant?.size || item.variant?.name,
           delivered_at: item.delivery?.delivered_at, lot_number: item.lot?.lot_number, ca_number: item.lot?.ca_number || units.find((unit) => unit.ca_number)?.ca_number,
           ca_expires_at: item.lot?.ca_expires_at || units.find((unit) => unit.ca_expires_at)?.ca_expires_at,
           test_number: item.lot?.test_number || uniqueValues("test_number"), test_report_number: item.lot?.test_report_number || uniqueValues("test_report_number"),
-          test_performed_at: item.lot?.test_performed_at || uniqueValues("test_performed_at"), test_expires_at: item.lot?.test_expires_at || uniqueValues("test_expires_at"),
+          test_performed_at: item.lot?.test_performed_at || uniqueValues("test_performed_at"), test_expires_at: item.lot?.test_expires_at || uniqueValues("valid_until"),
           condition: line.equipment_condition, destination: line.destination, incident_type: line.incident_type, incident_description: line.incident_description,
           deduction_amount: line.deduction_requested ? Number(line.deduction_amount) : null,
         }];
@@ -230,7 +230,7 @@ export default function ReturnsPage() {
               const testNumber = lot?.test_number || [...new Set(units.map((unit) => unit.test_number).filter(Boolean))].join(", ");
               const testReport = lot?.test_report_number || [...new Set(units.map((unit) => unit.test_report_number).filter(Boolean))].join(", ");
               const testDate = lot?.test_performed_at || units.find((unit) => unit.test_performed_at)?.test_performed_at;
-              const testExpiry = lot?.test_expires_at || units.find((unit) => unit.test_expires_at)?.test_expires_at;
+              const testExpiry = lot?.test_expires_at || units.find((unit) => unit.valid_until)?.valid_until;
               const availableToReturn = item.quantity - item.returned - item.pending_return;
               const lockedMissing = line.incident_type === "loss" || line.incident_type === "theft";
               return <article className={`return-line ${selected ? "selected" : ""}`} key={item.id}>
