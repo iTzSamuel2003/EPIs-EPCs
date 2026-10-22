@@ -4943,5 +4943,9 @@ html,body{max-width:100%;overflow-x:hidden}
 .recent-return-item>.recent-delivery-main>strong{white-space:normal;overflow-wrap:normal;word-break:normal;hyphens:none;}
 .recent-return-item>.recent-delivery-actions{grid-column:2;width:100%;justify-content:flex-start;align-items:flex-start;}
 .recent-return-item>.recent-delivery-date{display:none;}
-.term-renew-link-button{background:#fff0ed;color:#ba554a;border-color:#f3c7c1;}
-.term-renew-link-button:hover{background:#ffe5e0;}
+.term-renew-link-button{background:#f1effc;color:#6954c9;border-color:#d8d1f8;}
+.term-renew-link-button:hover{background:#e5e1fb;}
+.term-cancel-link-button{background:#fff0ed;color:#ba554a;border-color:#f3c7c1;}
+.term-cancel-link-button:hover{background:#ffe5e0;}
+.term-link-cancel-icon{background:#fff0ed;color:#ba554a;}
+.term-link-confirm-error{max-width:none;margin:0 0 16px;}

@@ -229,7 +229,9 @@ Deno.serve(async (request) => {
   try { body = object(await request.json()); } catch { return respond({ error: "Solicitação inválida." }, 400, origin); }
   const recordType = text(body.record_type);
   const recordId = text(body.record_id);
+  const action = text(body.action) || "create";
   if (!(recordType === "delivery" || recordType === "pending_delivery" || recordType === "return") || !isUuid(recordId)) return respond({ error: "Ficha inválida." }, 400, origin);
+  if (!(action === "create" || action === "cancel") || (action === "cancel" && recordType !== "return")) return respond({ error: "Ação de link inválida." }, 400, origin);
 
   const { data: profile, error: profileError } = await userClient.from("profiles").select("organization_id,role,full_name").eq("id", user.id).maybeSingle();
   if (profileError || !profile?.organization_id) return respond({ error: "Não foi possível identificar a organização." }, 403, origin);
@@ -257,6 +259,18 @@ Deno.serve(async (request) => {
   if (transactionRecord.organization_id !== profile.organization_id) return respond({ error: "A ficha não foi encontrada nesta organização." }, 404, origin);
   if (recordType === "pending_delivery" && transactionRecord.status !== "pending_signature") return respond({ error: "Esta ficha não está mais pendente de assinatura." }, 409, origin);
   if (recordType !== "pending_delivery" && transactionRecord.term_signed_at) return respond({ error: "Esta ficha já está assinada." }, 409, origin);
+
+  if (action === "cancel") {
+    const { data: revokedLinks, error: revokeError } = await admin.from("term_signature_links")
+      .update({ revoked_at: new Date().toISOString() })
+      .eq("organization_id", profile.organization_id)
+      .eq("return_id", recordId)
+      .is("used_at", null)
+      .is("revoked_at", null)
+      .select("id");
+    if (revokeError) return respond({ error: "Não foi possível cancelar o link de assinatura." }, 500, origin);
+    return respond({ cancelled: true, revoked_count: revokedLinks?.length ?? 0 }, 200, origin);
+  }
 
   const employee = object(transactionRecord.employee);
   const employeeId = text(transactionRecord.employee_id);
