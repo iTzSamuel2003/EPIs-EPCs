@@ -1,5 +1,7 @@
 # EPIS+
 
+Pendências de segurança e desempenho do Supabase: [docs/pendencias-seguranca-supabase.md](docs/pendencias-seguranca-supabase.md).
+
 Sistema web para controle de EPIs e EPCs, iniciado pela Fase 1 do escopo.
 
 ## Arquitetura
@@ -30,3 +32,7 @@ Preencha `NEXT_PUBLIC_SUPABASE_URL` e `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY` no 
 ## Validação
 
 `npm run lint` e `npm run build` devem passar antes de cada entrega.
+
+## Pendências técnicas
+
+- [ ] Revisar o relatório de vulnerabilidades do `npm ci` de 21/10/2026 (10 ocorrências: 1 crítica, 8 altas e 1 baixa), executar `npm audit`, avaliar atualizações compatíveis e validar lint/build. Nenhuma dependência foi atualizada naquela publicação.
