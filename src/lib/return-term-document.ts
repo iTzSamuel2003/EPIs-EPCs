@@ -25,7 +25,6 @@ export type ReturnTermItem = {
   destination?: string | null;
   incident_type?: string | null;
   incident_description?: string | null;
-  deduction_amount?: number | null;
 };
 
 export type ReturnTermData = {
@@ -281,7 +280,7 @@ export async function createReturnTermDocument(data: ReturnTermData): Promise<js
   addMetadata();
 
   const declaration = hasIncident
-    ? "Declaro que as informações e os itens desta ficha foram apresentados para registro e apuração individual. Os valores eventualmente indicados são estimativas, não representam dívida reconhecida e não autorizam desconto automático em folha. Qualquer ressarcimento dependerá da apuração dos fatos, da comprovação de responsabilidade e dos requisitos legais aplicáveis."
+    ? "Declaro que as informações e os itens desta ficha foram apresentados para registro e apuração individual. As ocorrências serão encaminhadas para análise separada, e esta ficha não representa dívida reconhecida nem autoriza desconto automático em folha. Qualquer ressarcimento dependerá da apuração dos fatos, da comprovação de responsabilidade e dos requisitos legais aplicáveis."
     : "Declaro que os materiais relacionados foram conferidos e devolvidos nas condições e destinos registrados nesta ficha. Eventuais danos, perdas ou divergências serão avaliados individualmente, conforme os procedimentos da organização e os requisitos legais aplicáveis.";
   const declarationLines = doc.splitTextToSize(declaration, contentWidth - 9);
   const declarationHeight = declarationLines.length * 3.35 + 13;
@@ -348,7 +347,6 @@ export async function createReturnTermDocument(data: ReturnTermData): Promise<js
       incidentNames[item.incident_type || "normal"] || item.incident_type || "",
       destinationNames[item.destination || ""] || item.destination || "",
       item.incident_description || "",
-      item.deduction_amount ? `Valor estimado para análise: R$ ${item.deduction_amount.toLocaleString("pt-BR", { minimumFractionDigits: 2 })}` : "",
     ].filter(Boolean).join("\n") || "Devolução normal";
     const values = [
       formatDate(item.delivered_at || data.returned_at),

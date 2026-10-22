@@ -12,7 +12,7 @@ import { ReturnTermOrganization } from "@/lib/return-term-document";
 
 type Employee = { id: string; full_name: string; registration: string; cpf?: string | null; job_title?: string | null; function_name?: string | null; department?: string | null; admission_date?: string | null; termination_date?: string | null; status?: string | null };
 type DeliveredItem = { id: string; quantity: number; returned: number; pending_return: number; variant_id: string | null; variant: { name: string; size: string | null } | null; material: { name: string; internal_code: string; unit: string } | null; lot: { lot_number: string | null; ca_number: string | null; ca_expires_at: string | null; test_number: string | null; test_report_number: string | null; test_performed_at: string | null; test_expires_at: string | null; unit_cost: number | null } | null; units: Array<{ unit_identifier: string | null; valid_until: string | null; test_number: string | null; test_report_number: string | null; test_performed_at: string | null; ca_number: string | null; ca_expires_at: string | null }> | null; delivery: { employee_id: string; delivered_at: string; employee: { full_name: string; registration: string } | null } | null };
-type ReturnLine = { delivery_item_id: string; quantity: number; equipment_condition: string; destination: string; incident_type: string; incident_description: string; deduction_requested: boolean; deduction_amount: string };
+type ReturnLine = { delivery_item_id: string; quantity: number; equipment_condition: string; destination: string; incident_type: string; incident_description: string; deduction_requested: boolean };
 type ReturnSignatureLink = { url: string; expiresAt: string };
 const reasons = [["replacement", "Substituição"], ["termination", "Desligamento"], ["role_change", "Alteração de função"], ["damaged", "Equipamento danificado"], ["voluntary", "Devolução voluntária"], ["other", "Outro"]];
 const incidentLabels: Record<string, string> = { normal: "Devolução normal", misuse: "Mau uso", loss: "Extravio", theft: "Furto", damage: "Dano", other: "Outro" };
@@ -98,7 +98,7 @@ export default function ReturnsPage() {
   const returnableItems = employeeItems.filter((item) => item.quantity > item.returned + item.pending_return);
   const filteredEmployees = employees.filter((employee) => `${employee.full_name} ${employee.registration}`.toLowerCase().includes(employeeQuery.toLowerCase())).slice(0, 8);
   if (error && !employees.length && !items.length && !employeeId && !saving) return <main className="module-shell"><header className="module-header"><div><p className="eyebrow">MOVIMENTAÇÃO DE EQUIPAMENTOS</p><h1>Devoluções</h1><p className="module-subtitle">Selecione um ou vários materiais e registre a condição de cada devolução.</p></div></header><section className="panel runtime-error-card"><FeedbackMessage onRetry={retryLoad}>{error}</FeedbackMessage></section></main>;
-  function defaultLine(item: DeliveredItem): ReturnLine { return { delivery_item_id: item.id, quantity: item.quantity - item.returned - item.pending_return, equipment_condition: "good", destination: "stock", incident_type: "normal", incident_description: "", deduction_requested: false, deduction_amount: "0" }; }
+  function defaultLine(item: DeliveredItem): ReturnLine { return { delivery_item_id: item.id, quantity: item.quantity - item.returned - item.pending_return, equipment_condition: "good", destination: "stock", incident_type: "normal", incident_description: "", deduction_requested: false }; }
   function selectPhotos(event: ChangeEvent<HTMLInputElement>) { const files = Array.from(event.target.files ?? []); event.target.value = ""; const invalid = files.find((file) => !["image/jpeg", "image/png", "image/webp"].includes(file.type) || file.size > 10 * 1024 * 1024); if (invalid) { setError(invalid.size > 10 * 1024 * 1024 ? "Cada foto deve ter no máximo 10 MB." : "As fotos devem estar em formato JPG, PNG ou WEBP."); return; } setError(""); setPhotoFiles((current) => [...current, ...files].slice(0, 5)); }
   function selectEmployee(employee: Employee) { setEmployeeId(employee.id); setEmployeeQuery(`${employee.registration} · ${employee.full_name}`); setSelectedIds([]); setLines({}); setSuggestionsOpen(false); }
   function toggleItem(item: DeliveredItem) { setSelectedIds((current) => current.includes(item.id) ? current.filter((id) => id !== item.id) : [...current, item.id]); setLines((current) => ({ ...current, [item.id]: current[item.id] ?? defaultLine(item) })); }
@@ -161,10 +161,9 @@ export default function ReturnsPage() {
       const selectedItem = items.find((item) => item.id === line?.delivery_item_id);
       const available = selectedItem ? selectedItem.quantity - selectedItem.returned - selectedItem.pending_return : 0;
       const quantity = Number(line?.quantity);
-      const deduction = Number(line?.deduction_amount);
-      return !line || !Number.isInteger(quantity) || quantity <= 0 || quantity > available || (line.deduction_requested && (!Number.isFinite(deduction) || deduction <= 0));
+      return !line || !Number.isInteger(quantity) || quantity <= 0 || quantity > available;
     })) {
-      setError("Confira as quantidades inteiras e os valores de desconto dos materiais selecionados.");
+      setError("Confira as quantidades inteiras dos materiais selecionados.");
       return;
     }
     setActiveReturnId(""); setActiveSignatureLink(null); setSignatureLinkError(""); setCopyFeedback("");
@@ -179,7 +178,7 @@ export default function ReturnsPage() {
       const actingUserName = profile?.full_name?.trim() || auth.user.email?.split("@")[0] || "";
       if (!actingUserName) throw new Error("Não foi possível identificar o usuário responsável pela devolução.");
       setResponsibleName(actingUserName);
-      const payload = selectedLines.map((line) => ({ ...line, quantity: Number(line.quantity), deduction_amount: line.deduction_requested ? Number(line.deduction_amount) || 0 : null }));
+      const payload = selectedLines.map((line) => ({ ...line, quantity: Number(line.quantity) }));
       const { data: returnId, error: returnError } = await supabase.rpc("register_return", { p_employee_id: employeeId, p_reason: reason, p_returned_at: returnedAt, p_items: payload, p_notes: notes.trim() || null });
       if (returnError || !returnId) throw returnError ?? new Error("Não foi possível registrar a devolução.");
 
@@ -198,7 +197,7 @@ export default function ReturnsPage() {
             p_incident_description: accountabilityDescription || null,
             p_employee_signature_name: actingUserName,
             p_deduction_requested: incidentLines.some((line) => line.deduction_requested),
-            p_deduction_amount: incidentLines.reduce((total, line) => total + (Number(line.deduction_amount) || 0), 0) || null,
+            p_deduction_amount: null,
           });
           if (accountabilityError) followUpError = "o termo de responsabilidade não foi salvo";
         } catch {
@@ -259,7 +258,7 @@ export default function ReturnsPage() {
                   <label>Condição<select value={line.equipment_condition} onChange={(event) => updateLine(item.id, "equipment_condition", event.target.value)}><option value="good">Bom</option><option value="used">Usado</option><option value="damaged">Danificado</option><option value="unusable">Inutilizado</option></select></label>
                   <label>Destino<select value={line.destination} disabled={lockedMissing} onChange={(event) => updateLine(item.id, "destination", event.target.value)}>{lockedMissing ? <option value="not_returned">Não devolvido</option> : <>{line.incident_type === "normal" && line.equipment_condition !== "damaged" && line.equipment_condition !== "unusable" && <option value="stock">Estoque</option>}<option value="maintenance">Manutenção</option><option value="disposal">Descarte</option></>}</select></label>
                   <label>Ocorrência<select value={line.incident_type} onChange={(event) => updateLine(item.id, "incident_type", event.target.value)}>{Object.entries(incidentLabels).map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select></label>
-                  {line.incident_type !== "normal" && <><label>Valor estimado para análise (R$)<input type="number" min="0" step="0.01" value={line.deduction_amount} onChange={(event) => updateLine(item.id, "deduction_amount", event.target.value)} /></label><label className="return-line-description">Descrição da ocorrência<textarea value={line.incident_description} onChange={(event) => updateLine(item.id, "incident_description", event.target.value)} rows={2} /></label><p className="return-line-legal-note">O valor é uma estimativa para análise. A assinatura registra ciência; não realiza desconto automático.</p></>}
+                  {line.incident_type !== "normal" && <label className="return-line-description">Descrição da ocorrência<textarea value={line.incident_description} onChange={(event) => updateLine(item.id, "incident_description", event.target.value)} rows={2} /></label>}
                 </div>}
               </article>;
             }) : <span>Nenhum material pendente de devolução.</span>}

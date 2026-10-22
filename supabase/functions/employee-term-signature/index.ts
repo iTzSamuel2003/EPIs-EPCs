@@ -18,7 +18,7 @@ const destinationLabels: Record<string, string> = { stock: "Retorno ao estoque",
 
 type Snapshot = {
   version: number;
-  type: "delivery" | "return";
+  type: "delivery" | "return" | "deduction";
   pre_delivery_signature?: boolean;
   organization_id?: string;
   organization_name: string;
@@ -36,6 +36,8 @@ type Snapshot = {
   date: string;
   reason: string;
   notes: string | null;
+  case_id?: string;
+  approved_amount?: number;
   items: Array<Record<string, unknown>>;
 };
 
@@ -456,7 +458,7 @@ async function createSignedReturnPdf(snapshot: Snapshot, signatureBytes: Uint8Ar
   y -= 13;
 
   const declaration = hasIncident
-    ? "Declaro que as informações e os itens desta ficha foram apresentados para registro e apuração individual. Os valores eventualmente indicados são estimativas, não representam dívida reconhecida e não autorizam desconto automático em folha. Qualquer ressarcimento dependerá da apuração dos fatos, da comprovação de responsabilidade e dos requisitos legais aplicáveis."
+    ? "Declaro que as informações e os itens desta ficha foram apresentados para registro e apuração individual. As ocorrências serão encaminhadas para análise separada, e esta ficha não representa dívida reconhecida nem autoriza desconto automático em folha. Qualquer ressarcimento dependerá da apuração dos fatos, da comprovação de responsabilidade e dos requisitos legais aplicáveis."
     : "Declaro que os materiais relacionados foram conferidos e devolvidos nas condições e destinos registrados nesta ficha. Eventuais danos, perdas ou divergências serão avaliados individualmente, conforme os procedimentos da organização e os requisitos legais aplicáveis.";
   const declarationLines = wrapped(declaration, regular, 7.1, width - 20);
   const declarationHeight = declarationLines.length * 9 + 28;
@@ -528,7 +530,6 @@ async function createSignedReturnPdf(snapshot: Snapshot, signatureBytes: Uint8Ar
       (incidentLabels[String(item.incident_type)] ?? renderText(item.incident_type)) || "Devolução normal",
       destinationLabels[String(item.destination)] ?? renderText(item.destination),
       renderText(item.incident_description),
-      item.deduction_requested === true ? `Valor estimado para análise: R$ ${Number(item.deduction_amount || 0).toFixed(2)}` : "",
     ].filter(Boolean).join("\n");
     tableRow([
       dateLabel(item.delivered_at || snapshot.date),
@@ -563,7 +564,183 @@ async function createSignedReturnPdf(snapshot: Snapshot, signatureBytes: Uint8Ar
   return document.save();
 }
 
+async function createSignedDeductionPdf(snapshot: Snapshot, signatureBytes: Uint8Array, signerName: string, signerCpf: string, signedAt: Date, linkId: string) {
+  const document = await PDFDocument.create();
+  document.setTitle(`Autorização específica de desconto - ${snapshot.employee_name}`);
+  document.setSubject(`Autorização individual assinada por link de uso único. Registro ${linkId}.`);
+  document.setCreator("EPIS+ Gestão inteligente");
+  const regular = await document.embedFont(StandardFonts.Helvetica);
+  const bold = await document.embedFont(StandardFonts.HelveticaBold);
+  const signature = await document.embedPng(signatureBytes);
+  const pageSize: [number, number] = [595.28, 841.89];
+  const margin = 42;
+  const width = pageSize[0] - margin * 2;
+  const ink = rgb(0.14, 0.18, 0.25);
+  const muted = rgb(0.36, 0.4, 0.47);
+  const gold = rgb(0.82, 0.79, 0.03);
+  const border = rgb(0.72, 0.75, 0.78);
+  const pale = rgb(0.985, 0.982, 0.93);
+  const safeText = (value: unknown) => String(value ?? "").replace(/[\r\n\t]+/g, " ").replace(/\s+/g, " ").trim()
+    .normalize("NFKD").replace(/[\u0300-\u036f]/g, "").replace(/[^\x20-\x7e]/g, "-");
+  const money = (value: unknown) => `R$ ${Number(value || 0).toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+  const wrap = (value: unknown, font: typeof regular, size: number, maxWidth: number) => {
+    const lines: string[] = [];
+    let current = "";
+    for (const word of safeText(value).split(/\s+/).filter(Boolean)) {
+      const candidate = current ? `${current} ${word}` : word;
+      if (current && font.widthOfTextAtSize(candidate, size) > maxWidth) { lines.push(current); current = word; }
+      else current = candidate;
+    }
+    if (current) lines.push(current);
+    return lines;
+  };
+  const date = (value: unknown) => {
+    const text = String(value ?? "");
+    const parsed = /^\d{4}-\d{2}-\d{2}$/.test(text) ? new Date(`${text}T12:00:00Z`) : new Date(text);
+    return Number.isNaN(parsed.getTime()) ? "Nao informada" : new Intl.DateTimeFormat("pt-BR", { timeZone: "America/Cuiaba" }).format(parsed);
+  };
+  let page = document.addPage(pageSize);
+  let y = pageSize[1] - 120;
+  let logo: PDFImage | null = null;
+  try {
+    if (snapshot.organization_id && snapshot.organization_logo_url) {
+      const logoUrl = new URL(snapshot.organization_logo_url);
+      const expectedPath = `/storage/v1/object/public/organization-logos/${snapshot.organization_id}/logo`;
+      if (logoUrl.origin === new URL(supabaseUrl).origin && logoUrl.pathname === expectedPath) {
+        const { data: file, error } = await admin.storage.from("organization-logos").download(`${snapshot.organization_id}/logo`);
+        if (!error && file && file.size <= 2 * 1024 * 1024) {
+          const bytes = new Uint8Array(await file.arrayBuffer());
+          const mime = file.type.split(";")[0].trim().toLowerCase();
+          logo = mime === "image/png" ? await document.embedPng(bytes) : mime === "image/jpeg" ? await document.embedJpg(bytes) : null;
+        }
+      }
+    }
+  } catch { /* A indisponibilidade da logo nao impede a assinatura. */ }
+
+  function drawHeader(target: typeof page) {
+    const top = pageSize[1];
+    target.drawRectangle({ x: 0, y: top - 98, width: pageSize[0], height: 98, color: pale });
+    target.drawRectangle({ x: 0, y: top - 103, width: pageSize[0], height: 5, color: gold });
+    target.drawText(safeText(snapshot.organization_name.toLocaleUpperCase("pt-BR")), { x: margin, y: top - 32, size: 10.5, font: bold, color: ink, maxWidth: width - (logo ? 155 : 0) });
+    target.drawText("AUTORIZACAO ESPECIFICA PARA DESCONTO EM FOLHA", { x: margin, y: top - 55, size: 11.5, font: bold, color: ink, maxWidth: width - (logo ? 155 : 0) });
+    target.drawText("REGISTRO INDIVIDUAL DE OCORRENCIA E AUTORIZACAO", { x: margin, y: top - 74, size: 7, font: regular, color: muted, maxWidth: width - (logo ? 155 : 0) });
+    if (logo) {
+      const scale = Math.min(132 / logo.width, 55 / logo.height);
+      target.drawImage(logo, { x: pageSize[0] - margin - logo.width * scale, y: top - 77, width: logo.width * scale, height: logo.height * scale });
+    }
+  }
+  function nextPage() { page = document.addPage(pageSize); drawHeader(page); y = pageSize[1] - 120; }
+  function writeWrapped(value: unknown, x: number, top: number, maxWidth: number, size: number, font: typeof regular, lineHeight = size + 2) {
+    const lines = wrap(value, font, size, maxWidth);
+    lines.forEach((line, index) => page.drawText(line, { x, y: top - index * lineHeight, size, font, color: ink, maxWidth }));
+    return lines.length * lineHeight;
+  }
+  function ensureSpace(height: number) { if (y - height >= 68) return; nextPage(); }
+  function meta(label: string, value: string, x: number, top: number, cellWidth: number) {
+    page.drawText(safeText(label.toUpperCase()), { x, y: top - 7, size: 6, font: bold, color: muted, maxWidth: cellWidth });
+    const line = safeText(value) || "Nao informada";
+    page.drawText(line.slice(0, 100), { x, y: top - 20, size: 7.7, font: bold, color: ink, maxWidth: cellWidth });
+    return 32;
+  }
+  drawHeader(page);
+  const cellGap = 10;
+  const cellWidth = (width - cellGap * 2) / 3;
+  const metadata = [
+    ["Nº DE REGISTRO / MATRÍCULA", snapshot.employee_registration || "Não informada"],
+    ["COLABORADOR", snapshot.employee_name],
+    ["CARGO / FUNÇÃO", snapshot.employee_function || "Não informada"],
+    ["SETOR", snapshot.employee_department || "Não informado"],
+    ["DATA DE ADMISSÃO", date(snapshot.employee_admission_date)],
+    ...(snapshot.employee_termination_date ? [["DATA DE DESLIGAMENTO", date(snapshot.employee_termination_date)]] : []),
+    ["DATA DA OCORRÊNCIA", date(snapshot.date)],
+    ["RESPONSÁVEL PELA ANÁLISE", snapshot.responsible_name],
+  ];
+  for (let index = 0; index < metadata.length; index += 3) {
+    const row = metadata.slice(index, index + 3);
+    const rowHeight = Math.max(...row.map(([label, value], column) => meta(label, value, margin + column * (cellWidth + cellGap), y, cellWidth)));
+    y -= rowHeight + 2;
+  }
+  y -= 7;
+
+  const disclosure = `Eu, ${snapshot.employee_name}, declaro que recebi as informações sobre a ocorrência e os itens descritos abaixo. Após análise individual, foi indicado o valor total de ${money(snapshot.approved_amount)}. Ao assinar, manifesto minha autorização específica para o desconto desse valor, observados os limites e requisitos da legislação aplicável e os procedimentos da empresa. Esta autorização refere-se somente a esta ocorrência e não é uma autorização genérica para descontos futuros. Ela não substitui o fornecimento ou a reposição de EPI necessário à proteção, e o sistema não realiza lançamento automático em folha.`;
+  const disclosureLines = wrap(disclosure, regular, 7.2, width - 20);
+  const disclosureHeight = disclosureLines.length * 9.4 + 29;
+  ensureSpace(disclosureHeight + 16);
+  page.drawRectangle({ x: margin, y: y - disclosureHeight, width, height: disclosureHeight, color: rgb(0.985, 0.985, 0.975), borderColor: border, borderWidth: 0.65 });
+  page.drawRectangle({ x: margin, y: y - disclosureHeight, width: 3, height: disclosureHeight, color: gold });
+  page.drawText("DECLARAÇÃO E AUTORIZAÇÃO INDIVIDUAL", { x: margin + 10, y: y - 14, size: 7.3, font: bold, color: ink });
+  writeWrapped(disclosure, margin + 10, y - 29, width - 20, 7.2, regular, 9.4);
+  y -= disclosureHeight + 12;
+
+  const approvedText = `VALOR TOTAL AUTORIZADO: ${money(snapshot.approved_amount)}`;
+  page.drawRectangle({ x: margin, y: y - 29, width, height: 29, color: pale, borderColor: border, borderWidth: 0.6 });
+  page.drawText(approvedText, { x: margin + 10, y: y - 19, size: 9, font: bold, color: ink });
+  y -= 42;
+  page.drawText("ITENS RELACIONADOS À OCORRÊNCIA", { x: margin, y, size: 8.3, font: bold, color: ink });
+  y -= 13;
+  const columns = [48, 155, 54, 95, width - 352];
+  const labels = ["DATA ENTREGA", "MATERIAL", "QTD./TAM.", "CA / ENSAIO", "OCORRÊNCIA"];
+  function tableHeader() {
+    let x = margin;
+    labels.forEach((label, index) => {
+      page.drawRectangle({ x, y: y - 25, width: columns[index], height: 25, color: pale, borderColor: border, borderWidth: 0.55 });
+      page.drawText(safeText(label), { x: x + 3, y: y - 9, size: 5.8, font: bold, color: ink, maxWidth: columns[index] - 6 });
+      x += columns[index];
+    });
+    y -= 25;
+  }
+  tableHeader();
+  for (const value of snapshot.items) {
+    const item = object(value);
+    const occurrence = [item.incident_type, item.incident_description, item.condition, item.destination].filter(Boolean).map(safeText).join(" - ");
+    const compliance = [item.ca_number ? `CA ${item.ca_number}` : "", item.ca_expires_at ? `Validade CA ${date(item.ca_expires_at)}` : "", item.test_number ? `Ensaio ${item.test_number}` : "", item.test_report_number ? `Laudo ${item.test_report_number}` : "", item.test_performed_at ? `Realizado ${date(item.test_performed_at)}` : "", item.test_expires_at ? `Validade ${date(item.test_expires_at)}` : ""].filter(Boolean).join("\n");
+    const values = [date(item.delivered_at || snapshot.date), safeText(item.material), `${Number(item.quantity) || 0} ${safeText(item.unit)}${item.size ? ` / ${safeText(item.size)}` : ""}`, safeText(compliance) || "-", safeText(occurrence) || "Ocorrência registrada"];
+    const lines = values.map((entry, index) => entry.split("\n").flatMap((line) => wrap(line, regular, 6.1, columns[index] - 7)));
+    const rowHeight = Math.max(32, ...lines.map((entry) => entry.length * 7.7 + 9));
+    if (y - rowHeight < 68) { nextPage(); tableHeader(); }
+    let x = margin;
+    values.forEach((entry, index) => {
+      page.drawRectangle({ x, y: y - rowHeight, width: columns[index], height: rowHeight, color: rgb(1, 1, 1), borderColor: border, borderWidth: 0.5 });
+      const rows = entry.split("\n").flatMap((line) => wrap(line, regular, 6.1, columns[index] - 7));
+      rows.forEach((line, lineIndex) => page.drawText(line, { x: x + 3, y: y - 10 - lineIndex * 7.7, size: 6.1, font: regular, color: ink, maxWidth: columns[index] - 7 }));
+      x += columns[index];
+    });
+    y -= rowHeight;
+  }
+
+  if (snapshot.notes) {
+    y -= 12;
+    ensureSpace(45);
+    page.drawText("OBSERVAÇÃO DA ANÁLISE", { x: margin, y, size: 6.8, font: bold, color: ink });
+    y -= 12 + writeWrapped(snapshot.notes, margin, y, width, 6.8, regular, 8.5);
+  }
+
+  ensureSpace(106);
+  const signatureLineY = y - 43;
+  const signatureScale = Math.min((width * 0.58 - 16) / signature.width, 33 / signature.height);
+  const signatureWidth = signature.width * signatureScale;
+  const signatureHeight = signature.height * signatureScale;
+  page.drawImage(signature, { x: margin + (width * 0.58 - signatureWidth) / 2, y: signatureLineY + 3, width: signatureWidth, height: signatureHeight });
+  page.drawLine({ start: { x: margin, y: signatureLineY }, end: { x: margin + width * 0.58, y: signatureLineY }, thickness: 0.75, color: muted });
+  page.drawText(safeText(signerName), { x: margin + 4, y: signatureLineY - 12, size: 7.5, font: bold, color: ink });
+  page.drawText(`CPF ${maskedCpf(signerCpf)} - Assinado em ${new Intl.DateTimeFormat("pt-BR", { dateStyle: "short", timeStyle: "short", timeZone: "America/Cuiaba" }).format(signedAt)}`, { x: margin + 4, y: signatureLineY - 23, size: 5.8, font: regular, color: muted });
+  page.drawText("ASSINATURA ELETRÔNICA DO COLABORADOR", { x: margin + width * 0.63, y: signatureLineY - 9, size: 6.5, font: bold, color: ink, maxWidth: width * 0.37 });
+  page.drawText("Aceite registrado no sistema por link individual, com identificação e data/hora do servidor.", { x: margin + width * 0.63, y: signatureLineY - 21, size: 5.8, font: regular, color: muted, maxWidth: width * 0.37 });
+
+  const isDsx = snapshot.organization_name.toLowerCase().includes("dsx");
+  const address = snapshot.organization_address || (isDsx ? "Rua Harrison de Figueiredo, 132, Jd. Sta. Maria, 79833-552, Dourados-MS" : "");
+  const phone = snapshot.organization_phone || (isDsx ? "+55 67 3425-2324" : "");
+  const footer = [snapshot.organization_cnpj ? `CNPJ ${snapshot.organization_cnpj}` : "", address, phone, isDsx ? "www.dsxenergia.com.br" : ""].filter(Boolean).join(" | ");
+  for (const [index, currentPage] of document.getPages().entries()) {
+    currentPage.drawLine({ start: { x: margin, y: 38 }, end: { x: pageSize[0] - margin, y: 38 }, thickness: 2.5, color: gold });
+    if (footer) currentPage.drawText(safeText(footer), { x: margin, y: 25, size: 5.7, font: regular, color: muted, maxWidth: width });
+    currentPage.drawText(safeText(`Registro ${linkId} - ${index + 1}/${document.getPageCount()} - desconto depende dos procedimentos legais aplicaveis.`), { x: margin, y: 13, size: 5.2, font: regular, color: muted, maxWidth: width });
+  }
+  return document.save();
+}
+
 async function createSignedPdf(snapshot: Snapshot, signatureBytes: Uint8Array, signerName: string, signerCpf: string, signedAt: Date, linkId: string) {
+  if (snapshot.type === "deduction") return createSignedDeductionPdf(snapshot, signatureBytes, signerName, signerCpf, signedAt, linkId);
   if (snapshot.pre_delivery_signature) return createPreDeliverySignedPdf(snapshot, signatureBytes, signerName, signerCpf, signedAt, linkId);
   if (snapshot.type === "return") return createSignedReturnPdf(snapshot, signatureBytes, signerName, signerCpf, signedAt, linkId);
   const document = await PDFDocument.create();
@@ -702,7 +879,7 @@ async function createSignedPdf(snapshot: Snapshot, signatureBytes: Uint8Array, s
       if (item.condition) line(`Condição: ${conditionLabels[String(item.condition)] ?? renderText(item.condition)} - Destino: ${destinationLabels[String(item.destination)] ?? renderText(item.destination)}`, 8, false, 11);
       const incident = incidentLabels[String(item.incident_type)] ?? renderText(item.incident_type);
       if (incident && incident !== incidentLabels.normal) line(`Ocorrência: ${incident}${item.incident_description ? ` - ${renderText(item.incident_description)}` : ""}`, 8, false, 11);
-      if (item.deduction_requested === true) line(`Solicitação de análise: ${item.deduction_amount ? `R$ ${Number(item.deduction_amount).toFixed(2)}` : "valor a avaliar"}. Nenhum desconto é aplicado automaticamente.`, 8, false, 11);
+      if (item.deduction_requested === true) line("Ocorrência encaminhada para análise individual. Esta ficha não autoriza desconto automático.", 8, false, 11);
     }
     y -= 5;
   }
@@ -718,7 +895,7 @@ async function createSignedPdf(snapshot: Snapshot, signatureBytes: Uint8Array, s
     : snapshot.type === "delivery"
       ? "Declaro que conferi e recebi os materiais relacionados nesta ficha. Comprometo-me a utilizá-los somente para a finalidade a que se destinam, seguir as orientações recebidas, cuidar da guarda e conservação, comunicar prontamente dano, alteração ou extravio e devolvê-los quando solicitado, na substituição, transferência ou desligamento, conforme os procedimentos aplicáveis da NR-06. Estou ciente de que eventuais danos ou perdas serão apurados individualmente; qualquer ressarcimento ou desconto dependerá da apuração e dos requisitos legais aplicáveis, não decorrendo automaticamente desta assinatura."
     : snapshot.items.some((value) => object(value).incident_type && object(value).incident_type !== "normal")
-      ? "Declaro que conferi as informações da ocorrência e compreendi que os valores indicados são estimativas para análise individual. Esta assinatura registra ciência, não representa dívida reconhecida nem autoriza desconto automático em folha. Qualquer ressarcimento dependerá da apuração dos fatos, comprovação de responsabilidade e verificação dos requisitos legais aplicáveis."
+      ? "Declaro que conferi as informações da ocorrência e compreendi que ela será analisada separadamente. Esta assinatura registra ciência, não representa dívida reconhecida nem autoriza desconto automático em folha. Qualquer ressarcimento dependerá da apuração dos fatos, comprovação de responsabilidade e verificação dos requisitos legais aplicáveis."
       : "Declaro que acompanhei a devolução dos materiais relacionados e conferi as informações desta ficha. Eventual ocorrência ou solicitação de desconto será analisada separadamente e não implica desconto automático.";
   line(statement, 9, false, 14);
   y -= 10;
@@ -781,7 +958,7 @@ Deno.serve(async (request) => {
   if (!isToken(token)) return respond({ error: "Este link é inválido, expirou ou já foi utilizado." }, 404, origin);
   const tokenHash = await sha256(token);
   const { data: link, error: linkError } = await admin.from("term_signature_links")
-    .select("id,organization_id,employee_id,delivery_id,return_id,pending_delivery_id,expires_at,used_at,revoked_at,failed_attempts,locked_until,accessed_at,snapshot,snapshot_hash")
+    .select("id,organization_id,employee_id,delivery_id,return_id,pending_delivery_id,deduction_case_id,expires_at,used_at,revoked_at,failed_attempts,locked_until,accessed_at,snapshot,snapshot_hash")
     .eq("token_hash", tokenHash).maybeSingle();
   if (linkError || !link) return respond({ error: "Este link é inválido, expirou ou já foi utilizado." }, 404, origin);
 
@@ -790,14 +967,24 @@ Deno.serve(async (request) => {
   if (link.locked_until && new Date(link.locked_until).getTime() > Date.now()) return respond({ error: "O link foi bloqueado temporariamente após tentativas inválidas. Solicite outro ao responsável." }, 423, origin);
 
   const snapshot = object(link.snapshot) as Snapshot;
-  if (!snapshot || snapshot.version !== 1 || !(snapshot.type === "delivery" || snapshot.type === "return") || await sha256(stableJson(snapshot)) !== link.snapshot_hash) {
+  if (!snapshot || snapshot.version !== 1 || !(snapshot.type === "delivery" || snapshot.type === "return" || snapshot.type === "deduction") || await sha256(stableJson(snapshot)) !== link.snapshot_hash) {
     return respond({ error: "Não foi possível validar a integridade desta ficha. Solicite um novo link." }, 409, origin);
+  }
+  if ((snapshot.type === "deduction") !== Boolean(link.deduction_case_id)) {
+    return respond({ error: "O tipo de autorização não corresponde ao link. Solicite um novo link ao RH." }, 409, origin);
   }
 
   if (action === "preview") {
     if (link.pending_delivery_id) {
       const { data: pending, error: pendingError } = await admin.from("pending_deliveries").select("status").eq("id", link.pending_delivery_id).eq("organization_id", link.organization_id).maybeSingle();
       if (pendingError || !pending || pending.status !== "pending_signature") return respond({ error: "Esta ficha não está mais pendente de assinatura." }, 410, origin);
+    } else if (link.deduction_case_id) {
+      const { data: deductionCase, error: caseError } = await admin.from("return_deduction_cases")
+        .select("status,signed_at,approved_amount")
+        .eq("id", link.deduction_case_id).eq("organization_id", link.organization_id).eq("employee_id", link.employee_id).maybeSingle();
+      if (caseError || !deductionCase || deductionCase.status !== "approved" || deductionCase.signed_at || Number(deductionCase.approved_amount) <= 0) {
+        return respond({ error: "Esta autorização não está mais pendente de assinatura." }, 410, origin);
+      }
     } else {
       const table = link.delivery_id ? "deliveries" : "returns";
       const recordId = link.delivery_id ?? link.return_id;
@@ -835,7 +1022,7 @@ Deno.serve(async (request) => {
   }
 
   const signedAt = new Date();
-  const recordId = String(link.pending_delivery_id ?? link.delivery_id ?? link.return_id);
+  const recordId = String(link.pending_delivery_id ?? link.delivery_id ?? link.return_id ?? link.deduction_case_id);
   const path = `${link.organization_id}/${recordId}/whatsapp-signature-${link.id}-${crypto.randomUUID()}.pdf`;
   let pdfBytes: Uint8Array;
   try { pdfBytes = await createSignedPdf(snapshot, signatureBytes, String(employee.full_name), signerCpf, signedAt, String(link.id)); }
@@ -847,7 +1034,8 @@ Deno.serve(async (request) => {
   const { error: uploadError } = await admin.storage.from("delivery-terms").upload(path, pdfBytes, { contentType: "application/pdf", upsert: false });
   if (uploadError) return respond({ error: "Não foi possível salvar o documento assinado. Tente novamente." }, 500, origin);
 
-  const { data: completedAt, error: completeError } = await admin.rpc("complete_employee_term_signature", {
+  const completionFunction = link.deduction_case_id ? "complete_employee_deduction_signature" : "complete_employee_term_signature";
+  const { data: completedAt, error: completeError } = await admin.rpc(completionFunction, {
     p_link_id: link.id,
     p_signature_file_path: path,
     p_signer_name: String(employee.full_name),
@@ -860,10 +1048,12 @@ Deno.serve(async (request) => {
     if (/lote.*saldo|saldo.*lote|estoque insuficiente|plano de lotes/i.test(completionMessage)) {
       return respond({ error: "O saldo de um dos lotes mudou desde a criação da ficha. Nenhuma entrega foi registrada; solicite uma nova ficha ao responsável." }, 409, origin);
     }
-    if (/link de assinatura inválido|link.*expirado|link.*utilizado|ficha.*não está mais pendente|ficha.*já foi assinada/i.test(completionMessage)) {
+    if (/link de assinatura inválido|link.*expirado|link.*utilizado|ficha.*não está mais pendente|ficha.*já foi assinada|autorização.*não está mais pendente/i.test(completionMessage)) {
       return respond({ error: "Esta ficha não está mais disponível para assinatura. Se você ainda não assinou, solicite ao responsável um novo link." }, 410, origin);
     }
-    return respond({ error: "Não foi possível registrar a assinatura agora. Ela não foi salva e o estoque não foi baixado. Tente novamente em instantes; se o erro continuar, avise o responsável pelo controle." }, 500, origin);
+    return respond({ error: link.deduction_case_id
+      ? "Não foi possível registrar a autorização agora. Ela não foi salva. Tente novamente em instantes ou avise o RH."
+      : "Não foi possível registrar a assinatura agora. Ela não foi salva e o estoque não foi baixado. Tente novamente em instantes; se o erro continuar, avise o responsável pelo controle." }, 500, origin);
   }
 
   return respond({ success: true, signed_at: completedAt }, 200, origin);

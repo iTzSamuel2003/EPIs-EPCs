@@ -25,7 +25,6 @@ type ReturnSignatureItem = ReturnTermItem | {
   destination?: string | null;
   incident_type?: string | null;
   incident_description?: string | null;
-  deduction_amount?: number | null;
 };
 type ReturnSignatureModalProps = {
   returnId: string;

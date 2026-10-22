@@ -40,7 +40,7 @@ function allowedToManage(role: string, pagePaths: unknown, page: string) {
   if (role === "admin") return true;
   if (Array.isArray(pagePaths)) return pagePaths.includes(page);
   const defaults: Record<string, string[]> = {
-    rh: ["/employees", "/deliveries", "/returns", "/requests", "/stock", "/validities", "/reports"],
+    rh: ["/employees", "/deliveries", "/returns", "/discounts", "/requests", "/stock", "/validities", "/reports"],
     tst: ["/entries", "/deliveries", "/returns", "/stock", "/validities", "/tests", "/ca", "/reports"],
     user: [],
   };
@@ -138,7 +138,6 @@ function mapReturnItem(value: unknown) {
     incident_type: text(item.incident_type) || "normal",
     incident_description: text(item.incident_description) || null,
     deduction_requested: item.deduction_requested === true,
-    deduction_amount: item.deduction_amount === null || item.deduction_amount === undefined ? null : Number(item.deduction_amount),
   };
 }
 
@@ -230,23 +229,25 @@ Deno.serve(async (request) => {
   const recordType = text(body.record_type);
   const recordId = text(body.record_id);
   const action = text(body.action) || "create";
-  if (!(recordType === "delivery" || recordType === "pending_delivery" || recordType === "return") || !isUuid(recordId)) return respond({ error: "Ficha inválida." }, 400, origin);
-  if (!(action === "create" || action === "cancel") || (action === "cancel" && recordType !== "return")) return respond({ error: "Ação de link inválida." }, 400, origin);
+  if (!(recordType === "delivery" || recordType === "pending_delivery" || recordType === "return" || recordType === "deduction") || !isUuid(recordId)) return respond({ error: "Ficha inválida." }, 400, origin);
+  if (!(action === "create" || action === "cancel") || (action === "cancel" && recordType !== "return" && recordType !== "deduction")) return respond({ error: "Ação de link inválida." }, 400, origin);
 
-  const table = recordType === "pending_delivery" ? "pending_deliveries" : recordType === "delivery" ? "deliveries" : "returns";
+  const table = recordType === "pending_delivery" ? "pending_deliveries" : recordType === "delivery" ? "deliveries" : recordType === "deduction" ? "return_deduction_cases" : "returns";
   const select = action === "cancel"
-    ? "id,organization_id,term_signed_at"
+    ? recordType === "deduction" ? "id,organization_id,employee_id,status,signed_at" : "id,organization_id,term_signed_at"
     : recordType === "pending_delivery"
       ? "id,organization_id,employee_id,delivered_at,reason,notes,request_items,lot_plan,status,snapshot,employee:employees(full_name,registration,phone,job_title,function_name,department,admission_date,termination_date,status)"
       : recordType === "delivery"
         ? "id,organization_id,employee_id,delivered_at,reason,notes,term_signed_at,employee:employees(full_name,registration,phone,job_title,function_name,department,admission_date,termination_date,status),delivery_items(quantity,test_performed_at,test_expires_at,expected_replacement_at,material:materials(name,unit,internal_code),lot:material_lots(ca_number,ca_expires_at,test_number,test_report_number,test_performed_at,test_expires_at),variant:material_variants(name,size),material_units(unit_identifier,valid_until,test_performed_at,test_number,test_report_number,ca_number,ca_expires_at))"
-        : "id,organization_id,employee_id,returned_at,reason,notes,term_signed_at,employee:employees(full_name,registration,phone,cpf,job_title,function_name,department,admission_date,termination_date,status),return_items(quantity,equipment_condition,destination,incident_type,incident_description,deduction_requested,deduction_amount,material:materials(name,unit),delivery_item:delivery_items(variant:material_variants(name,size),delivery:deliveries(delivered_at),lot:material_lots(lot_number,ca_number,ca_expires_at,test_number,test_report_number,test_performed_at,test_expires_at),units:material_units(unit_identifier,valid_until,ca_number,ca_expires_at,test_number,test_report_number,test_performed_at)))";
+      : recordType === "deduction"
+        ? "id,organization_id,return_id,employee_id,approved_amount,status,review_notes,employee:employees(full_name,registration,phone,job_title,function_name,department,admission_date,termination_date,status),return:returns(returned_at,reason,return_items(id,quantity,deduction_requested,equipment_condition,destination,incident_type,incident_description,material:materials(name,unit),delivery_item:delivery_items(variant:material_variants(name,size),delivery:deliveries(delivered_at),lot:material_lots(lot_number,ca_number,ca_expires_at,test_number,test_report_number,test_performed_at,test_expires_at),units:material_units(unit_identifier,valid_until,ca_number,ca_expires_at,test_number,test_report_number,test_performed_at))))"
+        : "id,organization_id,employee_id,returned_at,reason,notes,term_signed_at,employee:employees(full_name,registration,phone,cpf,job_title,function_name,department,admission_date,termination_date,status),return_items(quantity,equipment_condition,destination,incident_type,incident_description,deduction_requested,material:materials(name,unit),delivery_item:delivery_items(variant:material_variants(name,size),delivery:deliveries(delivered_at),lot:material_lots(lot_number,ca_number,ca_expires_at,test_number,test_report_number,test_performed_at,test_expires_at),units:material_units(unit_identifier,valid_until,ca_number,ca_expires_at,test_number,test_report_number,test_performed_at)))";
   const profileQuery = action === "cancel"
     ? userClient.from("profiles").select("organization_id,role,full_name").eq("id", user.id).maybeSingle()
     : userClient.from("profiles").select("organization_id,role,full_name,organization:organizations(name,logo_url,cnpj,address,phone)").eq("id", user.id).maybeSingle();
   const { data: profile, error: profileError } = await profileQuery;
   if (profileError || !profile?.organization_id) return respond({ error: "Não foi possível identificar a organização." }, 403, origin);
-  const requiredPage = recordType === "return" ? "/returns" : "/deliveries";
+  const requiredPage = recordType === "return" ? "/returns" : recordType === "deduction" ? "/discounts" : "/deliveries";
   let pagePaths: unknown = null;
   const transactionQuery = userClient.from(table).select(select).eq("id", recordId).maybeSingle();
   let transactionResponse: Awaited<typeof transactionQuery>;
@@ -267,18 +268,88 @@ Deno.serve(async (request) => {
   const transactionRecord = transaction as unknown as Record<string, unknown>;
   if (transactionRecord.organization_id !== profile.organization_id) return respond({ error: "A ficha não foi encontrada nesta organização." }, 404, origin);
   if (recordType === "pending_delivery" && transactionRecord.status !== "pending_signature") return respond({ error: "Esta ficha não está mais pendente de assinatura." }, 409, origin);
-  if (recordType !== "pending_delivery" && transactionRecord.term_signed_at) return respond({ error: "Esta ficha já está assinada." }, 409, origin);
+  if (recordType === "deduction" && action === "create" && (transactionRecord.status !== "approved" || transactionRecord.signed_at)) return respond({ error: "A autorização precisa estar aprovada e ainda não assinada." }, 409, origin);
+  if (recordType === "deduction" && transactionRecord.status === "signed") return respond({ error: "Esta autorização já foi assinada." }, 409, origin);
+  if (recordType !== "pending_delivery" && recordType !== "deduction" && transactionRecord.term_signed_at) return respond({ error: "Esta ficha já está assinada." }, 409, origin);
 
   if (action === "cancel") {
     const { data: revokedLinks, error: revokeError } = await admin.from("term_signature_links")
       .update({ revoked_at: new Date().toISOString() })
       .eq("organization_id", profile.organization_id)
-      .eq("return_id", recordId)
+      .eq(recordType === "deduction" ? "deduction_case_id" : "return_id", recordId)
       .is("used_at", null)
       .is("revoked_at", null)
       .select("id");
     if (revokeError) return respond({ error: "Não foi possível cancelar o link de assinatura." }, 500, origin);
     return respond({ cancelled: true, revoked_count: revokedLinks?.length ?? 0 }, 200, origin);
+  }
+
+  if (recordType === "deduction") {
+    const employee = object(transactionRecord.employee);
+    const returnRecord = object(transactionRecord.return);
+    const returnItems = Array.isArray(returnRecord.return_items) ? returnRecord.return_items.map(object).filter((item) => item.deduction_requested === true) : [];
+    const items = returnItems.map((item) => ({ ...mapReturnItem(item), deduction_requested: true }));
+    const approvedAmount = Number(transactionRecord.approved_amount);
+    if (!text(transactionRecord.employee_id) || !items.length || !Number.isFinite(approvedAmount) || approvedAmount <= 0) {
+      return respond({ error: "A autorização aprovada não possui colaborador, valor ou itens para assinatura." }, 409, origin);
+    }
+    const organization = object("organization" in profile ? profile.organization : null);
+    const snapshot = {
+      version: 1,
+      type: "deduction",
+      organization_id: String(profile.organization_id),
+      organization_name: text(organization.name) || "Organização",
+      organization_logo_url: text(organization.logo_url) || null,
+      organization_cnpj: text(organization.cnpj) || null,
+      organization_address: text(organization.address) || null,
+      organization_phone: text(organization.phone) || null,
+      responsible_name: text(profile.full_name) || "Responsável do RH",
+      employee_name: text(employee.full_name) || "Colaborador",
+      employee_registration: text(employee.registration) || null,
+      employee_function: text(employee.job_title) || text(employee.function_name) || null,
+      employee_department: text(employee.department) || null,
+      employee_admission_date: text(employee.admission_date) || null,
+      employee_termination_date: text(employee.status) === "terminated" ? text(employee.termination_date) || null : null,
+      date: text(returnRecord.returned_at),
+      reason: text(returnRecord.reason),
+      notes: text(transactionRecord.review_notes) || null,
+      case_id: recordId,
+      approved_amount: approvedAmount,
+      items,
+    };
+
+    const now = new Date();
+    const expiresAt = new Date(now.getTime() + 48 * 60 * 60 * 1000).toISOString();
+    const token = createToken();
+    const tokenHash = await sha256(token);
+    const snapshotHash = await sha256(stableJson(snapshot));
+    const { data: link, error: insertError } = await admin.from("term_signature_links").insert({
+      organization_id: profile.organization_id,
+      employee_id: text(transactionRecord.employee_id),
+      deduction_case_id: recordId,
+      created_by: user.id,
+      token_hash: tokenHash,
+      snapshot,
+      snapshot_hash: snapshotHash,
+      expires_at: expiresAt,
+    }).select("id,expires_at").single();
+    if (insertError || !link) return respond({ error: "Não foi possível gerar o link de autorização." }, 500, origin);
+
+    const { error: revokeError } = await admin.from("term_signature_links").update({ revoked_at: now.toISOString() })
+      .eq("organization_id", profile.organization_id).eq("deduction_case_id", recordId)
+      .neq("id", link.id).is("used_at", null).is("revoked_at", null);
+    if (revokeError) {
+      await admin.from("term_signature_links").update({ revoked_at: new Date().toISOString() }).eq("id", link.id);
+      return respond({ error: "Não foi possível preparar o link de autorização." }, 500, origin);
+    }
+    const safeOrigin = origin && allowedOrigins.has(origin) ? origin : productionOrigin;
+    return respond({
+      url: `${safeOrigin}/assinar/${token}`,
+      expires_at: link.expires_at,
+      employee_name: snapshot.employee_name,
+      employee_phone: text(employee.phone) || null,
+      snapshot,
+    }, 200, origin);
   }
 
   const employee = object(transactionRecord.employee);
@@ -330,6 +401,7 @@ Deno.serve(async (request) => {
     delivery_id: recordType === "delivery" ? recordId : null,
     return_id: recordType === "return" ? recordId : null,
     pending_delivery_id: recordType === "pending_delivery" ? recordId : null,
+    deduction_case_id: null,
     created_by: user.id,
     token_hash: tokenHash,
     snapshot,

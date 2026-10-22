@@ -4949,3 +4949,62 @@ html,body{max-width:100%;overflow-x:hidden}
 .term-cancel-link-button:hover{background:#ffe5e0;}
 .term-link-cancel-icon{background:#fff0ed;color:#ba554a;}
 .term-link-confirm-error{max-width:none;margin:0 0 16px;}
+
+.discounts-page{display:grid;gap:18px}
+.discounts-header{display:flex;justify-content:space-between;align-items:flex-end;gap:16px;margin-bottom:2px}
+.discounts-header h1{margin:0 0 7px;font-family:'Plus Jakarta Sans';font-size:28px;letter-spacing:-.8px}
+.discounts-header .subtitle{margin:0}
+.discounts-notice{display:flex;align-items:flex-start;gap:11px;padding:13px 15px;border:1px solid #f0dfae;border-radius:10px;background:#fffaf0;color:#765c20;font-size:12px;line-height:1.55}
+.discounts-notice svg{flex:0 0 auto;margin-top:1px;color:#bd8b22}
+.discounts-metrics{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px}
+.discounts-metrics button{display:flex;flex-direction:column;align-items:flex-start;gap:6px;padding:15px 17px;border:1px solid var(--line);border-radius:10px;background:#fff;color:var(--ink);text-align:left}
+.discounts-metrics button.selected{border-color:#9585e6;box-shadow:0 0 0 2px #7762d61a}
+.discounts-metrics small{color:var(--muted);font-size:11px}
+.discounts-metrics strong{font-size:23px}
+.discounts-toolbar{display:flex;align-items:center;gap:12px;padding:12px;background:#fff;border:1px solid var(--line);border-radius:10px}
+.discounts-toolbar label{display:flex;align-items:center;gap:9px;flex:1;min-width:0;padding:0 11px;border:1px solid var(--line);border-radius:8px;color:#8994a8}
+.discounts-toolbar input{width:100%;min-width:0;height:41px;border:0;outline:0;background:transparent;color:var(--ink)}
+.discounts-toolbar select,.discount-review-form input,.discount-review-form textarea{min-height:41px;border:1px solid var(--line);border-radius:8px;background:#fff;padding:9px 11px;color:var(--ink)}
+.discounts-toolbar select{min-width:190px}
+.discounts-feedback{padding:11px 14px;border:1px solid #dcd6fb;border-radius:8px;background:#f5f3ff;color:#5948ad;font-size:12px;line-height:1.5;overflow-wrap:anywhere}
+.discounts-empty{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:10px;min-height:190px;padding:24px;border:1px solid var(--line);border-radius:12px;background:#fff;color:var(--muted);text-align:center}
+.discounts-empty strong{color:var(--ink)}
+.discounts-error{color:#ad5047}
+.discounts-case-list{display:grid;gap:14px}
+.discount-case{min-width:0;padding:18px;border:1px solid var(--line);border-radius:12px;background:#fff}
+.discount-case-header{display:flex;justify-content:space-between;align-items:flex-start;gap:14px;padding-bottom:14px;border-bottom:1px solid #edf0f5}
+.discount-case-identity{display:flex;align-items:center;gap:11px;min-width:0}
+.discount-case-avatar{width:38px;height:38px;flex:0 0 auto;display:grid;place-items:center;border-radius:11px;background:#f0edfd;color:#6954c9;font-size:11px;font-weight:700}
+.discount-case-identity h2{margin:0 0 4px;font-size:15px}
+.discount-case-identity p{margin:0;color:var(--muted);font-size:11px;line-height:1.5}
+.discount-status{flex:0 0 auto;padding:6px 9px;border-radius:20px;background:#f3f4f8;color:#5c6880;font-size:10px;font-weight:700}
+.discount-status.status-pending_review{background:#fff5da;color:#98701a}
+.discount-status.status-approved{background:#edf1ff;color:#5856a7}
+.discount-status.status-signed{background:#e8f7ef;color:#28764e}
+.discount-status.status-rejected{background:#fff0ed;color:#a95148}
+.discount-case-summary{display:flex;flex-wrap:wrap;gap:12px 35px;padding:13px 0}
+.discount-case-summary div{display:grid;gap:4px}
+.discount-case-summary small{color:var(--muted);font-size:10px}
+.discount-case-summary strong{font-size:13px}
+.discount-items{display:grid;gap:8px}
+.discount-item{padding:11px 12px;border:1px solid #e9edf4;border-radius:9px;background:#fbfcfe}
+.discount-item-title{display:flex;justify-content:space-between;gap:12px;align-items:baseline}
+.discount-item-title strong{font-size:12px}
+.discount-item-title span{flex:0 0 auto;color:#5c6880;font-size:11px}
+.discount-item p{margin:5px 0;color:#5c6880;font-size:11px;line-height:1.45}
+.discount-item>small{display:block;color:#8a96aa;font-size:10px;line-height:1.5;overflow-wrap:anywhere}
+.discount-review-note{margin-top:12px;padding:10px 12px;border-left:3px solid #9585e6;background:#f8f7fe;color:#5c6880;font-size:11px;line-height:1.5}
+.discount-review-form{display:grid;grid-template-columns:minmax(180px,.35fr) minmax(250px,1fr);gap:12px;margin-top:14px;padding-top:14px;border-top:1px solid #edf0f5}
+.discount-review-form label{display:grid;gap:6px;color:#5c6880;font-size:11px;font-weight:600}
+.discount-review-form textarea{resize:vertical;min-height:68px}
+.discount-actions{display:flex;flex-wrap:wrap;align-items:center;justify-content:flex-end;gap:8px;grid-column:1/-1}
+.discount-actions button{display:inline-flex;align-items:center;justify-content:center;gap:7px;min-height:39px}
+.discount-reject{color:#a95148!important;border-color:#f1c9c3!important;background:#fff8f6!important}
+.discount-signature-actions{padding-top:13px;border-top:1px solid #edf0f5}
+.discount-link-expiry{margin-right:auto;color:#36794f;font-size:11px}
+.discount-generated-link{flex:1 1 300px;min-width:160px;height:38px;padding:8px 10px;border:1px solid var(--line);border-radius:7px;background:#fbfcfe;color:#5c6880;font-size:10px}
+.discount-signed-footer{display:flex;justify-content:space-between;align-items:center;gap:12px;margin-top:14px;padding-top:14px;border-top:1px solid #edf0f5}
+.discount-signed-footer>span{display:flex;align-items:center;gap:7px;color:#28764e;font-size:11px}
+.discount-signed-footer button{display:inline-flex;align-items:center;gap:7px}
+@media(max-width:800px){.discounts-metrics{grid-template-columns:repeat(2,minmax(0,1fr))}.discount-review-form{grid-template-columns:1fr}.discount-review-form label:first-child{max-width:220px}}
+@media(max-width:600px){.discounts-header{align-items:flex-start;flex-direction:column}.discounts-header .secondary-button{align-self:flex-end}.discounts-toolbar{align-items:stretch;flex-direction:column}.discounts-toolbar select{width:100%}.discount-case{padding:13px}.discount-case-header{flex-direction:column}.discount-case-identity{align-items:flex-start}.discount-status{margin-left:49px}.discount-case-summary{gap:12px 24px}.discount-item-title{align-items:flex-start;flex-direction:column;gap:4px}.discount-actions{justify-content:stretch}.discount-actions button{flex:1 1 100%}.discount-link-expiry{flex:1 1 100%;margin:0}.discount-generated-link{flex-basis:100%}.discount-signed-footer{align-items:stretch;flex-direction:column}.discount-signed-footer button{justify-content:center}}
