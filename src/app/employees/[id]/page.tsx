@@ -13,11 +13,14 @@ import { EmployeeNavigation } from "@/components/employee-navigation";
 import { DeliverySignatureModal } from "@/components/delivery-signature-modal";
 import { ReturnSignatureModal } from "@/components/return-signature-modal";
 import { FeedbackMessage } from "@/components/feedback-message";
+import { DeliveryTermPrintSheet, type DeliveryTermSnapshot } from "@/components/delivery-term-print-sheet";
+import { TermCopyLinkButton } from "@/components/term-copy-link-button";
+import { TermDocumentActions } from "@/components/term-document-actions";
 
 type Organization = { name: string; cnpj: string | null; logo_url: string | null; address: string | null; phone: string | null };
 type Employee = { id: string; registration: string | null; full_name: string; cpf: string; job_title: string | null; function_name: string | null; function_classification: string | null; department: string | null; unit: string | null; admission_date: string | null; termination_date: string | null; status: "active" | "away" | "terminated"; organization: Organization | null };
-type MaterialUnit = { unit_identifier: string; delivered_at: string | null; valid_until: string | null; ca_number: string | null; ca_expires_at: string | null };
-type Item = { id: string; quantity: number; returned: number; expected_replacement_at: string | null; material: { name: string; internal_code: string | null; unit: string; type: string } | null; variant: { name: string; size: string | null } | null; lot: { lot_number: string; ca_number: string | null; ca_expires_at: string | null } | null; units: MaterialUnit[]; delivery: { id: string; delivered_at: string; reason: string; term_file_path: string | null; term_uploaded_at: string | null; term_signature_method: string | null; term_signed_at: string | null } | null };
+type MaterialUnit = { unit_identifier: string; delivered_at: string | null; valid_until: string | null; ca_number: string | null; ca_expires_at: string | null; test_number: string | null; test_report_number: string | null; test_performed_at: string | null; test_expires_at: string | null };
+type Item = { id: string; quantity: number; returned: number; expected_replacement_at: string | null; material: { name: string; internal_code: string | null; unit: string; type: string } | null; variant: { name: string; size: string | null } | null; lot: { lot_number: string; ca_number: string | null; ca_expires_at: string | null } | null; units: MaterialUnit[]; delivery: { id: string; delivered_at: string; reason: string; notes: string | null; term_file_path: string | null; term_uploaded_at: string | null; term_signature_method: string | null; term_signed_at: string | null } | null };
 type Course = { id: string; name: string; provider: string | null; expires_at: string | null };
 type ReturnSheet = { id: string; returned_at: string; reason: string; term_file_path: string | null; term_signature_method: string | null; term_signed_at: string | null; items: Array<{ quantity: number; material: { name: string; unit: string } | null; variant: { name: string; size: string | null } | null }> };
 
@@ -28,22 +31,19 @@ function date(value: string | null) {
   return Number.isNaN(parsed.getTime()) ? "Data inválida" : parsed.toLocaleDateString("pt-BR");
 }
 function epiCaDetails(item: Item) {
-  const unitCertificates = item.units.flatMap((unit) => unit.ca_number
-    ? [`CA ${unit.ca_number}${unit.ca_expires_at ? ` · válido até ${date(unit.ca_expires_at)}` : ""}`]
-    : []);
-  const certificates = unitCertificates.length
-    ? [...new Set(unitCertificates)]
-    : item.lot?.ca_number
-      ? [`CA ${item.lot.ca_number}${item.lot.ca_expires_at ? ` · válido até ${date(item.lot.ca_expires_at)}` : ""}`]
-      : [];
-  if (certificates.length) return certificates.join("; ");
+  const unitDetails = item.units.flatMap((unit) => [
+    unit.ca_number ? `CA ${unit.ca_number}${unit.ca_expires_at ? ` · validade ${date(unit.ca_expires_at)}` : ""}` : "",
+    unit.test_number ? `Ensaio ${unit.test_number}` : "",
+    unit.test_report_number ? `Laudo ${unit.test_report_number}` : "",
+    unit.test_performed_at ? `realizado ${date(unit.test_performed_at)}` : "",
+    unit.test_expires_at ? `ensaio válido até ${date(unit.test_expires_at)}` : "",
+  ].filter(Boolean));
+  const certificate = item.lot?.ca_number
+    ? `CA ${item.lot.ca_number}${item.lot.ca_expires_at ? ` · validade ${date(item.lot.ca_expires_at)}` : ""}`
+    : "";
+  const details = [...new Set([...unitDetails, certificate].filter(Boolean))];
+  if (details.length) return details.join("; ");
   return item.material?.type === "EPI" ? "Não informado" : "Não se aplica";
-}
-function deliverySignatureLabel(delivery: Item["delivery"]) {
-  if (!delivery?.term_signed_at) return delivery?.term_file_path ? "Documento anexado" : "Pendente";
-  if (delivery.term_signature_method === "physical_upload") return `Assinado fisicamente · ${date(delivery.term_signed_at)}`;
-  if (delivery.term_signature_method === "assisted") return `Assinado no aparelho · ${date(delivery.term_signed_at)}`;
-  return `Assinado digitalmente · ${date(delivery.term_signed_at)}`;
 }
 function replacementStatus(value: string | null) {
   if (!value) return { label: "Sem previsão", tone: "neutral" };
@@ -76,6 +76,7 @@ export default function EmployeeMaterialsPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [uploadingId, setUploadingId] = useState("");
+  const [deliveryPrintSnapshot, setDeliveryPrintSnapshot] = useState<DeliveryTermSnapshot | null>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -90,7 +91,7 @@ export default function EmployeeMaterialsPage() {
       const supabase = createClient();
       const [{ data: employeeData, error: employeeError }, { data: deliveryData, error: deliveryError }, { data: courseData, error: courseError }, { data: returnData, error: returnError }] = await Promise.all([
         supabase.from("employees").select("id,registration,full_name,cpf,job_title,function_name,function_classification,department,unit,admission_date,termination_date,status,organization:organizations(name,cnpj,logo_url,address,phone)").eq("id", id).single(),
-        supabase.from("delivery_items").select("id,quantity,expected_replacement_at,materials(name,internal_code,unit,type),material_lots(lot_number,ca_number,ca_expires_at),variant:material_variants(name,size),material_units(unit_identifier,delivered_at,valid_until,ca_number,ca_expires_at),deliveries!inner(id,delivered_at,reason,employee_id,term_file_path,term_uploaded_at,term_signature_method,term_signed_at),return_items(quantity)").eq("deliveries.employee_id", id).order("created_at", { ascending: false }),
+        supabase.from("delivery_items").select("id,quantity,expected_replacement_at,materials(name,internal_code,unit,type),material_lots(lot_number,ca_number,ca_expires_at),variant:material_variants(name,size),material_units(unit_identifier,delivered_at,valid_until,ca_number,ca_expires_at,test_number,test_report_number,test_performed_at,test_expires_at),deliveries!inner(id,delivered_at,reason,notes,employee_id,term_file_path,term_uploaded_at,term_signature_method,term_signed_at),return_items(quantity)").eq("deliveries.employee_id", id).order("created_at", { ascending: false }),
         supabase.from("employee_courses").select("id,name,provider,expires_at").eq("employee_id", id).order("expires_at", { ascending: true, nullsFirst: false }),
         supabase.from("returns").select("id,returned_at,reason,term_file_path,term_signature_method,term_signed_at,return_items(quantity,material:materials(name,unit),delivery_item:delivery_items(variant:material_variants(name,size)))").eq("employee_id", id).order("returned_at", { ascending: false }),
       ]);
@@ -125,7 +126,7 @@ export default function EmployeeMaterialsPage() {
   const epiSheetRows = useMemo(() => [...items].sort((first, second) => (first.delivery?.delivered_at ?? "").localeCompare(second.delivery?.delivered_at ?? "")), [items]);
 
   const deliverySheets = useMemo(() => {
-    const grouped = new Map<string, { id: string; delivered_at: string; reason: string; term_file_path: string | null; term_uploaded_at: string | null; term_signature_method: string | null; items: number; materials: Item[] }>();
+    const grouped = new Map<string, { id: string; delivered_at: string; reason: string; notes: string | null; term_file_path: string | null; term_uploaded_at: string | null; term_signature_method: string | null; term_signed_at: string | null; items: number; materials: Item[] }>();
     items.forEach((item) => {
       if (!item.delivery) return;
       const current = grouped.get(item.delivery.id) ?? { ...item.delivery, items: 0, materials: [] };
@@ -141,6 +142,55 @@ export default function EmployeeMaterialsPage() {
   async function printEpiSheet() {
     const logos = Array.from(document.querySelectorAll<HTMLImageElement>(".employee-epi-brand img"));
     await Promise.all(logos.map((logo) => logo.decode().catch(() => undefined)));
+    window.print();
+  }
+
+  async function printDeliveryTerm(sheet: (typeof deliverySheets)[number]) {
+    if (!employee) return;
+    const organization = employee.organization;
+    const snapshot: DeliveryTermSnapshot = {
+      type: "delivery",
+      pre_delivery_signature: false,
+      organization_name: organization?.name || "DSX",
+      organization_logo_url: organization?.logo_url,
+      organization_cnpj: organization?.cnpj,
+      organization_address: organization?.address,
+      organization_phone: organization?.phone,
+      responsible_name: null,
+      employee_name: employee.full_name,
+      employee_registration: employee.registration,
+      employee_function: employee.function_name || employee.job_title,
+      employee_department: employee.department,
+      employee_admission_date: employee.admission_date,
+      employee_termination_date: employee.status === "terminated" ? employee.termination_date : null,
+      date: sheet.delivered_at,
+      reason: sheet.reason,
+      notes: sheet.notes,
+      items: sheet.materials.map((item) => ({
+        material: item.material?.name || "Material",
+        code: item.material?.internal_code,
+        unit: item.material?.unit || "un.",
+        quantity: item.quantity,
+        size: item.variant?.size || item.variant?.name || null,
+        ca_number: item.lot?.ca_number || item.units.find((unit) => unit.ca_number)?.ca_number || null,
+        ca_expires_at: item.lot?.ca_expires_at || item.units.find((unit) => unit.ca_expires_at)?.ca_expires_at || null,
+        expected_replacement_at: item.expected_replacement_at,
+        units: item.units.map((unit) => ({
+          identifier: unit.unit_identifier,
+          ca_number: unit.ca_number,
+          ca_expires_at: unit.ca_expires_at,
+          test_number: unit.test_number,
+          test_report_number: unit.test_report_number,
+          test_performed_at: unit.test_performed_at,
+          test_expires_at: unit.test_expires_at,
+        })),
+      })),
+    };
+    setDeliveryPrintSnapshot(snapshot);
+    await new Promise<void>((resolve) => window.requestAnimationFrame(() => window.requestAnimationFrame(() => resolve())));
+    const logo = document.querySelector<HTMLImageElement>(".pending-delivery-print img");
+    if (logo) await logo.decode().catch(() => undefined);
+    window.addEventListener("afterprint", () => setDeliveryPrintSnapshot(null), { once: true });
     window.print();
   }
 
@@ -163,11 +213,11 @@ export default function EmployeeMaterialsPage() {
     const { error: uploadError } = await supabase.storage.from("delivery-terms").upload(path, file, { contentType: file.type, upsert: false });
     if (uploadError) { setError(friendlyError(uploadError, "Não foi possível enviar o arquivo.")); return; }
     const uploadedAt = new Date().toISOString();
-    const { data: updatedDelivery, error: updateError } = await supabase.from("deliveries").update({ term_file_path: path, term_uploaded_at: uploadedAt, term_uploaded_by: auth.user.id }).eq("id", sheet.id).select("id").maybeSingle();
+    const { data: updatedDelivery, error: updateError } = await supabase.from("deliveries").update({ term_file_path: path, term_uploaded_at: uploadedAt, term_uploaded_by: auth.user.id, term_signature_method: "physical_upload", term_signed_at: uploadedAt, term_signer_name: employee!.full_name, term_signer_cpf: employee!.cpf }).eq("id", sheet.id).select("id").maybeSingle();
     if (updateError || !updatedDelivery) { setError(friendlyError(updateError, "Não foi possível atualizar o termo. Verifique se você ainda tem permissão para esta ficha.")); } else {
       uploadedPath = "";
       if (sheet.term_file_path) await supabase.storage.from("delivery-terms").remove([sheet.term_file_path]);
-      setItems((current) => current.map((item) => item.delivery?.id === sheet.id ? { ...item, delivery: item.delivery ? { ...item.delivery, term_file_path: path, term_uploaded_at: uploadedAt } : item.delivery } : item));
+      setItems((current) => current.map((item) => item.delivery?.id === sheet.id ? { ...item, delivery: item.delivery ? { ...item.delivery, term_file_path: path, term_uploaded_at: uploadedAt, term_signature_method: "physical_upload", term_signed_at: uploadedAt } : item.delivery } : item));
     }
     setUploadingId("");
     } catch (caught) {
@@ -179,32 +229,7 @@ export default function EmployeeMaterialsPage() {
   }
 
   function downloadTerm(sheet: (typeof deliverySheets)[number]) {
-    const doc = new jsPDF({ unit: "mm", format: "a4" });
-    const margin = 18; const width = 210; const lineWidth = width - margin * 2; let y = 20;
-    doc.setTextColor(23, 35, 60); doc.setFont("helvetica", "bold"); doc.setFontSize(16); doc.text("EPIS+", margin, y);
-    doc.setFont("helvetica", "normal"); doc.setFontSize(10); doc.setTextColor(100, 112, 135); doc.text("TERMO DE ENTREGA E RESPONSABILIDADE DE MATERIAIS", margin, y + 7); y += 15; doc.setDrawColor(210, 216, 227); doc.line(margin, y, width - margin, y); y += 10;
-    const metadata = [["Colaborador", employee?.full_name || "Não informado"], ["Matrícula", employee?.registration || "Não informada"], ["Data da entrega", date(sheet.delivered_at)], ["Motivo", reasonLabels[sheet.reason] || sheet.reason]]; const columnWidth = lineWidth / 4;
-    metadata.forEach(([label, value], index) => { const x = margin + index * columnWidth; doc.setFont("helvetica", "normal"); doc.setFontSize(8); doc.setTextColor(120, 132, 151); doc.text(label, x, y); doc.setFont("helvetica", "bold"); doc.setFontSize(9); doc.setTextColor(52, 64, 87); doc.text(doc.splitTextToSize(value, columnWidth - 3), x, y + 5); }); y += 20;
-    doc.setFont("helvetica", "bold"); doc.setFontSize(12); doc.text("Materiais entregues", margin, y); y += 7; const columns = [margin, margin + 68, margin + 103, margin + 132, width - margin]; doc.setFillColor(245, 246, 250); doc.rect(margin, y - 5, lineWidth, 8, "F"); doc.setFontSize(8); doc.setTextColor(83, 96, 120); ["Material", "Código", "Qtd.", "Troca prevista"].forEach((label, index) => doc.text(label, columns[index] + 2, y)); y += 8;
-    sheet.materials.forEach((item) => { const rowHeight = 9; const material = item.material?.name || "Material"; const code = item.material?.internal_code || "—"; const quantity = `${item.quantity} ${item.material?.unit || "un."}`; const replacement = item.expected_replacement_at ? date(item.expected_replacement_at) : "Conforme necessidade"; doc.setDrawColor(220, 225, 233); doc.rect(margin, y - 5, lineWidth, rowHeight); [columns[1], columns[2], columns[3]].forEach((x) => doc.line(x, y - 5, x, y + 4)); doc.setTextColor(52, 64, 87); doc.setFont("helvetica", "normal"); doc.setFontSize(8); doc.text(doc.splitTextToSize(material, 64), margin + 2, y); doc.text(code, columns[1] + 2, y); doc.text(quantity, columns[2] + 2, y); doc.text(replacement, columns[3] + 2, y); y += rowHeight; });
-    y += 12; const paragraph = "Declaro que recebi os materiais relacionados acima em condições adequadas de uso, comprometendo-me a utilizá-los corretamente, conservá-los e devolvê-los ao término do serviço, desligamento, troca de função ou quando solicitado. Em caso de perda, extravio, dano ou mau uso, o ocorrido será apurado conforme as políticas da empresa e a legislação aplicável, podendo gerar responsabilização após a devida análise."; doc.setFont("helvetica", "normal"); doc.setFontSize(8.5); doc.setTextColor(79, 93, 115); const paragraphLines = doc.splitTextToSize(paragraph, lineWidth); doc.text(paragraphLines, margin, y, { lineHeightFactor: 1.5 }); y += paragraphLines.length * 4.2 + 8;
-    const signatureY = Math.max(y + 28, 247); const signatureWidth = 72; doc.setDrawColor(70, 82, 103); doc.line(margin, signatureY, margin + signatureWidth, signatureY); doc.line(width - margin - signatureWidth, signatureY, width - margin, signatureY); doc.setFontSize(8); doc.setTextColor(90, 103, 123); doc.text("Assinatura do colaborador", margin + signatureWidth / 2, signatureY + 5, { align: "center" }); doc.text("Assinatura do responsável", width - margin - signatureWidth / 2, signatureY + 5, { align: "center" }); doc.setFont("helvetica", "bold"); doc.text(employee?.full_name || "", margin + signatureWidth / 2, signatureY + 10, { align: "center" }); doc.text("Responsável pela entrega", width - margin - signatureWidth / 2, signatureY + 10, { align: "center" });
-    doc.save(`termo-entrega-${safeFileName(employee?.full_name || "colaborador")}.pdf`);
-  }
-
-  async function downloadSignedTerm(sheet: (typeof deliverySheets)[number]) {
-    if (!sheet.term_file_path) return;
-    setError("");
-    const popup = openPendingDownload();
-    try {
-      if (!popup) throw new Error("O navegador bloqueou a abertura do termo. Permita pop-ups para este site.");
-      const { data, error: signedUrlError } = await createClient().storage.from("delivery-terms").createSignedUrl(sheet.term_file_path, 300);
-      if (signedUrlError || !data?.signedUrl) throw signedUrlError ?? new Error("Não foi possível abrir o termo assinado.");
-      finishPendingDownload(popup, data.signedUrl);
-    } catch (caught) {
-      closePendingDownload(popup);
-      setError(friendlyError(caught, "Não foi possível abrir o termo assinado."));
-    }
+    void printDeliveryTerm(sheet);
   }
 
   async function uploadReturnTerm(sheet: ReturnSheet, event: ChangeEvent<HTMLInputElement>) {
@@ -262,7 +287,8 @@ export default function EmployeeMaterialsPage() {
   const companyAddress = organization?.address || (isDsx ? "Rua Harrison de Figueiredo, 132, Jd. Sta. Maria, 79833-552, Dourados-MS" : "");
   const companyPhone = organization?.phone || (isDsx ? "+55 67 3425-2324" : "");
 
-  return <main className="module-shell employee-sheet">
+  return <main className={`module-shell employee-sheet${deliveryPrintSnapshot ? " print-single-delivery-sheet" : ""}`}>
+    {deliveryPrintSnapshot && <DeliveryTermPrintSheet snapshot={deliveryPrintSnapshot} />}
     <header className="module-header no-print"><div><Link className="employee-back-link" href="/employees"><ArrowLeft size={14} /> Funcionários</Link><p className="eyebrow">CONTROLE INDIVIDUAL</p><h1>Ficha de EPI</h1><p className="module-subtitle">Registro de fornecimento, dados do colaborador e assinaturas por entrega.</p></div><div className="employee-header-tools"><EmployeeNavigation id={id} current="sheet" /></div></header>
     <section className="panel sheet-card enhanced-sheet">
       <section className="employee-epi-print">
@@ -294,20 +320,17 @@ export default function EmployeeMaterialsPage() {
         <div className="employee-epi-declaration-signature"><span></span><strong>{employee.full_name}</strong><small>Assinatura do colaborador — ciência da ficha</small></div>
 
         <section className="employee-epi-deliveries" aria-labelledby="employee-epi-deliveries-title">
-          <div className="employee-epi-section-heading"><div><h3 id="employee-epi-deliveries-title">Materiais entregues</h3><p>Histórico por entrega, com variação, CA quando aplicável e situação da assinatura.</p></div><span>{epiSheetRows.length} registro(s)</span></div>
-          <div className="employee-epi-table-wrap"><table className="employee-epi-table"><thead><tr><th>Data</th><th>Descrição do equipamento</th><th>Quantidade</th><th>Tamanho / numeração</th><th>Nº CA / validade oficial</th><th>Assinatura</th></tr></thead><tbody>
+          <div className="employee-epi-section-heading"><div><h3 id="employee-epi-deliveries-title">Materiais entregues</h3><p>Histórico por entrega, com variação, CA e dados do ensaio quando aplicáveis.</p></div><span>{epiSheetRows.length} registro(s)</span></div>
+          <div className="employee-epi-table-wrap"><table className="employee-epi-table"><thead><tr><th>Data</th><th>Descrição do equipamento</th><th>Quantidade</th><th>Tamanho / numeração</th><th>Nº CA / ensaio</th></tr></thead><tbody>
             {epiSheetRows.length ? epiSheetRows.map((item) => {
-              const signature = deliverySignatureLabel(item.delivery);
-              const signed = Boolean(item.delivery?.term_signed_at);
               return <tr key={item.id}>
                 <td data-label="Data">{date(item.delivery?.delivered_at ?? null)}</td>
                 <td data-label="Descrição do equipamento"><strong>{item.material?.name || "Material"}</strong></td>
                 <td data-label="Quantidade">{item.quantity} {item.material?.unit || "un."}</td>
                 <td data-label="Tamanho / numeração">{item.variant ? item.variant.size || item.variant.name : "N/A"}</td>
-                <td data-label="Nº CA / validade oficial">{epiCaDetails(item)}</td>
-                <td data-label="Assinatura"><span className={`employee-epi-signature-status ${signed ? "signed" : "pending"}`}>{signature}</span>{!signed && <span className="employee-epi-row-signature-line" aria-hidden="true" />}</td>
+                <td data-label="Nº CA / ensaio">{epiCaDetails(item)}</td>
               </tr>;
-            }) : <tr><td colSpan={6} className="employee-epi-empty">Nenhum EPI entregue até o momento.</td></tr>}
+            }) : <tr><td colSpan={5} className="employee-epi-empty">Nenhum EPI entregue até o momento.</td></tr>}
           </tbody></table></div>
         </section>
 
@@ -317,7 +340,37 @@ export default function EmployeeMaterialsPage() {
         </footer>
       </section>
       <section className="sheet-metrics"><div><PackageCheck size={18} /><span><strong>{items.length}</strong> materiais distintos</span></div><div><PackageCheck size={18} /><span><strong>{summary.totalQuantity}</strong> itens entregues</span></div><div className={summary.pending ? "attention" : ""}><CalendarClock size={18} /><span><strong>{summary.pending}</strong> troca(s) a acompanhar</span></div></section>
-      <section className="sheet-section employee-delivery-sheets"><div className="sheet-section-heading"><div><p>FICHAS DE ENTREGA</p><h2>Termos de entrega</h2><span>{deliverySheets.length} ficha(s) registrada(s)</span></div></div>{deliverySheets.length ? <div className="table-wrap"><table><thead><tr><th>DATA</th><th>MOTIVO</th><th>ITENS</th><th>DOCUMENTO</th><th>AÇÕES</th></tr></thead><tbody>{deliverySheets.map((sheet) => <tr key={sheet.id}><td>{date(sheet.delivered_at)}</td><td>{reasonLabels[sheet.reason] || sheet.reason}</td><td>{sheet.items}</td><td><span className={`status-pill ${sheet.term_file_path ? "success" : "warning"}`}>{sheet.term_file_path ? <><Check size={11} /> {sheet.term_signature_method === "assisted" ? "Assinado" : "Anexado"}</> : "Pendente"}</span></td><td><EmployeeTermActions><div className="employee-sheet-actions"><button type="button" className="action-button" onClick={() => downloadTerm(sheet)}><Download size={14} /> Baixar termo para assinatura</button>{!sheet.term_file_path && <DeliverySignatureModal deliveryId={sheet.id} employeeName={employee.full_name} employeeCpf={employee.cpf} employeeRegistration={employee.registration} deliveredAt={sheet.delivered_at} reason={sheet.reason} items={sheet.materials.map((item) => ({ quantity: item.quantity, expected_replacement_at: item.expected_replacement_at, material: item.material }))} currentPath={sheet.term_file_path} onComplete={(path) => setItems((current) => current.map((item) => item.delivery?.id === sheet.id ? { ...item, delivery: item.delivery ? { ...item.delivery, term_file_path: path, term_signature_method: "assisted" } : item.delivery } : item))} />}</div></EmployeeTermActions>{sheet.term_file_path && <button type="button" className="action-button" onClick={() => void downloadSignedTerm(sheet)}><Eye size={14} /> Visualizar termo</button>}<label className="action-button upload-term-button"><Upload size={14} /> {uploadingId === sheet.id ? "Enviando..." : sheet.term_file_path ? "Trocar termo assinado" : "Anexar termo assinado"}<input type="file" accept="application/pdf,image/jpeg,image/png,image/webp" onChange={(event) => void uploadTerm(sheet, event)} disabled={uploadingId === sheet.id} /></label></td></tr>)}</tbody></table></div> : <div className="empty-state"><ShieldCheck size={27} /><strong>Nenhuma ficha registrada</strong><span>As fichas aparecerão após cada entrega.</span></div>}</section>
+      <section className="sheet-section employee-delivery-sheets">
+        <div className="sheet-section-heading"><div><p>FICHAS DE ENTREGA</p><h2>Termos de entrega</h2><span>{deliverySheets.length} ficha(s) registrada(s)</span></div></div>
+        {deliverySheets.length ? <div className="table-wrap"><table><thead><tr><th>DATA</th><th>MOTIVO</th><th>ITENS</th><th>DOCUMENTO</th><th>AÇÕES</th></tr></thead><tbody>
+          {deliverySheets.map((sheet) => {
+            const signed = Boolean(sheet.term_signed_at || sheet.term_file_path);
+            const status = sheet.term_file_path
+              ? sheet.term_signature_method === "physical_upload" ? "Assinado fisicamente" : "Assinado"
+              : sheet.term_signed_at ? "Assinado · arquivo indisponível" : "Pendente";
+            return <tr key={sheet.id}>
+              <td>{date(sheet.delivered_at)}</td>
+              <td>{reasonLabels[sheet.reason] || sheet.reason}</td>
+              <td>{sheet.items}</td>
+              <td><span className={`status-pill ${signed ? "success" : "warning"}`}>{signed ? <><Check size={11} /> {status}</> : status}</span></td>
+              <td>
+                <EmployeeTermActions>
+                  <div className="employee-sheet-actions">
+                    {!signed && <>
+                      <button type="button" className="action-button" onClick={() => downloadTerm(sheet)}><Printer size={14} /> Imprimir / salvar ficha em PDF</button>
+                      <TermCopyLinkButton recordType="delivery" recordId={sheet.id} />
+                      <DeliverySignatureModal deliveryId={sheet.id} employeeName={employee.full_name} employeeCpf={employee.cpf} employeeRegistration={employee.registration} deliveredAt={sheet.delivered_at} reason={sheet.reason} items={sheet.materials.map((item) => ({ quantity: item.quantity, expected_replacement_at: item.expected_replacement_at, material: item.material }))} currentPath={sheet.term_file_path} onComplete={(path) => setItems((current) => current.map((item) => item.delivery?.id === sheet.id ? { ...item, delivery: item.delivery ? { ...item.delivery, term_file_path: path, term_signature_method: "assisted", term_signed_at: new Date().toISOString() } : item.delivery } : item))} />
+                    </>}
+                    {sheet.term_file_path && <TermDocumentActions path={sheet.term_file_path} employeeName={employee.full_name} />}
+                    {signed && !sheet.term_file_path && <span className="delivery-term-status complete">Assinatura registrada; documento indisponível.</span>}
+                    <label className="action-button upload-term-button"><Upload size={14} /> {uploadingId === sheet.id ? "Enviando..." : sheet.term_file_path ? "Trocar termo assinado" : "Anexar termo assinado"}<input type="file" accept="application/pdf,image/jpeg,image/png,image/webp" onChange={(event) => void uploadTerm(sheet, event)} disabled={uploadingId === sheet.id} /></label>
+                  </div>
+                </EmployeeTermActions>
+              </td>
+            </tr>;
+          })}
+        </tbody></table></div> : <div className="empty-state"><ShieldCheck size={27} /><strong>Nenhuma ficha registrada</strong><span>As fichas aparecerão após cada entrega.</span></div>}
+      </section>
 
       <section className="sheet-section employee-return-sheets"><div className="sheet-section-heading"><div><p>FICHAS DE DEVOLUÇÃO</p><h2>Termos de devolução</h2><span>{returnSheets.length} termo(s) registrado(s)</span></div></div>{returnSheets.length ? <div className="table-wrap"><table><thead><tr><th>DOCUMENTO</th><th>DATA</th><th>MATERIAIS</th><th>STATUS</th><th>AÇÕES</th></tr></thead><tbody>{returnSheets.map((sheet) => <tr key={sheet.id}><td><strong>Termo de devolução</strong><small>{reasonLabels[sheet.reason] || sheet.reason}</small></td><td>{date(sheet.returned_at)}</td><td>{sheet.items.map((item, index) => <span className="employee-term-material" key={`${sheet.id}-${index}`}>{item.quantity}x {item.material?.name || "Material"}{item.variant ? ` · Tamanho ${item.variant.size || item.variant.name}` : ""}</span>)}</td><td><span className={`status-pill ${sheet.term_signed_at ? "success" : "warning"}`}>{sheet.term_signed_at ? <><Check size={11} /> {sheet.term_signature_method === "physical_upload" ? "Assinado fisicamente" : "Assinado digitalmente"}</> : "Pendente"}</span></td><td><EmployeeTermActions><div className="employee-sheet-actions"><button type="button" className="action-button" onClick={() => void downloadReturnTerm(sheet)}><Download size={14} /> Baixar termo para assinatura</button>{!sheet.term_signed_at && <ReturnSignatureModal returnId={sheet.id} employeeName={employee!.full_name} employeeCpf={employee!.cpf} employeeRegistration={employee!.registration} returnedAt={sheet.returned_at} reason={sheet.reason} items={sheet.items} currentPath={sheet.term_file_path} onComplete={(path) => setReturnSheets((current) => current.map((item) => item.id === sheet.id ? { ...item, term_file_path: path, term_signature_method: "assisted", term_signed_at: new Date().toISOString() } : item))} />}</div></EmployeeTermActions>{sheet.term_file_path && <button type="button" className="action-button" onClick={() => void openSignedReturnTerm(sheet)}><Eye size={14} /> Visualizar termo</button>}<label className="action-button upload-term-button"><Upload size={14} /> {uploadingId === sheet.id ? "Enviando..." : sheet.term_file_path ? "Trocar termo assinado" : "Anexar termo assinado"}<input type="file" accept="application/pdf,image/jpeg,image/png,image/webp" onChange={(event) => void uploadReturnTerm(sheet, event)} disabled={uploadingId === sheet.id} /></label></td></tr>)}</tbody></table></div> : <div className="empty-state"><ShieldCheck size={27} /><strong>Nenhum termo de devolução</strong><span>Os termos aparecerão após uma devolução registrada.</span></div>}</section>
 

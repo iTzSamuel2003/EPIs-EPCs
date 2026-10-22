@@ -3,10 +3,10 @@
 import { ChangeEvent, FormEvent, useCallback, useEffect, useRef, useState } from "react";
 import { ArrowLeft, Check, ClipboardCheck, Plus, Trash2 } from "lucide-react";
 import Link from "next/link";
-import Image from "next/image";
 import { createClient } from "@/lib/supabase/client";
 import { friendlyError } from "@/lib/ui-feedback";
 import { RecentDeliveries } from "@/components/recent-deliveries";
+import { DeliveryTermPrintSheet, type DeliveryTermSnapshot } from "@/components/delivery-term-print-sheet";
 import { uploadTransactionPhotos } from "@/lib/transaction-attachments";
 import { FeedbackMessage } from "@/components/feedback-message";
 
@@ -17,21 +17,13 @@ type TestLot = { material_id: string; variant_id: string | null; lot_number: str
 type CaCertificate = { ca_number: string; valid_until: string | null; status: string | null };
 type DeliveryItem = { material_id: string; materialQuery: string; variant_id: string; quantity: string; expected_replacement_at: string };
 type FunctionTemplate = { id: string; name: string; items: Array<{ material_name: string; material_id: string | null; quantity: number }> };
-type DeliverySnapshot = { type: "delivery"; pre_delivery_signature?: boolean; organization_id?: string; organization_name: string; organization_logo_url?: string | null; organization_cnpj?: string | null; organization_address?: string | null; organization_phone?: string | null; responsible_name: string; employee_name: string; employee_registration: string | null; employee_function?: string | null; employee_department?: string | null; employee_admission_date?: string | null; employee_termination_date?: string | null; date: string; reason: string; notes: string | null; items: Array<{ material: string; code?: string | null; unit: string; quantity: number; size?: string | null; ca_number?: string | null; ca_expires_at?: string | null; expected_replacement_at?: string | null; units?: Array<Record<string, unknown>> }> };
+type DeliverySnapshot = DeliveryTermSnapshot;
 type PendingDelivery = { id: string; organization_id: string; employee_id: string; requested_by: string; delivered_at: string; reason: string; notes: string | null; request_items: Array<{ material_id: string; variant_id: string | null; quantity: number; expected_replacement_at: string | null }>; snapshot: DeliverySnapshot | null; status: "pending_signature" | "completed" | "cancelled"; completed_delivery_id: string | null; created_at: string; employee: { full_name: string; registration: string | null } | null };
 type PendingLink = { id: string; url: string; expires_at: string; snapshot: DeliverySnapshot };
 const newDeliveryItem = (): DeliveryItem => ({ material_id: "", materialQuery: "", variant_id: "", quantity: "1", expected_replacement_at: "" });
 function calculateReplacementDate(deliveredAt: string, intervalDays: number | null) { if (!deliveredAt || !intervalDays) return ""; const date = new Date(`${deliveredAt}T00:00:00`); date.setDate(date.getDate() + intervalDays); return localDateValue(date); }
 function localDateValue(date = new Date()) { return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`; }
 function normalize(value: string) { return value.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().trim(); }
-function organizationFooter(snapshot: DeliverySnapshot) {
-  const isDsx = normalize(snapshot.organization_name).includes("dsx");
-  return {
-    address: snapshot.organization_address || (isDsx ? "Rua Harrison de Figueiredo, 132, Jd. Sta. Maria, 79833-552, Dourados-MS" : ""),
-    phone: snapshot.organization_phone || (isDsx ? "+55 67 3425-2324" : ""),
-    website: isDsx ? "www.dsxenergia.com.br" : "",
-  };
-}
 function isValidDateValue(value: string) { if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) return false; const [year, month, day] = value.split("-").map(Number); const date = new Date(year, month - 1, day); return date.getFullYear() === year && date.getMonth() === month - 1 && date.getDate() === day; }
 function functionKey(value: string) { return normalize(value).replace(/\s+(vi|v|iv|iii|ii|i)$/, "").replace(/\beletricista\s+lm\b/g, "eletricista de linha morta").replace(/\beletricista\s+lv\b/g, "eletricista de linha viva").replace(/\beletricista\s+linha\s+morta\b/g, "eletricista de linha morta").replace(/\beletricista\s+linha\s+viva\b/g, "eletricista de linha viva").replace(/\bmotorista\s+operador\s+munck\b/g, "motorista operador de munck"); }
 const reasons = [["admission", "Admissão"], ["periodic_change", "Troca periódica"], ["damaged", "Equipamento danificado"], ["lost", "Equipamento perdido"], ["role_change", "Alteração de função"], ["replacement", "Substituição"], ["other", "Outro"]];
@@ -50,7 +42,6 @@ export default function DeliveriesPage() {
   const [printSnapshot, setPrintSnapshot] = useState<DeliverySnapshot | null>(null);
   const [currentUserId, setCurrentUserId] = useState("");
   const activeSignatureRef = useRef<HTMLElement | null>(null);
-  const printSheetRef = useRef<HTMLElement | null>(null);
   const pendingStatusRef = useRef(new Map<string, string>());
   const pendingPhotosRef = useRef(new Map<string, File[]>());
   const pendingRefreshInFlightRef = useRef(false);
@@ -266,7 +257,7 @@ export default function DeliveriesPage() {
   async function printDeliverySheet(snapshot: DeliverySnapshot) {
     setPrintSnapshot(snapshot);
     await new Promise<void>((resolve) => window.requestAnimationFrame(() => window.requestAnimationFrame(() => resolve())));
-    const logo = printSheetRef.current?.querySelector("img");
+    const logo = document.querySelector<HTMLImageElement>(".pending-delivery-print img");
     if (logo) await logo.decode().catch(() => undefined);
     window.addEventListener("afterprint", () => setPrintSnapshot(null), { once: true });
     window.print();
@@ -394,30 +385,7 @@ export default function DeliveriesPage() {
       }).join("; ");
       return <article className="pending-delivery-card" key={pending.id}><div className="pending-delivery-copy"><strong>{employee}</strong><small>{new Date(`${pending.delivered_at}T12:00:00`).toLocaleDateString("pt-BR")} · {reasons.find(([value]) => value === pending.reason)?.[1] || pending.reason}</small><p>{itemSummary}</p><span className="delivery-term-status pending">Aguardando assinatura · recebimento não registrado</span></div><div className="pending-delivery-actions"><button type="button" className="action-button" onClick={() => void copyPendingLink(pending.id)} disabled={Boolean(pendingBusyId)}>{pendingBusyId === pending.id ? "Preparando..." : "Copiar link"}</button><button type="button" className="action-button" onClick={() => void printPendingSheet(pending)} disabled={Boolean(pendingBusyId)}>Imprimir ficha para assinatura</button>{canManage && <label className="action-button upload-term-button">{pendingBusyId === pending.id ? "Enviando..." : "Anexar ficha assinada"}<input type="file" accept="application/pdf,image/jpeg,image/png,image/webp" onChange={(event) => void uploadPhysicalSignature(pending, event)} disabled={Boolean(pendingBusyId)} /></label>}{canManage && <button type="button" className="action-button" onClick={() => void cancelPending(pending.id)} disabled={Boolean(pendingBusyId)}>Cancelar ficha</button>}</div></article>;
     })}</div></section>}
-    {printSnapshot && <section ref={printSheetRef} className="pending-delivery-print" aria-label="Ficha de EPI para assinatura">
-      <header className="pending-print-header"><div className="pending-print-heading"><strong>{printSnapshot.organization_name}</strong><span>FICHA DE EPI - EQUIPAMENTO DE PROTEÇÃO INDIVIDUAL</span></div>{printSnapshot.organization_logo_url && <Image className="pending-delivery-print-logo" src={printSnapshot.organization_logo_url} alt={`Logo ${printSnapshot.organization_name}`} width={260} height={100} unoptimized loading="eager" />}</header>
-      <div className="pending-print-meta">
-        <div><small>Nº DE REGISTRO / MATRÍCULA</small><strong>{printSnapshot.employee_registration || "Não informada"}</strong></div>
-        <div className="pending-print-meta-wide"><small>NOME DO COLABORADOR</small><strong>{printSnapshot.employee_name}</strong></div>
-        {printSnapshot.employee_admission_date && <div><small>DATA DE ADMISSÃO</small><strong>{new Date(`${printSnapshot.employee_admission_date}T12:00:00`).toLocaleDateString("pt-BR")}</strong></div>}
-        {printSnapshot.employee_termination_date && <div><small>DATA DE DESLIGAMENTO</small><strong>{new Date(`${printSnapshot.employee_termination_date}T12:00:00`).toLocaleDateString("pt-BR")}</strong></div>}
-        {printSnapshot.employee_function && <div><small>CARGO / FUNÇÃO</small><strong>{printSnapshot.employee_function}</strong></div>}
-        {printSnapshot.employee_department && <div><small>SETOR</small><strong>{printSnapshot.employee_department}</strong></div>}
-        <div><small>DATA DA ENTREGA</small><strong>{new Date(`${printSnapshot.date}T12:00:00`).toLocaleDateString("pt-BR")}</strong></div>
-        <div><small>MOTIVO</small><strong>{reasons.find(([value]) => value === printSnapshot.reason)?.[1] || printSnapshot.reason}</strong></div>
-        <div className="pending-print-meta-wide"><small>RESPONSÁVEL PELO CONTROLE</small><strong>{printSnapshot.responsible_name}</strong></div>
-      </div>
-      <section className="pending-print-declaration"><strong>DECLARAÇÃO DE RECEBIMENTO E RESPONSABILIDADE</strong><p>Declaro que recebi os equipamentos de proteção relacionados nesta ficha e que fui orientado(a) sobre seu uso, finalidade, limitações, guarda e conservação, conforme as medidas de prevenção da organização e as NR-06 e NR-01. Comprometo-me a utilizar corretamente os equipamentos, seguir as orientações recebidas, comunicar danos ou alterações e devolvê-los quando solicitado, inclusive em caso de substituição, mudança de função ou desligamento.</p><p>Estou ciente de que situações de perda, extravio, dano ou uso inadequado serão apuradas individualmente. Qualquer ressarcimento ou desconto dependerá da apuração e dos requisitos legais aplicáveis; esta declaração, por si só, não autoriza desconto automático.</p></section>
-      <div className="pending-print-employee-signature"><span />{printSnapshot.employee_name}<small>Assinatura do colaborador</small></div>
-      <h2>Materiais entregues</h2>
-      <table><thead><tr><th>Data</th><th>Descrição do equipamento</th><th>Quant.</th><th>Tam.</th><th>Nº CA / ensaio</th></tr></thead><tbody>{printSnapshot.items.map((item, index) => {
-        const test = item.units?.[0];
-        const compliance = [item.ca_number ? `CA ${item.ca_number}${item.ca_expires_at ? ` · validade ${new Date(`${item.ca_expires_at}T12:00:00`).toLocaleDateString("pt-BR")}` : ""}` : "", test?.test_number ? `Ensaio nº ${String(test.test_number)}` : "", test?.test_report_number ? `Laudo ${String(test.test_report_number)}` : "", test?.test_performed_at ? `Realizado ${new Date(`${String(test.test_performed_at)}T12:00:00`).toLocaleDateString("pt-BR")}` : "", test?.test_expires_at ? `Válido até ${new Date(`${String(test.test_expires_at)}T12:00:00`).toLocaleDateString("pt-BR")}` : ""].filter(Boolean);
-        return <tr key={`${item.material}-${index}`}><td>{new Date(`${printSnapshot.date}T12:00:00`).toLocaleDateString("pt-BR")}</td><td>{item.material}</td><td>{item.quantity} {item.unit}</td><td>{item.size || "—"}</td><td>{compliance.length ? compliance.map((value) => <div key={value}>{value}</div>) : "—"}</td></tr>;
-      })}</tbody></table>
-      {printSnapshot.notes && <p className="pending-print-notes"><strong>Observações:</strong> {printSnapshot.notes}</p>}
-      <footer><div>{printSnapshot.organization_cnpj && <span>CNPJ {printSnapshot.organization_cnpj}</span>}{organizationFooter(printSnapshot).address && <span>{organizationFooter(printSnapshot).address}</span>}</div><div>{organizationFooter(printSnapshot).phone && <span>{organizationFooter(printSnapshot).phone}</span>}{organizationFooter(printSnapshot).website && <span>{organizationFooter(printSnapshot).website}</span>}</div><small>O recebimento e a baixa do estoque são registrados após a confirmação da assinatura.</small></footer>
-    </section>}
+    {printSnapshot && <DeliveryTermPrintSheet snapshot={printSnapshot} />}
     <section className="panel entry-card delivery-card">
       <div className="entry-intro"><div className="entry-icon"><ClipboardCheck size={22} /></div><div><h2>Ficha de entrega</h2><p>Prepare o recibo com os dados do lote (CA e ensaio). O colaborador assina no ato em que recebe os materiais.</p></div></div>
       <form className="material-form" onSubmit={submit}>
@@ -457,6 +425,6 @@ export default function DeliveriesPage() {
         <div className="modal-actions"><Link className="secondary-button" href="/stock">Consultar estoque</Link><button className="primary-button" disabled={saving || loading || !employees.length || !materials.length || hasInsufficientStock || hasMissingRequiredVariant}>{saving ? "Gerando ficha..." : "Gerar ficha para assinatura"}<Check size={16} /></button></div>
       </form>
     </section>
-    <RecentDeliveries />
+    <RecentDeliveries onPrintTerm={printDeliverySheet} />
   </main>;
 }
