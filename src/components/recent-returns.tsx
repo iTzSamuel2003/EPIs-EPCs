@@ -46,35 +46,40 @@ export function RecentReturns({ organization }: { organization: ReturnTermOrgani
 
   useEffect(() => {
     let active = true;
-    const runLoad = () => {
-      const requestId = requestRef.current + 1;
-      void load().catch((caught) => {
-        if (active && requestId === requestRef.current) {
-          setError(friendlyError(caught, "Não foi possível carregar as devoluções."));
-          setLoading(false);
-        }
-      });
-    };
-    async function load() {
+    let initialLoadPending = true;
+    async function load(silent = false) {
       const requestId = ++requestRef.current;
-      setLoading(true); setError(""); setReturns([]);
+      if (!silent) { setLoading(true); setError(""); }
       const supabase = createClient();
       const { data: auth, error: authError } = await supabase.auth.getUser();
       if (authError || !auth.user) {
-        if (active && requestId === requestRef.current) { setError(friendlyError(authError, "Sua sessão expirou. Entre novamente.")); setLoading(false); }
+        if (!silent && active && requestId === requestRef.current) { setError(friendlyError(authError, "Sua sessão expirou. Entre novamente.")); setLoading(false); }
         return;
       }
       const { data, error: loadError } = await supabase.from("returns").select("id,returned_at,reason,notes,term_file_path,term_signature_method,term_signed_at,term_signer_name,term_signer_cpf,employee:employees(full_name,registration,cpf,job_title,function_name,department,admission_date,termination_date,status),return_accountability(responsible_name,employee_signature_name,signed_at),return_items(quantity,equipment_condition,destination,incident_type,incident_description,deduction_requested,deduction_amount,material:materials(name,unit),delivery_item:delivery_items(variant:material_variants(name,size),delivery:deliveries(delivered_at),lot:material_lots(lot_number,ca_number,ca_expires_at,test_number,test_report_number,test_performed_at,test_expires_at),units:material_units(unit_identifier,valid_until,ca_number,ca_expires_at,test_number,test_report_number,test_performed_at)))").order("returned_at", { ascending: false }).order("created_at", { ascending: false }).limit(10);
       if (!active || requestId !== requestRef.current) return;
-      if (loadError) setError(friendlyError(loadError, "Não foi possível carregar as devoluções.")); else setReturns((data ?? []) as unknown as ReturnRecord[]);
-      setLoading(false);
+      if (loadError) {
+        if (!silent) setError(friendlyError(loadError, "Não foi possível carregar as devoluções."));
+      } else {
+        setReturns((data ?? []) as unknown as ReturnRecord[]);
+        setError("");
+      }
+      if (!silent) setLoading(false);
     }
+    const runLoad = (silent = false) => {
+      const loadSilently = silent && !initialLoadPending;
+      const requestId = requestRef.current + 1;
+      void load(loadSilently).catch((caught) => {
+        if (!loadSilently && active && requestId === requestRef.current) {
+          setError(friendlyError(caught, "Não foi possível carregar as devoluções."));
+          setLoading(false);
+        }
+      }).finally(() => { if (!loadSilently) initialLoadPending = false; });
+    };
+    const refreshAfterReturn = () => runLoad(true);
     runLoad();
-    const refresh = runLoad;
-    const poll = window.setInterval(() => { if (document.visibilityState === "visible") refresh(); }, 30000);
-    window.addEventListener("return-created", refresh);
-    window.addEventListener("focus", refresh);
-    return () => { active = false; requestRef.current += 1; window.clearInterval(poll); window.removeEventListener("return-created", refresh); window.removeEventListener("focus", refresh); };
+    window.addEventListener("return-created", refreshAfterReturn);
+    return () => { active = false; requestRef.current += 1; window.removeEventListener("return-created", refreshAfterReturn); };
   }, [retryKey]);
 
   async function downloadTerm(item: ReturnRecord) {
@@ -142,7 +147,7 @@ export function RecentReturns({ organization }: { organization: ReturnTermOrgani
 
   return (
     <section className="panel recent-deliveries-card recent-returns-card">
-      <div className="panel-header"><div><p className="eyebrow">MOVIMENTAÇÃO DE EQUIPAMENTOS</p><h2>Últimas devoluções</h2><p>Devoluções registradas recentemente pelos colaboradores.</p></div><RotateCcw size={21} aria-hidden="true" /></div>
+      <div className="panel-header"><div><p className="eyebrow">MOVIMENTAÇÃO DE EQUIPAMENTOS</p><h2>Últimas devoluções</h2><p>Devoluções registradas recentemente pelos colaboradores.</p></div><button type="button" className="icon-button" onClick={() => window.dispatchEvent(new Event("return-created"))} aria-label="Atualizar devoluções" title="Atualizar devoluções"><RotateCcw size={21} aria-hidden="true" /></button></div>
       {loading ? <div className="module-loading" role="status" aria-live="polite"><LoaderCircle className="spin" size={22} aria-hidden="true" /> Carregando histórico...</div>
         : error ? <FeedbackMessage onRetry={() => setRetryKey((current) => current + 1)}>{error}</FeedbackMessage>
           : returns.length ? <div className="recent-delivery-list" role="list" aria-label="Últimas devoluções">

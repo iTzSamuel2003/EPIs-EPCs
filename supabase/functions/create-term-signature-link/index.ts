@@ -233,27 +233,36 @@ Deno.serve(async (request) => {
   if (!(recordType === "delivery" || recordType === "pending_delivery" || recordType === "return") || !isUuid(recordId)) return respond({ error: "Ficha inválida." }, 400, origin);
   if (!(action === "create" || action === "cancel") || (action === "cancel" && recordType !== "return")) return respond({ error: "Ação de link inválida." }, 400, origin);
 
-  const { data: profile, error: profileError } = await userClient.from("profiles").select("organization_id,role,full_name").eq("id", user.id).maybeSingle();
+  const table = recordType === "pending_delivery" ? "pending_deliveries" : recordType === "delivery" ? "deliveries" : "returns";
+  const select = action === "cancel"
+    ? "id,organization_id,term_signed_at"
+    : recordType === "pending_delivery"
+      ? "id,organization_id,employee_id,delivered_at,reason,notes,request_items,lot_plan,status,snapshot,employee:employees(full_name,registration,phone,job_title,function_name,department,admission_date,termination_date,status)"
+      : recordType === "delivery"
+        ? "id,organization_id,employee_id,delivered_at,reason,notes,term_signed_at,employee:employees(full_name,registration,phone,job_title,function_name,department,admission_date,termination_date,status),delivery_items(quantity,test_performed_at,test_expires_at,expected_replacement_at,material:materials(name,unit,internal_code),lot:material_lots(ca_number,ca_expires_at,test_number,test_report_number,test_performed_at,test_expires_at),variant:material_variants(name,size),material_units(unit_identifier,valid_until,test_performed_at,test_number,test_report_number,ca_number,ca_expires_at))"
+        : "id,organization_id,employee_id,returned_at,reason,notes,term_signed_at,employee:employees(full_name,registration,phone,cpf,job_title,function_name,department,admission_date,termination_date,status),return_items(quantity,equipment_condition,destination,incident_type,incident_description,deduction_requested,deduction_amount,material:materials(name,unit),delivery_item:delivery_items(variant:material_variants(name,size),delivery:deliveries(delivered_at),lot:material_lots(lot_number,ca_number,ca_expires_at,test_number,test_report_number,test_performed_at,test_expires_at),units:material_units(unit_identifier,valid_until,ca_number,ca_expires_at,test_number,test_report_number,test_performed_at)))";
+  const profileQuery = action === "cancel"
+    ? userClient.from("profiles").select("organization_id,role,full_name").eq("id", user.id).maybeSingle()
+    : userClient.from("profiles").select("organization_id,role,full_name,organization:organizations(name,logo_url,cnpj,address,phone)").eq("id", user.id).maybeSingle();
+  const { data: profile, error: profileError } = await profileQuery;
   if (profileError || !profile?.organization_id) return respond({ error: "Não foi possível identificar a organização." }, 403, origin);
   const requiredPage = recordType === "return" ? "/returns" : "/deliveries";
   let pagePaths: unknown = null;
+  const transactionQuery = userClient.from(table).select(select).eq("id", recordId).maybeSingle();
+  let transactionResponse: Awaited<typeof transactionQuery>;
   if (profile.role !== "admin") {
-    const [{ data: override, error: overrideError }, { data: roleAccess, error: roleError }] = await Promise.all([
+    const [transactionResult, { data: override, error: overrideError }, { data: roleAccess, error: roleError }] = await Promise.all([
+      transactionQuery,
       userClient.from("profile_access_overrides").select("page_paths").eq("profile_id", user.id).eq("organization_id", profile.organization_id).maybeSingle(),
       userClient.from("organization_role_access").select("page_paths").eq("organization_id", profile.organization_id).eq("role", profile.role).maybeSingle(),
     ]);
+    transactionResponse = transactionResult;
     if (overrideError || roleError) return respond({ error: "Não foi possível validar suas permissões." }, 403, origin);
     pagePaths = override?.page_paths ?? roleAccess?.page_paths ?? null;
-  }
+  } else transactionResponse = await transactionQuery;
   if (!allowedToManage(String(profile.role ?? "user"), pagePaths, requiredPage)) return respond({ error: "Seu perfil não tem acesso a esta ficha." }, 403, origin);
 
-  const table = recordType === "pending_delivery" ? "pending_deliveries" : recordType === "delivery" ? "deliveries" : "returns";
-  const select = recordType === "pending_delivery"
-    ? "id,organization_id,employee_id,delivered_at,reason,notes,request_items,lot_plan,status,snapshot,employee:employees(full_name,registration,phone,job_title,function_name,department,admission_date,termination_date,status)"
-    : recordType === "delivery"
-      ? "id,organization_id,employee_id,delivered_at,reason,notes,term_signed_at,employee:employees(full_name,registration,phone,job_title,function_name,department,admission_date,termination_date,status),delivery_items(quantity,test_performed_at,test_expires_at,expected_replacement_at,material:materials(name,unit,internal_code),lot:material_lots(ca_number,ca_expires_at,test_number,test_report_number,test_performed_at,test_expires_at),variant:material_variants(name,size),material_units(unit_identifier,valid_until,test_performed_at,test_number,test_report_number,ca_number,ca_expires_at))"
-      : "id,organization_id,employee_id,returned_at,reason,notes,term_signed_at,employee:employees(full_name,registration,phone,cpf,job_title,function_name,department,admission_date,termination_date,status),return_items(quantity,equipment_condition,destination,incident_type,incident_description,deduction_requested,deduction_amount,material:materials(name,unit),delivery_item:delivery_items(variant:material_variants(name,size),delivery:deliveries(delivered_at),lot:material_lots(lot_number,ca_number,ca_expires_at,test_number,test_report_number,test_performed_at,test_expires_at),units:material_units(unit_identifier,valid_until,ca_number,ca_expires_at,test_number,test_report_number,test_performed_at)))";
-  const { data: transaction, error: transactionError } = await userClient.from(table).select(select).eq("id", recordId).maybeSingle();
+  const { data: transaction, error: transactionError } = transactionResponse;
   if (transactionError || !transaction) return respond({ error: "A ficha não foi encontrada nesta organização." }, 404, origin);
   const transactionRecord = transaction as unknown as Record<string, unknown>;
   if (transactionRecord.organization_id !== profile.organization_id) return respond({ error: "A ficha não foi encontrada nesta organização." }, 404, origin);
@@ -274,8 +283,7 @@ Deno.serve(async (request) => {
 
   const employee = object(transactionRecord.employee);
   const employeeId = text(transactionRecord.employee_id);
-  const { data: organization, error: organizationError } = await userClient.from("organizations").select("name,logo_url,cnpj,address,phone").eq("id", profile.organization_id).maybeSingle();
-  if (organizationError) return respond({ error: "Não foi possível carregar a organização." }, 500, origin);
+  const organization = object("organization" in profile ? profile.organization : null);
   const rawItems = recordType === "delivery" ? transactionRecord.delivery_items : transactionRecord.return_items;
   const items = recordType === "pending_delivery"
     ? await mapPendingDeliveryItems(transactionRecord, String(profile.organization_id))
@@ -343,11 +351,12 @@ Deno.serve(async (request) => {
   }
 
   const safeOrigin = origin && allowedOrigins.has(origin) ? origin : productionOrigin;
-  return respond({
+  const result: Record<string, unknown> = {
     url: `${safeOrigin}/assinar/${token}`,
     expires_at: link.expires_at,
     employee_name: snapshot.employee_name,
     employee_phone: text(employee.phone) || null,
-    snapshot,
-  }, 200, origin);
+  };
+  if (recordType === "pending_delivery") result.snapshot = snapshot;
+  return respond(result, 200, origin);
 });
