@@ -1,7 +1,7 @@
 "use client";
 
 import { ChangeEvent, FormEvent, useEffect, useMemo, useRef, useState } from "react";
-import { ArrowLeft, Check, ClipboardCheck, ClipboardCopy, X } from "lucide-react";
+import { ArrowLeft, Check, ClipboardCheck, ClipboardCopy, Upload, X } from "lucide-react";
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/client";
 import { uploadTransactionPhotos } from "@/lib/transaction-attachments";
@@ -265,7 +265,7 @@ export default function ReturnsPage() {
           </div>}
           <div className="form-grid two"><label>Data da devolução<input type="date" value={returnedAt} onChange={(event) => setReturnedAt(event.target.value)} required /></label><label>Motivo geral<select value={reason} onChange={(event) => setReason(event.target.value)}>{reasons.map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select></label></div>
           <div className="form-section-title"><h2>Termos e evidências</h2><p>Ocorrências geram termo específico para ciência e análise individual. A baixa por extravio/furto só ocorre após assinatura; nenhum desconto é aplicado automaticamente.</p></div>
-          <label className="transaction-photo-picker">Fotos da devolução (opcional)<input type="file" accept="image/jpeg,image/png,image/webp" multiple onChange={selectPhotos} /></label>{photoFiles.length > 0 && <small className="muted-cell">{photoFiles.length} foto(s) selecionada(s).</small>}
+          <label className="transaction-photo-picker"><span className="transaction-photo-picker-title">Fotos da devolução (opcional)</span><span className="transaction-photo-trigger"><Upload size={16} aria-hidden="true" />Selecionar fotos<span>JPG, PNG ou WEBP · até 5 arquivos</span></span><input type="file" aria-label="Selecionar fotos da devolução" accept="image/jpeg,image/png,image/webp" multiple onChange={selectPhotos} /></label>{photoFiles.length > 0 && <small className="muted-cell transaction-photo-selection">{photoFiles.length} foto(s) selecionada(s): {photoFiles.map((file) => file.name).join(", ")}</small>}
           <label>Responsável pelo registro (usuário logado)<input value={responsibleName || (loading ? "Carregando usuário..." : "Não identificado")} readOnly /><small className="employee-function-info">O responsável é identificado automaticamente pela sessão atual.</small></label>
           <label>Observações gerais<textarea value={notes} onChange={(event) => setNotes(event.target.value)} rows={2} /></label>
           <div className="modal-actions"><Link className="secondary-button" href="/stock">Consultar estoque</Link><button className="primary-button" disabled={saving || loading || !selectedIds.length}>{saving ? "Registrando..." : "Registrar e gerar link"}<Check size={16} /></button></div>

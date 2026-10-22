@@ -103,6 +103,7 @@ export function PublicTermSignature({ token }: { token: string }) {
   const [cpf, setCpf] = useState("");
   const [accepted, setAccepted] = useState(false);
   const [hasSignature, setHasSignature] = useState(false);
+  const [signatureActive, setSignatureActive] = useState(false);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [success, setSuccess] = useState(false);
@@ -130,7 +131,49 @@ export function PublicTermSignature({ token }: { token: string }) {
     return { x: (event.clientX - bounds.left) * (canvas.width / bounds.width), y: (event.clientY - bounds.top) * (canvas.height / bounds.height) };
   }
 
+  function normalizedSignatureDataUrl(canvas: HTMLCanvasElement) {
+    const context = canvas.getContext("2d", { willReadFrequently: true });
+    if (!context) return canvas.toDataURL("image/png");
+    const { data, width, height } = context.getImageData(0, 0, canvas.width, canvas.height);
+    let minX = width;
+    let minY = height;
+    let maxX = -1;
+    let maxY = -1;
+
+    for (let y = 0; y < height; y += 1) {
+      for (let x = 0; x < width; x += 1) {
+        if (data[(y * width + x) * 4 + 3] < 24) continue;
+        minX = Math.min(minX, x);
+        minY = Math.min(minY, y);
+        maxX = Math.max(maxX, x);
+        maxY = Math.max(maxY, y);
+      }
+    }
+
+    if (maxX < minX || maxY < minY) return null;
+    const paddingX = Math.max(4, Math.round((maxX - minX + 1) * 0.035));
+    const paddingY = Math.max(4, Math.round((maxY - minY + 1) * 0.08));
+    const sourceX = Math.max(0, minX - paddingX);
+    const sourceY = Math.max(0, minY - paddingY);
+    const sourceWidth = Math.min(width, maxX + paddingX + 1) - sourceX;
+    const sourceHeight = Math.min(height, maxY + paddingY + 1) - sourceY;
+    const output = document.createElement("canvas");
+    output.width = width;
+    output.height = height;
+    const outputContext = output.getContext("2d");
+    if (!outputContext) return canvas.toDataURL("image/png");
+
+    const scale = Math.min((width - 48) / sourceWidth, (height - 38) / sourceHeight, 2.5);
+    const drawnWidth = sourceWidth * scale;
+    const drawnHeight = sourceHeight * scale;
+    const destinationX = (width - drawnWidth) / 2;
+    const destinationY = height - drawnHeight - 14;
+    outputContext.drawImage(canvas, sourceX, sourceY, sourceWidth, sourceHeight, destinationX, destinationY, drawnWidth, drawnHeight);
+    return output.toDataURL("image/png");
+  }
+
   function startDrawing(event: PointerEvent<HTMLCanvasElement>) {
+    if (!signatureActive) return;
     event.preventDefault();
     const canvas = canvasRef.current;
     const context = canvas?.getContext("2d");
@@ -150,7 +193,7 @@ export function PublicTermSignature({ token }: { token: string }) {
   }
 
   function draw(event: PointerEvent<HTMLCanvasElement>) {
-    if (!drawingRef.current) return;
+    if (!signatureActive || !drawingRef.current) return;
     event.preventDefault();
     const context = canvasRef.current?.getContext("2d");
     const position = point(event);
@@ -161,6 +204,10 @@ export function PublicTermSignature({ token }: { token: string }) {
 
   function stopDrawing() {
     drawingRef.current = false;
+  }
+
+  function activateSignature() {
+    setSignatureActive(true);
   }
 
   function clearSignature() {
@@ -180,7 +227,9 @@ export function PublicTermSignature({ token }: { token: string }) {
     setSaving(true);
     setError("");
     try {
-      const result = await signatureRequest({ action: "complete", token, signer_name: signerName, signer_cpf: cpf, signature_data_url: canvasRef.current.toDataURL("image/png"), accepted });
+      const signatureDataUrl = normalizedSignatureDataUrl(canvasRef.current);
+      if (!signatureDataUrl) throw new Error("Não foi possível identificar o traço. Ative o campo e assine novamente.");
+      const result = await signatureRequest({ action: "complete", token, signer_name: signerName, signer_cpf: cpf, signature_data_url: signatureDataUrl, accepted });
       if (!result?.success) throw new Error("Não foi possível registrar a assinatura.");
       setSuccess(true);
     } catch (caught) {
@@ -257,8 +306,9 @@ export function PublicTermSignature({ token }: { token: string }) {
               <form className="public-term-form" onSubmit={(event) => void submit(event)}>
                 <label>Nome completo<input value={signerName} onChange={(event) => setSignerName(event.target.value)} autoComplete="name" required maxLength={160} /></label>
                 <label>CPF do colaborador<input value={cpf} onChange={(event) => setCpf(formatCpf(event.target.value))} inputMode="numeric" autoComplete="off" placeholder="000.000.000-00" required /></label>
-                <div className="public-term-signature-label"><strong>Assinatura</strong><button type="button" onClick={clearSignature}><Eraser size={14} aria-hidden="true" /> Limpar</button></div>
-                <canvas ref={canvasRef} width={640} height={180} className="signature-pad public-term-signature-pad" aria-label="Campo para assinar com o dedo ou mouse" tabIndex={0} onPointerDown={startDrawing} onPointerMove={draw} onPointerUp={stopDrawing} onPointerCancel={stopDrawing} />
+                <div className="public-term-signature-label"><strong>Assinatura</strong><div className="public-term-signature-controls"><button type="button" className={signatureActive ? "is-active" : ""} aria-pressed={signatureActive} onClick={() => setSignatureActive((current) => !current)}>{signatureActive ? "Desativar para rolar" : "Ativar para assinar"}</button><button type="button" onClick={clearSignature} disabled={!hasSignature}><Eraser size={14} aria-hidden="true" /> Limpar</button></div></div>
+                <small id="public-term-signature-hint" className="public-term-signature-hint">{signatureActive ? "Campo ativo: escreva dentro da área. Para rolar a página, desative o campo ou arraste fora dele." : "Toque no campo ou em “Ativar para assinar”. Enquanto estiver inativo, arraste para rolar a página."}</small>
+                <canvas ref={canvasRef} width={640} height={180} className={`signature-pad public-term-signature-pad${signatureActive ? " is-active" : ""}`} aria-label="Área de desenho da assinatura" aria-describedby="public-term-signature-hint" onClick={activateSignature} onPointerDown={startDrawing} onPointerMove={draw} onPointerUp={stopDrawing} onPointerCancel={stopDrawing} />
                 <label className="public-term-acceptance"><input type="checkbox" checked={accepted} onChange={(event) => setAccepted(event.target.checked)} />{isDeduction ? `Confirmo que li o termo, reconheço o valor de R$ ${Number(snapshot.approved_amount || 0).toLocaleString("pt-BR", { minimumFractionDigits: 2 })} e autorizo especificamente o desconto referente a esta ocorrência.` : isPreDelivery ? "Confirmo que li e compreendi as condições acima, conferi os itens e estou recebendo os materiais listados nesta ficha." : hasReturnIncident ? "Confirmo que li e conferi os materiais e a ocorrência descrita, ciente de que a assinatura não aplica desconto automático." : "Confirmo que li e conferi os materiais e as informações desta ficha."}</label>
                 <p className="public-term-legal-note">{isDeduction ? "Ao confirmar, o sistema registra a autorização individual, a identificação informada, a data e hora e os itens e valores desta ficha. O processamento deve observar os requisitos legais e os procedimentos da organização." : isDelivery ? "Ao confirmar, o sistema registra seu aceite, a identificação informada, a data e hora e os itens desta ficha para rastreabilidade do fornecimento de EPI, conforme o registro previsto na NR-06, item 6.5.1(d)." : "Ao confirmar, o sistema registra seu aceite, a identificação informada, a data e hora e os itens desta ficha para rastreabilidade da devolução."} Assinatura eletrônica por link individual de uso único; não utiliza certificado ICP-Brasil.</p>
                 {error && <div className="public-term-error" role="alert"><X size={16} aria-hidden="true" /><span>{error}</span></div>}
