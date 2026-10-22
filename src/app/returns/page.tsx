@@ -23,7 +23,7 @@ const safeFileName = (value: string) => value.normalize("NFD").replace(/[\u0300-
 export default function ReturnsPage() {
   const [retryKey, setRetryKey] = useState(0);
   const [organization, setOrganization] = useState<ReturnTermOrganization>({ name: "EPIS+" });
-  const [employees, setEmployees] = useState<Employee[]>([]); const [items, setItems] = useState<DeliveredItem[]>([]); const [employeeId, setEmployeeId] = useState(""); const [employeeQuery, setEmployeeQuery] = useState(""); const [suggestionsOpen, setSuggestionsOpen] = useState(false); const [selectedIds, setSelectedIds] = useState<string[]>([]); const [lines, setLines] = useState<Record<string, ReturnLine>>({}); const [reason, setReason] = useState("replacement"); const [returnedAt, setReturnedAt] = useState(localDateValue()); const [signature, setSignature] = useState(""); const [notes, setNotes] = useState(""); const [photoFiles, setPhotoFiles] = useState<File[]>([]); const [loading, setLoading] = useState(true); const [saving, setSaving] = useState(false); const [error, setError] = useState(""); const [success, setSuccess] = useState("");
+  const [employees, setEmployees] = useState<Employee[]>([]); const [items, setItems] = useState<DeliveredItem[]>([]); const [employeeId, setEmployeeId] = useState(""); const [employeeQuery, setEmployeeQuery] = useState(""); const [suggestionsOpen, setSuggestionsOpen] = useState(false); const [selectedIds, setSelectedIds] = useState<string[]>([]); const [lines, setLines] = useState<Record<string, ReturnLine>>({}); const [reason, setReason] = useState("replacement"); const [returnedAt, setReturnedAt] = useState(localDateValue()); const [responsibleName, setResponsibleName] = useState(""); const [notes, setNotes] = useState(""); const [photoFiles, setPhotoFiles] = useState<File[]>([]); const [loading, setLoading] = useState(true); const [saving, setSaving] = useState(false); const [error, setError] = useState(""); const [success, setSuccess] = useState("");
   const loadRequestRef = useRef(0);
   const submitLockRef = useRef(false);
   const mountedRef = useRef(true);
@@ -57,13 +57,15 @@ export default function ReturnsPage() {
         map.set(item.delivery_item_id, (map.get(item.delivery_item_id) ?? 0) + quantity);
       });
       setEmployees((employeeData ?? []) as Employee[]);
-      const { data: auth } = await supabase.auth.getUser();
-      if (auth.user) {
-        const { data: profile } = await supabase.from("profiles").select("organization_id").eq("id", auth.user.id).maybeSingle();
-        if (profile?.organization_id) {
-          const { data: organizationData } = await supabase.from("organizations").select("name,logo_url,cnpj,address,phone").eq("id", profile.organization_id).maybeSingle();
-          if (organizationData) setOrganization(organizationData as ReturnTermOrganization);
-        }
+      const { data: auth, error: authError } = await supabase.auth.getUser();
+      if (authError || !auth.user) throw authError ?? new Error("Sua sessão expirou. Entre novamente.");
+      const { data: profile, error: profileError } = await supabase.from("profiles").select("organization_id,full_name").eq("id", auth.user.id).maybeSingle();
+      if (profileError) throw profileError;
+      setResponsibleName(profile?.full_name?.trim() || auth.user.email?.split("@")[0] || "");
+      if (profile?.organization_id) {
+        const { data: organizationData, error: organizationError } = await supabase.from("organizations").select("name,logo_url,cnpj,address,phone").eq("id", profile.organization_id).maybeSingle();
+        if (organizationError) throw organizationError;
+        if (organizationData) setOrganization(organizationData as ReturnTermOrganization);
       }
       setItems(((itemData ?? []) as unknown as DeliveredItem[]).map((item) => ({
         ...item,
@@ -109,12 +111,12 @@ export default function ReturnsPage() {
   }
   function selectAll() { if (selectedIds.length === returnableItems.length) { setSelectedIds([]); return; } setSelectedIds(returnableItems.map((item) => item.id)); setLines((current) => Object.fromEntries(returnableItems.map((item) => [item.id, current[item.id] ?? defaultLine(item)]))); }
   
-  async function generateTerm(employee: Employee, selected: DeliveredItem[], selectedLines: ReturnLine[], returnId: string) {
+  async function generateTerm(employee: Employee, selected: DeliveredItem[], selectedLines: ReturnLine[], returnId: string, actingUserName: string) {
     const selectedById = new Map(selectedLines.map((line) => [line.delivery_item_id, line]));
     const term = await createReturnTermDocument({
       organization,
       employee: { name: employee.full_name, registration: employee.registration, cpf: employee.cpf, job_title: employee.job_title || employee.function_name, department: employee.department, admission_date: employee.admission_date, termination_date: employee.status === "terminated" ? employee.termination_date : null },
-      responsible_name: signature.trim(),
+      responsible_name: actingUserName,
       return_id: returnId,
       returned_at: returnedAt,
       reason,
@@ -155,14 +157,17 @@ export default function ReturnsPage() {
       setError("Confira as quantidades inteiras e os valores de desconto dos materiais selecionados.");
       return;
     }
-    if (selectedLines.some((line) => line.incident_type !== "normal" && !signature.trim())) {
-      setError("Informe o nome completo do responsável para registrar uma ocorrência.");
-      return;
-    }
     submitLockRef.current = true;
     setSaving(true);
     try {
       const supabase = createClient();
+      const { data: auth, error: authError } = await supabase.auth.getUser();
+      if (authError || !auth.user) throw authError ?? new Error("Sua sessão expirou. Entre novamente.");
+      const { data: profile, error: profileError } = await supabase.from("profiles").select("full_name").eq("id", auth.user.id).maybeSingle();
+      if (profileError) throw profileError;
+      const actingUserName = profile?.full_name?.trim() || auth.user.email?.split("@")[0] || "";
+      if (!actingUserName) throw new Error("Não foi possível identificar o usuário responsável pela devolução.");
+      setResponsibleName(actingUserName);
       const payload = selectedLines.map((line) => ({ ...line, quantity: Number(line.quantity), deduction_amount: line.deduction_requested ? Number(line.deduction_amount) || 0 : null }));
       const { data: returnId, error: returnError } = await supabase.rpc("register_return", { p_employee_id: employeeId, p_reason: reason, p_returned_at: returnedAt, p_items: payload, p_notes: notes.trim() || null });
       if (returnError || !returnId) throw returnError ?? new Error("Não foi possível registrar a devolução.");
@@ -180,7 +185,7 @@ export default function ReturnsPage() {
             p_return_id: returnId,
             p_incident_type: incidentTypes.length === 1 ? incidentTypes[0] : "other",
             p_incident_description: accountabilityDescription || null,
-            p_employee_signature_name: signature.trim() || null,
+            p_employee_signature_name: actingUserName,
             p_deduction_requested: incidentLines.some((line) => line.deduction_requested),
             p_deduction_amount: incidentLines.reduce((total, line) => total + (Number(line.deduction_amount) || 0), 0) || null,
           });
@@ -196,11 +201,11 @@ export default function ReturnsPage() {
         followUpError = followUpError ? `${followUpError}; as fotos não foram salvas` : "as fotos não foram salvas";
       }
       const employee = employees.find((item) => item.id === employeeId);
-      if (employee) await generateTerm(employee, selected, selectedLines, returnId);
+      if (employee) await generateTerm(employee, selected, selectedLines, returnId, actingUserName);
       if (followUpError) setError(`Devolução registrada, mas ${followUpError}`);
       else setSuccess(incidentLines.length ? "Devolução registrada. Foram gerados os termos." : "Devolução registrada e termo gerado.");
       window.dispatchEvent(new Event("return-created"));
-      setEmployeeId(""); setEmployeeQuery(""); setSuggestionsOpen(false); setSelectedIds([]); setLines({}); setSignature(""); setNotes(""); setPhotoFiles([]); setReturnedAt(localDateValue());
+      setEmployeeId(""); setEmployeeQuery(""); setSuggestionsOpen(false); setSelectedIds([]); setLines({}); setNotes(""); setPhotoFiles([]); setReturnedAt(localDateValue());
     } catch (caught) {
       setError(friendlyError(caught, "Não foi possível registrar a devolução."));
     } finally {
@@ -249,7 +254,7 @@ export default function ReturnsPage() {
           <div className="form-grid two"><label>Data da devolução<input type="date" value={returnedAt} onChange={(event) => setReturnedAt(event.target.value)} required /></label><label>Motivo geral<select value={reason} onChange={(event) => setReason(event.target.value)}>{reasons.map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select></label></div>
           <div className="form-section-title"><h2>Termos e evidências</h2><p>Ocorrências geram termo específico para ciência e análise individual. A baixa por extravio/furto só ocorre após assinatura; nenhum desconto é aplicado automaticamente.</p></div>
           <label className="transaction-photo-picker">Fotos da devolução (opcional)<input type="file" accept="image/jpeg,image/png,image/webp" multiple onChange={selectPhotos} /></label>{photoFiles.length > 0 && <small className="muted-cell">{photoFiles.length} foto(s) selecionada(s).</small>}
-          <label>Nome completo do responsável<input value={signature} onChange={(event) => setSignature(event.target.value)} placeholder="Digite o nome completo do responsável pelo controle" /></label>
+          <label>Responsável pelo registro (usuário logado)<input value={responsibleName || (loading ? "Carregando usuário..." : "Não identificado")} readOnly /><small className="employee-function-info">O responsável é identificado automaticamente pela sessão atual.</small></label>
           <label>Observações gerais<textarea value={notes} onChange={(event) => setNotes(event.target.value)} rows={2} /></label>
           <div className="modal-actions"><Link className="secondary-button" href="/stock">Consultar estoque</Link><button className="primary-button" disabled={saving || loading || !selectedIds.length}>{saving ? "Registrando..." : "Confirmar devolução"}<Check size={16} /></button></div>
         </form>
