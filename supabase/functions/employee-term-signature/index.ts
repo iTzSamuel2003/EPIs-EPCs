@@ -692,9 +692,17 @@ async function createSignedDeductionPdf(snapshot: Snapshot, signatureBytes: Uint
   tableHeader();
   for (const value of snapshot.items) {
     const item = object(value);
-    const occurrence = [item.incident_type, item.incident_description, item.condition, item.destination].filter(Boolean).map(safeText).join(" - ");
+    const incidentType = String(item.incident_type ?? "");
+    const condition = String(item.condition ?? "");
+    const destination = String(item.destination ?? "");
+    const occurrence = [
+      incidentType ? safeText(incidentType === "loss" ? "Extravio / perda" : incidentLabels[incidentType] ?? incidentType) : "",
+      item.incident_description ? `Descrição: ${safeText(item.incident_description)}` : "",
+      condition ? `Condição: ${safeText(conditionLabels[condition] ?? condition)}` : "",
+      destination ? `Destino: ${safeText(destinationLabels[destination] ?? destination)}` : "",
+    ].filter(Boolean).join("\n");
     const compliance = [item.ca_number ? `CA ${item.ca_number}` : "", item.ca_expires_at ? `Validade CA ${date(item.ca_expires_at)}` : "", item.test_number ? `Ensaio ${item.test_number}` : "", item.test_report_number ? `Laudo ${item.test_report_number}` : "", item.test_performed_at ? `Realizado ${date(item.test_performed_at)}` : "", item.test_expires_at ? `Validade ${date(item.test_expires_at)}` : ""].filter(Boolean).join("\n");
-    const values = [date(item.delivered_at || snapshot.date), safeText(item.material), `${Number(item.quantity) || 0} ${safeText(item.unit)}${item.size ? ` / ${safeText(item.size)}` : ""}`, safeText(compliance) || "-", safeText(occurrence) || "Ocorrência registrada"];
+    const values = [date(item.delivered_at || snapshot.date), safeText(item.material), `${Number(item.quantity) || 0} ${safeText(item.unit)}${item.size ? ` / ${safeText(item.size)}` : ""}`, safeText(compliance) || "-", occurrence || "Ocorrência registrada"];
     const lines = values.map((entry, index) => entry.split("\n").flatMap((line) => wrap(line, regular, 6.1, columns[index] - 7)));
     const rowHeight = Math.max(32, ...lines.map((entry) => entry.length * 7.7 + 9));
     if (y - rowHeight < 68) { nextPage(); tableHeader(); }
@@ -709,10 +717,20 @@ async function createSignedDeductionPdf(snapshot: Snapshot, signatureBytes: Uint
   }
 
   if (snapshot.notes) {
-    y -= 12;
-    ensureSpace(45);
+    const noteLines = wrap(snapshot.notes, regular, 6.8, width);
+    ensureSpace(30);
     page.drawText("OBSERVAÇÃO DA ANÁLISE", { x: margin, y, size: 6.8, font: bold, color: ink });
-    y -= 12 + writeWrapped(snapshot.notes, margin, y, width, 6.8, regular, 8.5);
+    y -= 12;
+    for (const noteLine of noteLines) {
+      if (y - 8 < 68) {
+        nextPage();
+        page.drawText("OBSERVAÇÃO DA ANÁLISE (CONTINUAÇÃO)", { x: margin, y, size: 6.8, font: bold, color: ink });
+        y -= 12;
+      }
+      page.drawText(noteLine, { x: margin, y, size: 6.8, font: regular, color: ink, maxWidth: width });
+      y -= 8.5;
+    }
+    y -= 4;
   }
 
   ensureSpace(106);
@@ -725,7 +743,8 @@ async function createSignedDeductionPdf(snapshot: Snapshot, signatureBytes: Uint
   page.drawText(safeText(signerName), { x: margin + 4, y: signatureLineY - 12, size: 7.5, font: bold, color: ink });
   page.drawText(`CPF ${maskedCpf(signerCpf)} - Assinado em ${new Intl.DateTimeFormat("pt-BR", { dateStyle: "short", timeStyle: "short", timeZone: "America/Cuiaba" }).format(signedAt)}`, { x: margin + 4, y: signatureLineY - 23, size: 5.8, font: regular, color: muted });
   page.drawText("ASSINATURA ELETRÔNICA DO COLABORADOR", { x: margin + width * 0.63, y: signatureLineY - 9, size: 6.5, font: bold, color: ink, maxWidth: width * 0.37 });
-  page.drawText("Aceite registrado no sistema por link individual, com identificação e data/hora do servidor.", { x: margin + width * 0.63, y: signatureLineY - 21, size: 5.8, font: regular, color: muted, maxWidth: width * 0.37 });
+  const signatureDetails = wrap("Aceite registrado por link individual, com identificação e data/hora do servidor.", regular, 5.8, width * 0.37);
+  signatureDetails.forEach((line, index) => page.drawText(line, { x: margin + width * 0.63, y: signatureLineY - 21 - index * 7.5, size: 5.8, font: regular, color: muted, maxWidth: width * 0.37 }));
 
   const isDsx = snapshot.organization_name.toLowerCase().includes("dsx");
   const address = snapshot.organization_address || (isDsx ? "Rua Harrison de Figueiredo, 132, Jd. Sta. Maria, 79833-552, Dourados-MS" : "");

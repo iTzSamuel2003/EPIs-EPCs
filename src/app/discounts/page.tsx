@@ -32,6 +32,7 @@ type LinkResult = { url: string; expires_at: string; snapshot: DeductionSnapshot
 
 const incidentLabels: Record<string, string> = { misuse: "Mau uso", loss: "Extravio / perda", theft: "Furto", damage: "Dano", other: "Outra ocorrência" };
 const destinationLabels: Record<string, string> = { not_returned: "Não devolvido", disposal: "Descarte", maintenance: "Manutenção", stock: "Retorno ao estoque" };
+const conditionLabels: Record<string, string> = { good: "Bom", used: "Usado", damaged: "Danificado", unusable: "Inutilizado" };
 const statusLabels: Record<DeductionCase["status"], string> = { pending_review: "Aguardando análise do RH", approved: "Aprovado · aguardando assinatura", rejected: "Não aprovado", signed: "Assinada · pendente de lançamento em folha" };
 const formatMoney = (value: number | null | undefined) => `R$ ${Number(value || 0).toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 const formatDate = (value?: string | null) => value ? new Date(`${value.slice(0, 10)}T12:00:00`).toLocaleDateString("pt-BR") : "—";
@@ -72,8 +73,11 @@ function printDraft(snapshot: DeductionSnapshot) {
   } catch { /* Logo opcional. */ }
   const rows = snapshot.items.map((value) => {
     const item = value as Record<string, unknown>;
-    const lines = [item.ca_number ? `CA ${item.ca_number}` : "", item.ca_expires_at ? `Validade CA ${formatDate(String(item.ca_expires_at))}` : "", item.test_number ? `Ensaio ${item.test_number}` : "", item.test_report_number ? `Laudo ${item.test_report_number}` : "", item.test_performed_at ? `Ensaio realizado ${formatDate(String(item.test_performed_at))}` : "", item.test_expires_at ? `Ensaio válido até ${formatDate(String(item.test_expires_at))}` : "", item.incident_type ? incidentLabels[String(item.incident_type)] || item.incident_type : "", item.incident_description || ""].filter(Boolean);
-    return `<tr><td>${escapeHtml(formatDate(String(item.delivered_at || snapshot.date)))}</td><td><b>${escapeHtml(item.material)}</b><br>${escapeHtml(item.lot_number ? `Lote ${item.lot_number}` : "")}</td><td>${escapeHtml(`${item.quantity || 0} ${item.unit || "un."}${item.size ? ` · ${item.size}` : ""}`)}</td><td>${escapeHtml(lines.join(" · "))}</td><td>${escapeHtml(item.condition || "—")} · ${escapeHtml(destinationLabels[String(item.destination)] || String(item.destination || "—"))}</td></tr>`;
+    const lines = [item.ca_number ? `CA ${item.ca_number}` : "", item.ca_expires_at ? `Validade CA ${formatDate(String(item.ca_expires_at))}` : "", item.test_number ? `Ensaio ${item.test_number}` : "", item.test_report_number ? `Laudo ${item.test_report_number}` : "", item.test_performed_at ? `Ensaio realizado ${formatDate(String(item.test_performed_at))}` : "", item.test_expires_at ? `Ensaio válido até ${formatDate(String(item.test_expires_at))}` : "", item.incident_type ? `Ocorrência: ${incidentLabels[String(item.incident_type)] || item.incident_type}` : "", item.incident_description ? `Descrição: ${item.incident_description}` : ""].filter(Boolean);
+    const condition = item.condition ? conditionLabels[String(item.condition)] || String(item.condition) : "—";
+    const destination = item.destination ? destinationLabels[String(item.destination)] || String(item.destination) : "";
+    const conditionAndDestination = [condition !== "—" ? `Condição: ${condition}` : "", destination ? `Destino: ${destination}` : ""].filter(Boolean).join("\n") || "—";
+    return `<tr><td>${escapeHtml(formatDate(String(item.delivered_at || snapshot.date)))}</td><td><b>${escapeHtml(item.material)}</b><br>${escapeHtml(item.lot_number ? `Lote ${item.lot_number}` : "")}</td><td>${escapeHtml(`${item.quantity || 0} ${item.unit || "un."}${item.size ? ` · ${item.size}` : ""}`)}</td><td>${escapeHtml(lines.join(" · "))}</td><td>${escapeHtml(conditionAndDestination).replace(/\n/g, "<br>")}</td></tr>`;
   }).join("");
   const address = snapshot.organization_address || (snapshot.organization_name.toLowerCase().includes("dsx") ? "Rua Harrison de Figueiredo, 132, Jd. Sta. Maria, 79833-552, Dourados-MS" : "");
   const phone = snapshot.organization_phone || (snapshot.organization_name.toLowerCase().includes("dsx") ? "+55 67 3425-2324" : "");
