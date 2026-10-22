@@ -6,9 +6,10 @@ import { createClient } from "@/lib/supabase/client";
 import { ReturnSignatureModal } from "@/components/return-signature-modal";
 import { friendlyError } from "@/lib/ui-feedback";
 import { FeedbackMessage } from "@/components/feedback-message";
+import { createReturnTermDocument, ReturnTermOrganization } from "@/lib/return-term-document";
 
-type ReturnItem = { quantity: number; material: { name: string; unit: string } | null; delivery_item: { variant: { name: string; size: string | null } | null } | null };
-type ReturnRecord = { id: string; returned_at: string; reason: string; term_file_path: string | null; term_signature_method: string | null; term_signed_at: string | null; employee: { full_name: string; registration: string | null; cpf: string } | null; return_items: ReturnItem[] };
+type ReturnItem = { quantity: number; equipment_condition: string; destination: string; incident_type: string; incident_description: string | null; deduction_requested: boolean; deduction_amount: number | null; material: { name: string; unit: string } | null; delivery_item: { variant: { name: string; size: string | null } | null; delivery: { delivered_at: string } | null; lot: { lot_number: string | null; ca_number: string | null; ca_expires_at: string | null; test_number: string | null; test_report_number: string | null; test_performed_at: string | null; test_expires_at: string | null } | null; units: Array<{ unit_identifier: string | null; ca_number: string | null; ca_expires_at: string | null; test_number: string | null; test_report_number: string | null; test_performed_at: string | null; test_expires_at: string | null }> | null } | null };
+type ReturnRecord = { id: string; returned_at: string; reason: string; notes: string | null; term_file_path: string | null; term_signature_method: string | null; term_signed_at: string | null; term_signer_name?: string | null; term_signer_cpf?: string | null; employee: { full_name: string; registration: string | null; cpf: string; job_title?: string | null; function_name?: string | null; department?: string | null; admission_date?: string | null; termination_date?: string | null; status?: string | null } | null; return_accountability: { responsible_name: string | null; employee_signature_name: string | null; signed_at: string | null } | null; return_items: ReturnItem[] };
 
 const reasons: Record<string, string> = { replacement: "Substituição", termination: "Desligamento", role_change: "Alteração de função", damaged: "Equipamento danificado", voluntary: "Devolução voluntária", other: "Outro" };
 const date = (value: string) => new Date(`${value}T00:00:00`).toLocaleDateString("pt-BR");
@@ -16,7 +17,23 @@ const safeFileName = (value: string) => value.normalize("NFD").replace(/[\u0300-
 const allowedTermTypes = ["application/pdf", "image/jpeg", "image/png", "image/webp"];
 const maxTermSize = 10 * 1024 * 1024;
 
-export function RecentReturns() {
+function toTermItem(item: ReturnItem) {
+  const source = item.delivery_item?.lot;
+  const variant = item.delivery_item?.variant;
+  const units = item.delivery_item?.units ?? [];
+  const unitValues = (key: "ca_number" | "ca_expires_at" | "test_number" | "test_report_number" | "test_performed_at" | "test_expires_at") => [...new Set(units.map((unit) => unit[key]).filter(Boolean))].join(", ") || null;
+  return {
+    material: item.material?.name || "Material", unit: item.material?.unit || "un.", quantity: item.quantity,
+    size: variant?.size || variant?.name, delivered_at: item.delivery_item?.delivery?.delivered_at,
+    lot_number: source?.lot_number, ca_number: source?.ca_number || unitValues("ca_number"), ca_expires_at: source?.ca_expires_at || unitValues("ca_expires_at"),
+    test_number: source?.test_number || unitValues("test_number"), test_report_number: source?.test_report_number || unitValues("test_report_number"),
+    test_performed_at: source?.test_performed_at || unitValues("test_performed_at"), test_expires_at: source?.test_expires_at || unitValues("test_expires_at"),
+    condition: item.equipment_condition, destination: item.destination, incident_type: item.incident_type,
+    incident_description: item.incident_description, deduction_amount: item.deduction_requested ? Number(item.deduction_amount) : null,
+  };
+}
+
+export function RecentReturns({ organization }: { organization: ReturnTermOrganization }) {
   const [returns, setReturns] = useState<ReturnRecord[]>([]);
   const [uploadingId, setUploadingId] = useState("");
   const [downloadingId, setDownloadingId] = useState("");
@@ -47,7 +64,7 @@ export function RecentReturns() {
         if (active && requestId === requestRef.current) { setError(friendlyError(authError, "Sua sessão expirou. Entre novamente.")); setLoading(false); }
         return;
       }
-      const { data, error: loadError } = await supabase.from("returns").select("id,returned_at,reason,term_file_path,term_signature_method,term_signed_at,employee:employees(full_name,registration,cpf),return_items(quantity,material:materials(name,unit),delivery_item:delivery_items(variant:material_variants(name,size)))").order("returned_at", { ascending: false }).order("created_at", { ascending: false }).limit(10);
+      const { data, error: loadError } = await supabase.from("returns").select("id,returned_at,reason,notes,term_file_path,term_signature_method,term_signed_at,term_signer_name,term_signer_cpf,employee:employees(full_name,registration,cpf,job_title,function_name,department,admission_date,termination_date,status),return_accountability(responsible_name,employee_signature_name,signed_at),return_items(quantity,equipment_condition,destination,incident_type,incident_description,deduction_requested,deduction_amount,material:materials(name,unit),delivery_item:delivery_items(variant:material_variants(name,size),delivery:deliveries(delivered_at),lot:material_lots(lot_number,ca_number,ca_expires_at,test_number,test_report_number,test_performed_at,test_expires_at),units:material_units(unit_identifier,ca_number,ca_expires_at,test_number,test_report_number,test_performed_at,test_expires_at)))").order("returned_at", { ascending: false }).order("created_at", { ascending: false }).limit(10);
       if (!active || requestId !== requestRef.current) return;
       if (loadError) setError(friendlyError(loadError, "Não foi possível carregar as devoluções.")); else setReturns((data ?? []) as unknown as ReturnRecord[]);
       setLoading(false);
@@ -63,13 +80,33 @@ export function RecentReturns() {
     if (downloadingRef.current === item.id) return;
     downloadingRef.current = item.id; setDownloadingId(item.id); setError("");
     try {
-      const { jsPDF } = await import("jspdf");
-      const doc = new jsPDF({ unit: "mm", format: "a4" }); const margin = 18; let y = 20;
-      doc.setFont("helvetica", "bold"); doc.setFontSize(16); doc.text("EPIS+", margin, y); doc.setFont("helvetica", "normal"); doc.setFontSize(10); doc.text("TERMO DE DEVOLUÇÃO DE MATERIAIS", margin, y + 7); y += 17;
-      doc.setFontSize(9); doc.text(`Colaborador: ${item.employee?.full_name || "Não informado"}`, margin, y); doc.text(`Matrícula: ${item.employee?.registration || "Não informada"}`, margin + 95, y); y += 6; doc.text(`Data: ${date(item.returned_at)} · Motivo: ${reasons[item.reason] || item.reason}`, margin, y); y += 12;
-      doc.setFont("helvetica", "bold"); doc.text("Materiais devolvidos", margin, y); y += 8; doc.setFont("helvetica", "normal");
-      item.return_items.forEach((returnItem) => { const variant = returnItem.delivery_item?.variant; const variation = variant ? ` · Tamanho ${variant.size || variant.name}` : ""; doc.text(`${returnItem.quantity}x ${returnItem.material?.name || "Material"}${variation}`, margin, y); y += 6; });
-      y += 12; doc.text("Declaro que os materiais acima foram devolvidos e conferidos.", margin, y); y += 35; doc.line(margin, y, margin + 72, y); doc.line(120, y, 192, y); doc.setFontSize(8); doc.text("Assinatura do colaborador", margin + 36, y + 5, { align: "center" }); doc.text("Responsável pelo controle", 156, y + 5, { align: "center" });
+      if (item.term_signed_at && item.term_file_path) {
+        const supabase = createClient();
+        const { data: signedFile, error: signedUrlError } = await supabase.storage.from("delivery-terms").createSignedUrl(item.term_file_path, 60);
+        if (signedUrlError || !signedFile?.signedUrl) throw signedUrlError ?? new Error("Não foi possível localizar o termo assinado.");
+        const response = await fetch(signedFile.signedUrl);
+        if (!response.ok) throw new Error("Não foi possível baixar o termo assinado.");
+        const blob = await response.blob();
+        const extension = blob.type === "image/jpeg" ? "jpg" : blob.type === "image/png" ? "png" : blob.type === "image/webp" ? "webp" : "pdf";
+        const blobUrl = URL.createObjectURL(blob);
+        const link = document.createElement("a");
+        link.href = blobUrl;
+        link.download = `termo-devolucao-assinado-${safeFileName(item.employee?.full_name || "colaborador") || "colaborador"}.${extension}`;
+        document.body.append(link);
+        link.click();
+        link.remove();
+        window.setTimeout(() => URL.revokeObjectURL(blobUrl), 1000);
+        return;
+      }
+      const doc = await createReturnTermDocument({
+        organization,
+        employee: { name: item.employee?.full_name || "Não informado", registration: item.employee?.registration, cpf: item.employee?.cpf, job_title: item.employee?.job_title || item.employee?.function_name, department: item.employee?.department, admission_date: item.employee?.admission_date, termination_date: item.employee?.status === "terminated" ? item.employee.termination_date : null },
+        responsible_name: item.return_accountability?.responsible_name,
+        return_id: item.id, returned_at: item.returned_at, reason: item.reason, notes: item.notes,
+        items: item.return_items.map(toTermItem),
+        signed_at: item.term_signed_at, signed_name: item.term_signer_name || item.return_accountability?.employee_signature_name,
+        signed_cpf: item.term_signer_cpf,
+      });
       doc.save(`termo-devolucao-${safeFileName(item.employee?.full_name || "colaborador") || "colaborador"}.pdf`);
     } catch (caughtError) { setError(friendlyError(caughtError, "Não foi possível gerar o termo.")); }
     finally { downloadingRef.current = ""; setDownloadingId(""); }
@@ -102,5 +139,45 @@ export function RecentReturns() {
     finally { if (uploadedPath && supabase) await supabase.storage.from("delivery-terms").remove([uploadedPath]); uploadingRef.current = ""; setUploadingId(""); }
   }
 
-  return <section className="panel recent-deliveries-card recent-returns-card"><div className="panel-header"><div><p className="eyebrow">MOVIMENTAÇÃO DE EQUIPAMENTOS</p><h2>Últimas devoluções</h2><p>Devoluções registradas recentemente pelos colaboradores.</p></div><RotateCcw size={21} aria-hidden="true" /></div>{loading ? <div className="module-loading" role="status" aria-live="polite"><LoaderCircle className="spin" size={22} aria-hidden="true" /> Carregando histórico...</div> : error ? <FeedbackMessage onRetry={() => setRetryKey((current) => current + 1)}>{error}</FeedbackMessage> : returns.length ? <div className="recent-delivery-list" role="list" aria-label="Últimas devoluções">{returns.map((item) => <article className="recent-delivery-item" key={item.id} role="listitem"><div className="recent-delivery-icon recent-return-icon"><UserRound size={17} aria-hidden="true" /></div><div className="recent-delivery-main"><strong>{item.employee?.full_name || "Funcionário não informado"}</strong><small>{item.employee?.registration ? `Matrícula ${item.employee.registration} · ` : ""}{date(item.returned_at)} · {reasons[item.reason] || item.reason}</small><div className="recent-delivery-materials" aria-label="Materiais devolvidos">{item.return_items.map((returnItem, index) => { const variant = returnItem.delivery_item?.variant; return <span key={`${item.id}-${index}`}>{returnItem.quantity}x {returnItem.material?.name || "Material"}{variant ? ` · ${variant.size || variant.name}` : ""}</span>; })}</div><span className={`delivery-term-status ${item.term_signed_at ? "complete" : "pending"}`}>{item.term_signed_at ? <><Check size={12} aria-hidden="true" /> {item.term_signature_method === "physical_upload" ? "Assinado fisicamente" : "Assinado digitalmente"}</> : "Termo pendente de assinatura"}</span></div><div className="recent-delivery-actions"><button type="button" className="action-button" onClick={() => void downloadTerm(item)} disabled={downloadingId === item.id}><Download size={14} aria-hidden="true" /> {downloadingId === item.id ? "Gerando..." : "Baixar termo para assinatura"}</button>{!item.term_signed_at && <ReturnSignatureModal returnId={item.id} employeeName={item.employee?.full_name || "Colaborador"} employeeCpf={item.employee?.cpf || ""} employeeRegistration={item.employee?.registration || null} returnedAt={item.returned_at} reason={item.reason} items={item.return_items.map((returnItem) => ({ quantity: returnItem.quantity, material: returnItem.material, variant: returnItem.delivery_item?.variant || null }))} currentPath={item.term_file_path} onComplete={(path) => setReturns((current) => current.map((currentItem) => currentItem.id === item.id ? { ...currentItem, term_file_path: path, term_signature_method: "assisted", term_signed_at: new Date().toISOString() } : currentItem))} />}{!item.term_signed_at && <label className="action-button upload-term-button"><Upload size={14} aria-hidden="true" /> {uploadingId === item.id ? "Enviando..." : "Anexar termo assinado"}<input type="file" accept="application/pdf,image/jpeg,image/png,image/webp" onChange={(event) => void uploadTerm(item, event)} disabled={uploadingId === item.id} /></label>}</div><ClipboardList size={17} className="recent-delivery-date" aria-hidden="true" /></article>)}</div> : <div className="empty-state"><ClipboardList size={27} aria-hidden="true" /><strong>Nenhuma devolução registrada</strong><span>As devoluções confirmadas aparecerão aqui.</span></div>}</section>;
+  return (
+    <section className="panel recent-deliveries-card recent-returns-card">
+      <div className="panel-header"><div><p className="eyebrow">MOVIMENTAÇÃO DE EQUIPAMENTOS</p><h2>Últimas devoluções</h2><p>Devoluções registradas recentemente pelos colaboradores.</p></div><RotateCcw size={21} aria-hidden="true" /></div>
+      {loading ? <div className="module-loading" role="status" aria-live="polite"><LoaderCircle className="spin" size={22} aria-hidden="true" /> Carregando histórico...</div>
+        : error ? <FeedbackMessage onRetry={() => setRetryKey((current) => current + 1)}>{error}</FeedbackMessage>
+          : returns.length ? <div className="recent-delivery-list" role="list" aria-label="Últimas devoluções">
+            {returns.map((item) => {
+              const pdfItems = item.return_items.map(toTermItem);
+              const hasMissingItem = pdfItems.some((returnItem) => returnItem.destination === "not_returned");
+              return <article className="recent-delivery-item" key={item.id} role="listitem">
+                <div className="recent-delivery-icon recent-return-icon"><UserRound size={17} aria-hidden="true" /></div>
+                <div className="recent-delivery-main">
+                  <strong>{item.employee?.full_name || "Funcionário não informado"}</strong>
+                  <small>{item.employee?.registration ? `Matrícula ${item.employee.registration} · ` : ""}{date(item.returned_at)} · {reasons[item.reason] || item.reason}</small>
+                  <div className="recent-delivery-materials" aria-label="Materiais devolvidos">{item.return_items.map((returnItem, index) => { const variant = returnItem.delivery_item?.variant; return <span key={`${item.id}-${index}`}>{returnItem.quantity}x {returnItem.material?.name || "Material"}{variant ? ` · ${variant.size || variant.name}` : ""}{returnItem.incident_type !== "normal" ? ` · ${returnItem.incident_type}` : ""}</span>; })}</div>
+                  <span className={`delivery-term-status ${item.term_signed_at ? "complete" : "pending"}`}>{item.term_signed_at ? <><Check size={12} aria-hidden="true" /> {item.term_signature_method === "physical_upload" ? "Assinado fisicamente" : "Assinado digitalmente"}</> : "Termo pendente de assinatura"}</span>
+                  {hasMissingItem && !item.term_signed_at && <small className="return-line-legal-note">Baixa do material extraviado/furtado aguardando assinatura do termo.</small>}
+                </div>
+                <div className="recent-delivery-actions">
+                  <button type="button" className="action-button" onClick={() => void downloadTerm(item)} disabled={downloadingId === item.id}><Download size={14} aria-hidden="true" /> {downloadingId === item.id ? "Preparando..." : item.term_signed_at ? "Baixar termo assinado" : "Baixar termo para assinatura"}</button>
+                  {!item.term_signed_at && <ReturnSignatureModal
+                    returnId={item.id}
+                    employee={{ name: item.employee?.full_name || "Colaborador", cpf: item.employee?.cpf || "", registration: item.employee?.registration || null, job_title: item.employee?.job_title || item.employee?.function_name, department: item.employee?.department, admission_date: item.employee?.admission_date, termination_date: item.employee?.status === "terminated" ? item.employee.termination_date : null }}
+                    organization={organization}
+                    responsibleName={item.return_accountability?.responsible_name || null}
+                    returnedAt={item.returned_at}
+                    reason={item.reason}
+                    notes={item.notes}
+                    items={pdfItems}
+                    currentPath={item.term_file_path}
+                    onComplete={(path) => setReturns((current) => current.map((currentItem) => currentItem.id === item.id ? { ...currentItem, term_file_path: path, term_signature_method: "assisted", term_signed_at: new Date().toISOString() } : currentItem))}
+                  />}
+                  {!item.term_signed_at && <label className="action-button upload-term-button"><Upload size={14} aria-hidden="true" /> {uploadingId === item.id ? "Enviando..." : "Anexar termo assinado"}<input type="file" accept="application/pdf,image/jpeg,image/png,image/webp" onChange={(event) => void uploadTerm(item, event)} disabled={uploadingId === item.id} /></label>}
+                </div>
+                <ClipboardList size={17} className="recent-delivery-date" aria-hidden="true" />
+              </article>;
+            })}
+          </div>
+          : <div className="empty-state"><ClipboardList size={27} aria-hidden="true" /><strong>Nenhuma devolução registrada</strong><span>As devoluções confirmadas aparecerão aqui.</span></div>}
+    </section>
+  );
 }

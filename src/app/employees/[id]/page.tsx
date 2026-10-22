@@ -5,7 +5,6 @@ import { AlertTriangle, ArrowLeft, CalendarClock, Check, Download, Eye, LoaderCi
 import Link from "next/link";
 import Image from "next/image";
 import { useParams } from "next/navigation";
-import { jsPDF } from "jspdf";
 import { createClient } from "@/lib/supabase/client";
 import { friendlyError } from "@/lib/ui-feedback";
 import { closePendingDownload, finishPendingDownload, openPendingDownload } from "@/lib/external-download";
@@ -16,13 +15,45 @@ import { FeedbackMessage } from "@/components/feedback-message";
 import { DeliveryTermPrintSheet, type DeliveryTermSnapshot } from "@/components/delivery-term-print-sheet";
 import { TermCopyLinkButton } from "@/components/term-copy-link-button";
 import { TermDocumentActions } from "@/components/term-document-actions";
+import { createReturnTermDocument, type ReturnTermItem } from "@/lib/return-term-document";
 
 type Organization = { name: string; cnpj: string | null; logo_url: string | null; address: string | null; phone: string | null };
 type Employee = { id: string; registration: string | null; full_name: string; cpf: string; job_title: string | null; function_name: string | null; function_classification: string | null; department: string | null; unit: string | null; admission_date: string | null; termination_date: string | null; status: "active" | "away" | "terminated"; organization: Organization | null };
 type MaterialUnit = { unit_identifier: string; delivered_at: string | null; valid_until: string | null; ca_number: string | null; ca_expires_at: string | null; test_number: string | null; test_report_number: string | null; test_performed_at: string | null };
 type Item = { id: string; quantity: number; returned: number; expected_replacement_at: string | null; test_performed_at: string | null; test_expires_at: string | null; material: { name: string; internal_code: string | null; unit: string; type: string } | null; variant: { name: string; size: string | null } | null; lot: { lot_number: string; ca_number: string | null; ca_expires_at: string | null; test_number: string | null; test_report_number: string | null; test_performed_at: string | null; test_expires_at: string | null } | null; units: MaterialUnit[]; delivery: { id: string; delivered_at: string; reason: string; notes: string | null; term_file_path: string | null; term_uploaded_at: string | null; term_signature_method: string | null; term_signed_at: string | null } | null };
 type Course = { id: string; name: string; provider: string | null; expires_at: string | null };
-type ReturnSheet = { id: string; returned_at: string; reason: string; term_file_path: string | null; term_signature_method: string | null; term_signed_at: string | null; items: Array<{ quantity: number; material: { name: string; unit: string } | null; variant: { name: string; size: string | null } | null }> };
+type ReturnSheetItem = {
+  quantity: number;
+  material: { name: string; unit: string } | null;
+  variant: { name: string; size: string | null } | null;
+  delivered_at: string | null;
+  lot_number: string | null;
+  ca_number: string | null;
+  ca_expires_at: string | null;
+  test_number: string | null;
+  test_report_number: string | null;
+  test_performed_at: string | null;
+  test_expires_at: string | null;
+  units?: Array<{ unit_identifier: string | null; ca_number: string | null; ca_expires_at: string | null; test_number: string | null; test_report_number: string | null; test_performed_at: string | null; test_expires_at: string | null }>;
+  condition: string | null;
+  destination: string | null;
+  incident_type: string | null;
+  incident_description: string | null;
+  deduction_amount: number | null;
+};
+type ReturnSheet = { id: string; returned_at: string; reason: string; notes: string | null; responsible_name: string | null; term_file_path: string | null; term_signature_method: string | null; term_signed_at: string | null; term_signer_name: string | null; term_signer_cpf: string | null; items: ReturnSheetItem[] };
+
+function toReturnTermItem(item: ReturnSheetItem): ReturnTermItem {
+  const uniqueUnitValue = (key: "ca_number" | "ca_expires_at" | "test_number" | "test_report_number" | "test_performed_at" | "test_expires_at") => [...new Set((item.units ?? []).map((unit) => unit[key]).filter(Boolean))].join(", ") || null;
+  return {
+    material: item.material?.name || "Material", unit: item.material?.unit || "un.", quantity: item.quantity,
+    size: item.variant?.size || item.variant?.name, delivered_at: item.delivered_at, lot_number: item.lot_number,
+    ca_number: item.ca_number || uniqueUnitValue("ca_number"), ca_expires_at: item.ca_expires_at || uniqueUnitValue("ca_expires_at"), test_number: item.test_number || uniqueUnitValue("test_number"),
+    test_report_number: item.test_report_number || uniqueUnitValue("test_report_number"), test_performed_at: item.test_performed_at || uniqueUnitValue("test_performed_at"), test_expires_at: item.test_expires_at || uniqueUnitValue("test_expires_at"),
+    condition: item.condition, destination: item.destination, incident_type: item.incident_type,
+    incident_description: item.incident_description, deduction_amount: item.deduction_amount,
+  };
+}
 
 const reasonLabels: Record<string, string> = { admission: "Admissão", periodic_change: "Troca periódica", damaged: "Equipamento danificado", lost: "Equipamento perdido", role_change: "Alteração de função", replacement: "Substituição", other: "Outro" };
 function date(value: string | null) {
@@ -96,21 +127,44 @@ export default function EmployeeMaterialsPage() {
       const supabase = createClient();
       const [{ data: employeeData, error: employeeError }, { data: deliveryData, error: deliveryError }, { data: courseData, error: courseError }, { data: returnData, error: returnError }] = await Promise.all([
         supabase.from("employees").select("id,registration,full_name,cpf,job_title,function_name,function_classification,department,unit,admission_date,termination_date,status,organization:organizations(name,cnpj,logo_url,address,phone)").eq("id", id).single(),
-        supabase.from("delivery_items").select("id,quantity,expected_replacement_at,test_performed_at,test_expires_at,materials(name,internal_code,unit,type),material_lots(lot_number,ca_number,ca_expires_at,test_number,test_report_number,test_performed_at,test_expires_at),variant:material_variants(name,size),material_units(unit_identifier,delivered_at,valid_until,ca_number,ca_expires_at,test_number,test_report_number,test_performed_at),deliveries!inner(id,delivered_at,reason,notes,employee_id,term_file_path,term_uploaded_at,term_signature_method,term_signed_at),return_items(quantity)").eq("deliveries.employee_id", id).order("created_at", { ascending: false }),
+        supabase.from("delivery_items").select("id,quantity,expected_replacement_at,test_performed_at,test_expires_at,materials(name,internal_code,unit,type),material_lots(lot_number,ca_number,ca_expires_at,test_number,test_report_number,test_performed_at,test_expires_at),variant:material_variants(name,size),material_units(unit_identifier,delivered_at,valid_until,ca_number,ca_expires_at,test_number,test_report_number,test_performed_at),deliveries!inner(id,delivered_at,reason,notes,employee_id,term_file_path,term_uploaded_at,term_signature_method,term_signed_at),return_items(quantity,destination,return:returns(term_signed_at))").eq("deliveries.employee_id", id).order("created_at", { ascending: false }),
         supabase.from("employee_courses").select("id,name,provider,expires_at").eq("employee_id", id).order("expires_at", { ascending: true, nullsFirst: false }),
-        supabase.from("returns").select("id,returned_at,reason,term_file_path,term_signature_method,term_signed_at,return_items(quantity,material:materials(name,unit),delivery_item:delivery_items(variant:material_variants(name,size)))").eq("employee_id", id).order("returned_at", { ascending: false }),
+        supabase.from("returns").select("id,returned_at,reason,notes,term_file_path,term_signature_method,term_signed_at,term_signer_name,term_signer_cpf,return_accountability(responsible_name),return_items(quantity,equipment_condition,destination,incident_type,incident_description,deduction_requested,deduction_amount,material:materials(name,unit),delivery_item:delivery_items(variant:material_variants(name,size),delivery:deliveries(delivered_at),lot:material_lots(lot_number,ca_number,ca_expires_at,test_number,test_report_number,test_performed_at,test_expires_at),units:material_units(unit_identifier,ca_number,ca_expires_at,test_number,test_report_number,test_performed_at,test_expires_at)))").eq("employee_id", id).order("returned_at", { ascending: false }),
       ]);
       if (cancelled) return;
       if (employeeError || deliveryError || courseError || returnError) setError(friendlyError(employeeError ?? deliveryError ?? courseError ?? returnError, "Não foi possível carregar a ficha."));
       setEmployee(employeeData as unknown as Employee);
       setCourses((courseData ?? []) as Course[]);
-      setReturnSheets(((returnData ?? []) as Array<Record<string, unknown>>).map((row) => ({ id: String(row.id), returned_at: String(row.returned_at), reason: String(row.reason), term_file_path: row.term_file_path as string | null, term_signature_method: row.term_signature_method as string | null, term_signed_at: row.term_signed_at as string | null, items: ((row.return_items ?? []) as Array<Record<string, unknown>>).map((item) => ({ quantity: Number(item.quantity), material: item.material as ReturnSheet["items"][number]["material"], variant: ((item.delivery_item as Record<string, unknown> | null)?.variant ?? null) as ReturnSheet["items"][number]["variant"] })) })));
+      setReturnSheets(((returnData ?? []) as Array<Record<string, unknown>>).map((row) => ({
+        id: String(row.id), returned_at: String(row.returned_at), reason: String(row.reason), notes: row.notes as string | null,
+        term_file_path: row.term_file_path as string | null, term_signature_method: row.term_signature_method as string | null,
+        term_signed_at: row.term_signed_at as string | null, term_signer_name: row.term_signer_name as string | null, term_signer_cpf: row.term_signer_cpf as string | null,
+        responsible_name: ((row.return_accountability as Record<string, unknown> | null)?.responsible_name as string | null) ?? null,
+        items: ((row.return_items ?? []) as Array<Record<string, unknown>>).map((item) => {
+          const material = item.material as { name: string; unit: string } | null;
+          const deliveryItem = item.delivery_item as Record<string, unknown> | null;
+          const variant = deliveryItem?.variant as { name: string; size: string | null } | null;
+          const delivery = deliveryItem?.delivery as { delivered_at: string } | null;
+          const lot = deliveryItem?.lot as Record<string, unknown> | null;
+          const units = (deliveryItem?.units ?? []) as ReturnSheetItem["units"];
+          return {
+            material, variant, quantity: Number(item.quantity),
+            delivered_at: delivery?.delivered_at || null, lot_number: (lot?.lot_number as string | null) || null,
+            ca_number: (lot?.ca_number as string | null) || null, ca_expires_at: (lot?.ca_expires_at as string | null) || null,
+            test_number: (lot?.test_number as string | null) || null, test_report_number: (lot?.test_report_number as string | null) || null,
+            test_performed_at: (lot?.test_performed_at as string | null) || null, test_expires_at: (lot?.test_expires_at as string | null) || null,
+            units,
+            condition: String(item.equipment_condition || ""), destination: String(item.destination || ""), incident_type: String(item.incident_type || "normal"),
+            incident_description: item.incident_description as string | null, deduction_amount: item.deduction_requested ? Number(item.deduction_amount) : null,
+          };
+        }),
+      })));
       setItems(((deliveryData ?? []) as unknown[]).map((row) => {
         const value = row as Record<string, unknown>;
         const units = (value.material_units ?? []) as MaterialUnit[];
         const material = value.materials as Item["material"];
 
-        return { id: String(value.id), quantity: Number(value.quantity), returned: ((value.return_items ?? []) as Array<Record<string, unknown>>).reduce((total, item) => total + Number(item.quantity || 0), 0), expected_replacement_at: value.expected_replacement_at as string | null, test_performed_at: value.test_performed_at as string | null, test_expires_at: value.test_expires_at as string | null, material, variant: value.variant as Item["variant"], lot: value.material_lots as Item["lot"], units, delivery: value.deliveries as Item["delivery"] };
+        return { id: String(value.id), quantity: Number(value.quantity), returned: ((value.return_items ?? []) as Array<Record<string, unknown>>).reduce((total, item) => { const signed = Boolean((item.return as Record<string, unknown> | null)?.term_signed_at); return total + (item.destination === "not_returned" && !signed ? 0 : Number(item.quantity || 0)); }, 0), expected_replacement_at: value.expected_replacement_at as string | null, test_performed_at: value.test_performed_at as string | null, test_expires_at: value.test_expires_at as string | null, material, variant: value.variant as Item["variant"], lot: value.material_lots as Item["lot"], units, delivery: value.deliveries as Item["delivery"] };
       }));
       } catch (caught) {
         if (!cancelled) setError(friendlyError(caught, "Não foi possível carregar a ficha."));
@@ -262,11 +316,40 @@ export default function EmployeeMaterialsPage() {
   }
 
   async function downloadReturnTerm(sheet: ReturnSheet) {
-    const doc = new jsPDF({ unit: "mm", format: "a4" }); const margin = 18; let y = 20;
-    doc.setFont("helvetica", "bold"); doc.setFontSize(16); doc.text("EPIS+", margin, y); doc.setFont("helvetica", "normal"); doc.setFontSize(10); doc.text("TERMO DE DEVOLUÇÃO DE MATERIAIS", margin, y + 7); y += 17;
-    doc.setFontSize(9); doc.text(`Colaborador: ${employee!.full_name}`, margin, y); doc.text(`Matrícula: ${employee!.registration || "Não informada"}`, margin + 95, y); y += 6; doc.text(`Data: ${date(sheet.returned_at)} · Motivo: ${reasonLabels[sheet.reason] || sheet.reason}`, margin, y); y += 12;
-    doc.setFont("helvetica", "bold"); doc.text("Materiais devolvidos", margin, y); y += 8; doc.setFont("helvetica", "normal"); sheet.items.forEach((item) => { const variation = item.variant ? ` · Tamanho ${item.variant.size || item.variant.name}` : ""; doc.text(`${item.quantity}x ${item.material?.name || "Material"}${variation}`, margin, y); y += 6; });
-    y += 12; doc.text("Declaro que os materiais acima foram devolvidos e conferidos.", margin, y); y += 35; doc.line(margin, y, margin + 72, y); doc.line(120, y, 192, y); doc.setFontSize(8); doc.text("Assinatura do colaborador", margin + 36, y + 5, { align: "center" }); doc.text("Responsável pelo controle", 156, y + 5, { align: "center" }); doc.save(`termo-devolucao-${safeFileName(employee!.full_name)}.pdf`);
+    if (!employee) return;
+    if (sheet.term_signed_at && sheet.term_file_path) {
+      const { data: signedFile, error: signedUrlError } = await createClient().storage.from("delivery-terms").createSignedUrl(sheet.term_file_path, 60);
+      if (signedUrlError || !signedFile?.signedUrl) { setError(friendlyError(signedUrlError, "Não foi possível baixar o termo assinado.")); return; }
+      try {
+        const response = await fetch(signedFile.signedUrl);
+        if (!response.ok) throw new Error("Não foi possível baixar o termo assinado.");
+        const blob = await response.blob();
+        const extension = blob.type === "image/jpeg" ? "jpg" : blob.type === "image/png" ? "png" : blob.type === "image/webp" ? "webp" : "pdf";
+        const blobUrl = URL.createObjectURL(blob);
+        const link = document.createElement("a");
+        link.href = blobUrl;
+        link.download = `termo-devolucao-assinado-${safeFileName(employee.full_name)}.${extension}`;
+        document.body.append(link);
+        link.click();
+        link.remove();
+        window.setTimeout(() => URL.revokeObjectURL(blobUrl), 1000);
+      } catch (caught) { setError(friendlyError(caught, "Não foi possível baixar o termo assinado.")); }
+      return;
+    }
+    const doc = await createReturnTermDocument({
+      organization: employee.organization || { name: "EPIS+" },
+      employee: { name: employee.full_name, cpf: employee.cpf, registration: employee.registration, job_title: employee.job_title || employee.function_name, department: employee.department, admission_date: employee.admission_date, termination_date: employee.status === "terminated" ? employee.termination_date : null },
+      responsible_name: sheet.responsible_name,
+      return_id: sheet.id,
+      returned_at: sheet.returned_at,
+      reason: sheet.reason,
+      notes: sheet.notes,
+      items: sheet.items.map(toReturnTermItem),
+      signed_at: sheet.term_signed_at,
+      signed_name: sheet.term_signer_name,
+      signed_cpf: sheet.term_signer_cpf,
+    });
+    doc.save(`termo-devolucao-${safeFileName(employee.full_name)}.pdf`);
   }
 
   async function openSignedReturnTerm(sheet: ReturnSheet) {
@@ -377,7 +460,7 @@ export default function EmployeeMaterialsPage() {
         </tbody></table></div> : <div className="empty-state"><ShieldCheck size={27} /><strong>Nenhuma ficha registrada</strong><span>As fichas aparecerão após cada entrega.</span></div>}
       </section>
 
-      <section className="sheet-section employee-return-sheets"><div className="sheet-section-heading"><div><p>FICHAS DE DEVOLUÇÃO</p><h2>Termos de devolução</h2><span>{returnSheets.length} termo(s) registrado(s)</span></div></div>{returnSheets.length ? <div className="table-wrap"><table><thead><tr><th>DOCUMENTO</th><th>DATA</th><th>MATERIAIS</th><th>STATUS</th><th>AÇÕES</th></tr></thead><tbody>{returnSheets.map((sheet) => <tr key={sheet.id}><td><strong>Termo de devolução</strong><small>{reasonLabels[sheet.reason] || sheet.reason}</small></td><td>{date(sheet.returned_at)}</td><td>{sheet.items.map((item, index) => <span className="employee-term-material" key={`${sheet.id}-${index}`}>{item.quantity}x {item.material?.name || "Material"}{item.variant ? ` · Tamanho ${item.variant.size || item.variant.name}` : ""}</span>)}</td><td><span className={`status-pill ${sheet.term_signed_at ? "success" : "warning"}`}>{sheet.term_signed_at ? <><Check size={11} /> {sheet.term_signature_method === "physical_upload" ? "Assinado fisicamente" : "Assinado digitalmente"}</> : "Pendente"}</span></td><td><EmployeeTermActions><div className="employee-sheet-actions"><button type="button" className="action-button" onClick={() => void downloadReturnTerm(sheet)}><Download size={14} /> Baixar termo para assinatura</button>{!sheet.term_signed_at && <ReturnSignatureModal returnId={sheet.id} employeeName={employee!.full_name} employeeCpf={employee!.cpf} employeeRegistration={employee!.registration} returnedAt={sheet.returned_at} reason={sheet.reason} items={sheet.items} currentPath={sheet.term_file_path} onComplete={(path) => setReturnSheets((current) => current.map((item) => item.id === sheet.id ? { ...item, term_file_path: path, term_signature_method: "assisted", term_signed_at: new Date().toISOString() } : item))} />}</div></EmployeeTermActions>{sheet.term_file_path && <button type="button" className="action-button" onClick={() => void openSignedReturnTerm(sheet)}><Eye size={14} /> Visualizar termo</button>}<label className="action-button upload-term-button"><Upload size={14} /> {uploadingId === sheet.id ? "Enviando..." : sheet.term_file_path ? "Trocar termo assinado" : "Anexar termo assinado"}<input type="file" accept="application/pdf,image/jpeg,image/png,image/webp" onChange={(event) => void uploadReturnTerm(sheet, event)} disabled={uploadingId === sheet.id} /></label></td></tr>)}</tbody></table></div> : <div className="empty-state"><ShieldCheck size={27} /><strong>Nenhum termo de devolução</strong><span>Os termos aparecerão após uma devolução registrada.</span></div>}</section>
+      <section className="sheet-section employee-return-sheets"><div className="sheet-section-heading"><div><p>FICHAS DE DEVOLUÇÃO</p><h2>Termos de devolução</h2><span>{returnSheets.length} termo(s) registrado(s)</span></div></div>{returnSheets.length ? <div className="table-wrap"><table><thead><tr><th>DOCUMENTO</th><th>DATA</th><th>MATERIAIS</th><th>STATUS</th><th>AÇÕES</th></tr></thead><tbody>{returnSheets.map((sheet) => <tr key={sheet.id}><td><strong>Termo de devolução</strong><small>{reasonLabels[sheet.reason] || sheet.reason}</small></td><td>{date(sheet.returned_at)}</td><td>{sheet.items.map((item, index) => <span className="employee-term-material" key={`${sheet.id}-${index}`}>{item.quantity}x {item.material?.name || "Material"}{item.variant ? ` · Tamanho ${item.variant.size || item.variant.name}` : ""}</span>)}</td><td><span className={`status-pill ${sheet.term_signed_at ? "success" : "warning"}`}>{sheet.term_signed_at ? <><Check size={11} /> {sheet.term_signature_method === "physical_upload" ? "Assinado fisicamente" : "Assinado digitalmente"}</> : "Pendente"}</span></td><td><EmployeeTermActions><div className="employee-sheet-actions"><button type="button" className="action-button" onClick={() => void downloadReturnTerm(sheet)}><Download size={14} /> {sheet.term_signed_at ? "Baixar termo assinado" : "Baixar termo para assinatura"}</button>{!sheet.term_signed_at && <ReturnSignatureModal returnId={sheet.id} employee={{ name: employee!.full_name, cpf: employee!.cpf, registration: employee!.registration, job_title: employee!.job_title || employee!.function_name, department: employee!.department, admission_date: employee!.admission_date, termination_date: employee!.status === "terminated" ? employee!.termination_date : null }} organization={employee!.organization || { name: "EPIS+" }} responsibleName={sheet.responsible_name} returnedAt={sheet.returned_at} reason={sheet.reason} items={sheet.items} currentPath={sheet.term_file_path} onComplete={(path) => setReturnSheets((current) => current.map((item) => item.id === sheet.id ? { ...item, term_file_path: path, term_signature_method: "assisted", term_signed_at: new Date().toISOString() } : item))} />}</div></EmployeeTermActions>{sheet.term_file_path && <button type="button" className="action-button" onClick={() => void openSignedReturnTerm(sheet)}><Eye size={14} /> Visualizar termo</button>}<label className="action-button upload-term-button"><Upload size={14} /> {uploadingId === sheet.id ? "Enviando..." : sheet.term_file_path ? "Trocar termo assinado" : "Anexar termo assinado"}<input type="file" accept="application/pdf,image/jpeg,image/png,image/webp" onChange={(event) => void uploadReturnTerm(sheet, event)} disabled={uploadingId === sheet.id} /></label></td></tr>)}</tbody></table></div> : <div className="empty-state"><ShieldCheck size={27} /><strong>Nenhum termo de devolução</strong><span>Os termos aparecerão após uma devolução registrada.</span></div>}</section>
 
       <section className="sheet-section"><div className="sheet-section-heading"><div><p>RESPONSABILIDADE ATUAL</p><h2>Materiais atualmente com o colaborador</h2><span>{currentItems.length} registro(s) em posse do colaborador</span></div></div>{currentItems.length ? <div className="table-wrap sheet-table-wrap"><table><thead><tr><th>MATERIAL</th><th>IDENTIFICAÇÃO</th><th>VALIDADE</th><th>LOTE</th><th>QTD.</th><th>ENTREGA</th><th>PREVISÃO DE TROCA</th><th>STATUS</th><th>MOTIVO</th></tr></thead><tbody>{currentItems.map((item) => { const status = replacementStatus(item.expected_replacement_at); return <tr key={item.id}><td><strong>{item.material?.name || "Material"}</strong><small>{item.material?.internal_code ? `${item.material.internal_code || "Código não informado"} · ${item.material.unit}` : item.material?.unit}</small></td><td>{item.units.length ? item.units.map((unit, index) => <span className="employee-term-material" key={`${item.id}-unit-${index}`}>{unit.unit_identifier}</span>) : "—"}</td><td>{item.units.length ? item.units.map((unit, index) => <span className="employee-term-material" key={`${item.id}-validity-${index}`}>{date(unit.valid_until)}</span>) : "—"}</td><td>{item.lot?.lot_number || "—"}</td><td><strong>{item.quantity - item.returned}</strong></td><td>{date(item.delivery?.delivered_at ?? null)}</td><td>{date(item.expected_replacement_at)}</td><td><span className={`status-pill ${status.tone}`}>{status.tone !== "success" && status.tone !== "neutral" && <AlertTriangle size={11} />}{status.label}</span></td><td>{reasonLabels[item.delivery?.reason ?? ""] || "—"}</td></tr>; })}</tbody></table></div> : <div className="empty-state"><ShieldCheck size={27} /><strong>Nenhum material em posse</strong><span>Este colaborador não possui materiais atualmente sob sua responsabilidade.</span></div>}</section>
       {courses.length > 0 && <section className="sheet-courses"><div className="sheet-section-heading"><div><p>CAPACITAÇÕES</p><h2>Cursos e treinamentos</h2></div></div>{courses.map((course) => <div key={course.id}><strong>{course.name}</strong><span>{course.provider || "Instituição não informada"}{course.expires_at ? ` · validade ${date(course.expires_at)}` : ""}</span></div>)}</section>}

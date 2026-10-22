@@ -116,11 +116,23 @@ function mapReturnItem(value: unknown) {
   const material = object(item.material);
   const deliveryItem = object(item.delivery_item);
   const variant = object(deliveryItem.variant);
+  const lot = object(deliveryItem.lot);
+  const delivery = object(deliveryItem.delivery);
+  const units = Array.isArray(deliveryItem.units) ? deliveryItem.units.map(object) : [];
+  const unitValue = (key: string) => [...new Set(units.map((unit) => text(unit[key])).filter(Boolean))].join(", ") || null;
   return {
     material: text(material.name) || "Material",
     unit: text(material.unit) || "un.",
     quantity: Number(item.quantity) || 0,
     size: text(variant.size) || text(variant.name) || null,
+    delivered_at: text(delivery.delivered_at) || null,
+    lot_number: text(lot.lot_number) || null,
+    ca_number: text(lot.ca_number) || unitValue("ca_number"),
+    ca_expires_at: text(lot.ca_expires_at) || unitValue("ca_expires_at"),
+    test_number: text(lot.test_number) || unitValue("test_number"),
+    test_report_number: text(lot.test_report_number) || unitValue("test_report_number"),
+    test_performed_at: text(lot.test_performed_at) || unitValue("test_performed_at"),
+    test_expires_at: text(lot.test_expires_at) || unitValue("test_expires_at"),
     condition: text(item.equipment_condition) || null,
     destination: text(item.destination) || null,
     incident_type: text(item.incident_type) || "normal",
@@ -238,10 +250,11 @@ Deno.serve(async (request) => {
     ? "id,organization_id,employee_id,delivered_at,reason,notes,request_items,lot_plan,status,snapshot,employee:employees(full_name,registration,phone,job_title,function_name,department,admission_date,termination_date,status)"
     : recordType === "delivery"
       ? "id,organization_id,employee_id,delivered_at,reason,notes,term_signed_at,employee:employees(full_name,registration,phone,job_title,function_name,department,admission_date,termination_date,status),delivery_items(quantity,test_performed_at,test_expires_at,expected_replacement_at,material:materials(name,unit,internal_code),lot:material_lots(ca_number,ca_expires_at,test_number,test_report_number,test_performed_at,test_expires_at),variant:material_variants(name,size),material_units(unit_identifier,valid_until,test_performed_at,test_number,test_report_number,ca_number,ca_expires_at))"
-      : "id,organization_id,employee_id,returned_at,reason,notes,term_signed_at,employee:employees(full_name,registration,phone),return_items(quantity,equipment_condition,destination,incident_type,incident_description,deduction_requested,deduction_amount,material:materials(name,unit),delivery_item:delivery_items(variant:material_variants(name,size)))";
+      : "id,organization_id,employee_id,returned_at,reason,notes,term_signed_at,employee:employees(full_name,registration,phone,cpf,job_title,function_name,department,admission_date,termination_date,status),return_items(quantity,equipment_condition,destination,incident_type,incident_description,deduction_requested,deduction_amount,material:materials(name,unit),delivery_item:delivery_items(variant:material_variants(name,size),delivery:deliveries(delivered_at),lot:material_lots(lot_number,ca_number,ca_expires_at,test_number,test_report_number,test_performed_at,test_expires_at),units:material_units(unit_identifier,ca_number,ca_expires_at,test_number,test_report_number,test_performed_at,test_expires_at)))";
   const { data: transaction, error: transactionError } = await userClient.from(table).select(select).eq("id", recordId).maybeSingle();
-  if (transactionError || !transaction || transaction.organization_id !== profile.organization_id) return respond({ error: "A ficha não foi encontrada nesta organização." }, 404, origin);
+  if (transactionError || !transaction) return respond({ error: "A ficha não foi encontrada nesta organização." }, 404, origin);
   const transactionRecord = transaction as unknown as Record<string, unknown>;
+  if (transactionRecord.organization_id !== profile.organization_id) return respond({ error: "A ficha não foi encontrada nesta organização." }, 404, origin);
   if (recordType === "pending_delivery" && transactionRecord.status !== "pending_signature") return respond({ error: "Esta ficha não está mais pendente de assinatura." }, 409, origin);
   if (recordType !== "pending_delivery" && transactionRecord.term_signed_at) return respond({ error: "Esta ficha já está assinada." }, 409, origin);
 
