@@ -174,8 +174,11 @@ async function createPreDeliverySignedPdf(snapshot: Snapshot, signatureBytes: Ui
     const top = pageSize[1];
     target.drawRectangle({ x: 0, y: top - 97, width: pageSize[0], height: 97, color: rgb(1, 0.998, 0.96) });
     target.drawRectangle({ x: 0, y: top - 101, width: pageSize[0], height: 5, color: gold });
-    target.drawText(pdfText(renderText(snapshot.organization_name).toUpperCase()), { x: margin, y: top - 35, size: 11, font: bold, color: ink, maxWidth: width - 160 });
-    target.drawText(pdfText("FICHA DE EPI - EQUIPAMENTO DE PROTEÇÃO INDIVIDUAL"), { x: margin, y: top - 60, size: 12, font: bold, color: ink, maxWidth: width - 160 });
+    const headingWidth = width - (logo ? 160 : 0);
+    target.drawText(pdfText(renderText(snapshot.organization_name).toUpperCase()), { x: margin, y: top - 35, size: 11, font: bold, color: ink, maxWidth: headingWidth });
+    const title = pdfText("FICHA DE EPI - EQUIPAMENTO DE PROTEÇÃO INDIVIDUAL");
+    const titleSize = Math.min(12, (headingWidth - 4) * 11.7 / bold.widthOfTextAtSize(title, 11.7));
+    target.drawText(title, { x: margin, y: top - 60, size: titleSize, font: bold, color: ink, maxWidth: headingWidth });
     target.drawText(pdfText("RECIBO DE ENTREGA E RESPONSABILIDADE"), { x: margin, y: top - 78, size: 8, font: regular, color: muted });
     if (logo) {
       const scale = Math.min(138 / logo.width, 57 / logo.height);
