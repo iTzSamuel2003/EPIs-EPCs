@@ -5009,6 +5009,37 @@ html,body{max-width:100%;overflow-x:hidden}
 @media(max-width:800px){.discounts-metrics{grid-template-columns:repeat(2,minmax(0,1fr))}.discount-review-form{grid-template-columns:1fr}.discount-review-form label:first-child{max-width:220px}}
 @media(max-width:600px){.discounts-header{align-items:flex-start;flex-direction:column}.discounts-header .secondary-button{align-self:flex-end}.discounts-toolbar{align-items:stretch;flex-direction:column}.discounts-toolbar select{width:100%}.discount-case{padding:13px}.discount-case-header{flex-direction:column}.discount-case-identity{align-items:flex-start}.discount-status{margin-left:49px}.discount-case-summary{gap:12px 24px}.discount-item-title{align-items:flex-start;flex-direction:column;gap:4px}.discount-actions{justify-content:stretch}.discount-actions button{flex:1 1 100%}.discount-link-expiry{flex:1 1 100%;margin:0}.discount-generated-link{flex-basis:100%}.discount-signed-footer{align-items:stretch;flex-direction:column}.discount-signed-footer button{justify-content:center}}
 
+.discount-refusal-modal{width:min(100%,760px)}
+.discount-refusal-form{display:grid;gap:13px;margin-top:16px}
+.discount-refusal-form label{display:grid;gap:6px;color:#536078;font-size:11px;font-weight:700}
+.discount-refusal-form select,.discount-refusal-form textarea{width:100%;box-sizing:border-box;min-height:42px;border:1px solid #dfe4ed;border-radius:8px;background:#fff;padding:10px 11px;color:#243452;font:inherit;font-weight:400}
+.discount-refusal-form textarea{resize:vertical;line-height:1.5}
+.discount-refusal-warning{padding:10px 12px;border:1px solid #f0dfae;border-radius:8px;background:#fffaf0;color:#765c20;font-size:11px;line-height:1.5}
+.discount-refusal-witness-heading,.discount-refusal-entry-heading{display:flex;justify-content:space-between;align-items:center;gap:12px}
+.discount-refusal-witness-heading>div,.discount-refusal-entry-heading>div{display:grid;gap:4px}
+.discount-refusal-witness-heading strong,.discount-refusal-history-heading strong{color:#344057;font-size:12px}
+.discount-refusal-witness-heading small,.discount-refusal-history-heading small,.discount-refusal-entry-heading small{color:#8995aa;font-size:10px;line-height:1.45}
+.discount-witness-card{position:relative;display:grid;gap:10px;min-width:0;margin:0;padding:14px;border:1px solid #e1e5ed;border-radius:9px;background:#fbfcfe}
+.discount-witness-card legend{padding:0 5px;color:#536078;font-size:10px;font-weight:700}
+.discount-witness-card select{width:100%;min-height:42px;border:1px solid #dfe4ed;border-radius:8px;background:#fff;padding:9px 11px;color:#243452}
+.discount-witness-remove{position:absolute;top:5px;right:8px;display:grid;place-items:center;width:34px;height:34px;border:0;border-radius:7px;background:#f4f5f9;color:#7b879b;cursor:pointer}
+.discount-refusal-helper{margin:0;color:#77849a;font-size:10px;line-height:1.5}
+.discount-refusal-error{margin:0;padding:9px 11px;border-radius:7px;background:#fff0ed;color:#ad5047;font-size:11px;line-height:1.45}
+.discount-refusal-attestation{padding:10px 12px;border-left:3px solid #9585e6;background:#f8f7fe;color:#5c6880;font-size:10px;line-height:1.55}
+.discount-witness-signature .signature-pad{height:110px;min-height:110px;touch-action:none;cursor:crosshair}
+.discount-refusal-history{display:grid;gap:9px;margin-top:14px;padding:12px;border:1px solid #e6e9f0;border-radius:9px;background:#fafbfe}
+.discount-refusal-history-heading{display:flex;justify-content:space-between;align-items:center;gap:10px}
+.discount-refusal-entry{display:grid;gap:9px;padding:11px;border:1px solid #e9edf4;border-radius:8px;background:#fff}
+.discount-refusal-entry p{margin:0;color:#5c6880;font-size:10px;line-height:1.5;overflow-wrap:anywhere}
+.discount-refusal-entry-heading button{display:inline-flex;align-items:center;gap:6px;min-height:34px;white-space:nowrap}
+.discount-refusal-witness-list{display:flex;gap:10px;flex-wrap:wrap}
+.discount-refusal-witness{display:flex;align-items:center;gap:8px;min-width:180px;padding:7px 9px;border:1px solid #edf0f5;border-radius:7px;background:#fbfcfe}
+.discount-refusal-witness img{width:74px;height:34px;object-fit:contain;border-bottom:1px solid #9da6b6}
+.discount-refusal-witness span{display:grid;gap:3px;min-width:0}
+.discount-refusal-witness strong{color:#344057;font-size:10px}
+.discount-refusal-witness small{color:#8995aa;font-size:9px;line-height:1.35}
+@media(max-width:600px){.discount-refusal-witness-heading,.discount-refusal-entry-heading{align-items:stretch;flex-direction:column}.discount-refusal-witness-heading .action-button,.discount-refusal-entry-heading button{width:100%;justify-content:center}.discount-refusal-witness{width:100%;min-width:0}}
+
 .transaction-photo-picker{
   display:grid;
   gap:9px;

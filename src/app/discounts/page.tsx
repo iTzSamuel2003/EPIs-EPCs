@@ -2,7 +2,10 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { Check, ClipboardCopy, Download, ExternalLink, FileText, LoaderCircle, RefreshCw, RotateCcw, Search, ShieldAlert, X } from "lucide-react";
+import Image from "next/image";
 import { createClient } from "@/lib/supabase/client";
+import { DiscountRefusalModal, type RefusalOutcome } from "@/components/discount-refusal-modal";
+import { printDeductionRefusalRecord, type ReturnDeductionRefusalRecord, type RefusalWitnessRecord } from "@/lib/deduction-refusal-document";
 
 type Employee = { full_name: string; registration: string | null; job_title?: string | null; function_name?: string | null; department?: string | null; admission_date?: string | null };
 type UnitDetails = { ca_number: string | null; ca_expires_at: string | null; test_number: string | null; test_report_number: string | null; test_performed_at: string | null; test_expires_at: string | null; valid_until: string | null };
@@ -29,11 +32,15 @@ type DeductionCase = {
 };
 type SignatureLink = { id: string; deduction_case_id: string; expires_at: string; used_at: string | null; revoked_at: string | null; snapshot: DeductionSnapshot };
 type LinkResult = { url: string; expires_at: string; snapshot: DeductionSnapshot; error?: string };
+type RefusalRecordRow = Omit<ReturnDeductionRefusalRecord, "witnesses">;
+type RefusalWitnessRow = RefusalWitnessRecord & { refusal_record_id: string };
 
 const incidentLabels: Record<string, string> = { misuse: "Mau uso", loss: "Extravio / perda", theft: "Furto", damage: "Dano", other: "Outra ocorrência" };
 const destinationLabels: Record<string, string> = { not_returned: "Não devolvido", disposal: "Descarte", maintenance: "Manutenção", stock: "Retorno ao estoque" };
 const conditionLabels: Record<string, string> = { good: "Bom", used: "Usado", damaged: "Danificado", unusable: "Inutilizado" };
 const statusLabels: Record<DeductionCase["status"], string> = { pending_review: "Aguardando análise do RH", approved: "Aprovado · aguardando assinatura", rejected: "Não aprovado", signed: "Assinada · pendente de lançamento em folha" };
+const refusalOutcomeLabels: Record<RefusalOutcome, string> = { employee_refused: "Recusa expressa", employee_absent: "Colaborador ausente", unable_to_present: "Apresentação não concluída" };
+const presentationChannelLabels: Record<ReturnDeductionRefusalRecord["presentation_channel"], string> = { in_person: "Presencial", printed_term: "Termo impresso", digital_link: "Link individual" };
 const formatMoney = (value: number | null | undefined) => `R$ ${Number(value || 0).toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 const formatDate = (value?: string | null) => value ? new Date(`${value.slice(0, 10)}T12:00:00`).toLocaleDateString("pt-BR") : "—";
 const formatDateTime = (value?: string | null) => value ? new Date(value).toLocaleString("pt-BR", { dateStyle: "short", timeStyle: "short" }) : "—";
@@ -106,20 +113,35 @@ export default function DiscountsPage() {
   const [amountDraft, setAmountDraft] = useState<Record<string, string>>({});
   const [notesDraft, setNotesDraft] = useState<Record<string, string>>({});
   const [generatedLinks, setGeneratedLinks] = useState<Record<string, string>>({});
+  const [refusalRecords, setRefusalRecords] = useState<ReturnDeductionRefusalRecord[]>([]);
+  const [refusalCase, setRefusalCase] = useState<{ caseId: string; employeeId: string; employeeName: string; returnDate: string; activeLinkId: string | null } | null>(null);
   const supabase = useMemo(() => createClient(), []);
 
   const loadData = useCallback(async () => {
     setLoading(true); setLoadError("");
     try {
-      const [caseResult, linkResult] = await Promise.all([
+      const [caseResult, linkResult, refusalResult, witnessResult] = await Promise.all([
         supabase.from("return_deduction_cases").select("id,organization_id,return_id,employee_id,approved_amount,status,review_notes,reviewed_at,created_at,signed_at,signed_term_path,employee:employees(full_name,registration,job_title,function_name,department,admission_date),return:returns(returned_at,reason,return_items(id,quantity,deduction_requested,incident_type,incident_description,equipment_condition,destination,material:materials(name,unit),delivery_item:delivery_items(variant:material_variants(name,size),delivery:deliveries(delivered_at),lot:material_lots(lot_number,ca_number,ca_expires_at,test_number,test_report_number,test_performed_at,test_expires_at),units:material_units(unit_identifier,valid_until,ca_number,ca_expires_at,test_number,test_report_number,test_performed_at))))").order("created_at", { ascending: false }).limit(100),
         supabase.from("term_signature_links").select("id,deduction_case_id,expires_at,used_at,revoked_at,snapshot").not("deduction_case_id", "is", null).order("created_at", { ascending: false }).limit(300),
+        supabase.from("return_deduction_refusal_records").select("id,organization_id,deduction_case_id,return_id,employee_id,outcome,presentation_channel,employee_statement,signature_link_id,case_snapshot,presented_term_snapshot,recorded_by_name,recorded_at").order("recorded_at", { ascending: false }).limit(500),
+        supabase.from("return_deduction_refusal_witnesses").select("id,refusal_record_id,employee_id,employee_name_snapshot,employee_registration_snapshot,employee_job_title_snapshot,signature_data_url,signed_at").order("signed_at", { ascending: false }).limit(1000),
       ]);
       if (caseResult.error) throw caseResult.error;
       if (linkResult.error) throw linkResult.error;
+      if (refusalResult.error) throw refusalResult.error;
+      if (witnessResult.error) throw witnessResult.error;
       const nextCases = (caseResult.data ?? []) as unknown as DeductionCase[];
       const nextLinks = (linkResult.data ?? []) as unknown as SignatureLink[];
+      const nextRefusals = (refusalResult.data ?? []) as unknown as RefusalRecordRow[];
+      const nextWitnesses = (witnessResult.data ?? []) as unknown as RefusalWitnessRow[];
+      const witnessesByRecord = new Map<string, RefusalWitnessRecord[]>();
+      nextWitnesses.forEach((witness) => {
+        const list = witnessesByRecord.get(witness.refusal_record_id) ?? [];
+        list.push(witness);
+        witnessesByRecord.set(witness.refusal_record_id, list);
+      });
       setCases(nextCases); setLinks(nextLinks);
+      setRefusalRecords(nextRefusals.map((record) => ({ ...record, witnesses: witnessesByRecord.get(record.id) ?? [] })));
       setAmountDraft(Object.fromEntries(nextCases.map((item) => [item.id, item.approved_amount == null ? "" : String(item.approved_amount)])));
       setNotesDraft(Object.fromEntries(nextCases.map((item) => [item.id, item.review_notes ?? ""])));
     } catch (error) {
@@ -138,6 +160,16 @@ export default function DiscountsPage() {
     }
     return map;
   }, [links]);
+
+  const refusalRecordsByCase = useMemo(() => {
+    const map = new Map<string, ReturnDeductionRefusalRecord[]>();
+    refusalRecords.forEach((record) => {
+      const records = map.get(record.deduction_case_id) ?? [];
+      records.push(record);
+      map.set(record.deduction_case_id, records);
+    });
+    return map;
+  }, [refusalRecords]);
 
   const visibleCases = useMemo(() => cases.filter((item) => {
     const employee = one(item.employee);
@@ -196,6 +228,19 @@ export default function DiscountsPage() {
     setBusyId("");
   }
 
+  function onRefusalSaved(outcome: RefusalOutcome) {
+    if (!refusalCase) return;
+    const caseId = refusalCase.caseId;
+    setRefusalCase(null);
+    if (outcome === "employee_refused") {
+      setGeneratedLinks((current) => { const next = { ...current }; delete next[caseId]; return next; });
+      setFeedback("Recusa registrada na devolução vinculada. Links ativos foram cancelados; o registro da testemunha não é assinatura nem autorização de desconto.");
+    } else {
+      setFeedback("Tentativa de apresentação registrada na devolução vinculada. O registro não representa assinatura ou autorização de desconto.");
+    }
+    void loadData();
+  }
+
   const counts = { all: cases.length, pending_review: cases.filter((item) => item.status === "pending_review").length, approved: cases.filter((item) => item.status === "approved").length, signed: cases.filter((item) => item.status === "signed").length };
 
   return <main className="page-content discounts-page">
@@ -212,6 +257,7 @@ export default function DiscountsPage() {
           const deductionItems = (returnData?.return_items ?? []).filter((entry) => entry.deduction_requested);
           const activeLink = activeLinkByCase.get(item.id);
           const generatedUrl = generatedLinks[item.id];
+          const caseRefusalRecords = refusalRecordsByCase.get(item.id) ?? [];
           return <article className="discount-case" key={item.id}>
             <div className="discount-case-header"><div className="discount-case-identity"><span className="discount-case-avatar">{(employee?.full_name || "?").split(/\s+/).slice(0, 2).map((part) => part[0]).join("").toUpperCase()}</span><div><h2>{employee?.full_name || "Colaborador"}</h2><p>{employee?.registration ? `Matrícula ${employee.registration} · ` : ""}{employee?.job_title || employee?.function_name ? `${employee.job_title || employee.function_name} · ` : ""}{employee?.department ? `${employee.department} · ` : ""}Devolução {formatDate(returnData?.returned_at)} · Recebido em {formatDateTime(item.created_at)}</p></div></div><span className={`discount-status status-${item.status}`}>{statusLabels[item.status]}</span></div>
             <div className="discount-case-summary">{item.approved_amount != null && <div><small>Valor aprovado</small><strong>{formatMoney(item.approved_amount)}</strong></div>}<div><small>Status da análise</small><strong>{item.reviewed_at ? `Analisado ${formatDateTime(item.reviewed_at)}` : "Aguardando RH"}</strong></div></div>
@@ -221,11 +267,20 @@ export default function DiscountsPage() {
               return <div className="discount-item" key={entry.id}><div className="discount-item-title"><strong>{entry.material?.name || "Material"}</strong><span>{entry.quantity} {entry.material?.unit || "un."}{variant?.size || variant?.name ? ` · ${variant.size || variant.name}` : ""}</span></div><p>{incidentLabels[entry.incident_type] || entry.incident_type}{entry.incident_description ? ` · ${entry.incident_description}` : ""} · {destinationLabels[entry.destination] || entry.destination}</p><small>Entrega: {formatDate(delivery?.delivered_at)} · {itemCompliance(entry)}</small></div>;
             })}</div>
             {item.review_notes && <div className="discount-review-note"><strong>Observação do RH:</strong> {item.review_notes}</div>}
+            {caseRefusalRecords.length > 0 && <section className="discount-refusal-history" aria-label="Histórico de apresentação e recusa">
+              <div className="discount-refusal-history-heading"><div><strong>Histórico de apresentação e não assinatura</strong><small>Complementa a devolução vinculada; não substitui a assinatura do colaborador.</small></div></div>
+              {caseRefusalRecords.map((record) => <article className="discount-refusal-entry" key={record.id}>
+                <div className="discount-refusal-entry-heading"><div><strong>{refusalOutcomeLabels[record.outcome]}</strong><small>{presentationChannelLabels[record.presentation_channel]} · {formatDateTime(record.recorded_at)} · Registrado por {record.recorded_by_name}</small></div><button type="button" className="secondary-button" onClick={() => { try { printDeductionRefusalRecord(record); } catch (error) { setFeedback(error instanceof Error ? error.message : "Não foi possível imprimir o registro."); } }}><Download size={14} /> Imprimir / salvar PDF</button></div>
+                {record.employee_statement && <p><strong>Relato atribuído ao colaborador:</strong> {record.employee_statement}</p>}
+                <div className="discount-refusal-witness-list">{record.witnesses.map((witness) => <div className="discount-refusal-witness" key={witness.id}><Image src={witness.signature_data_url} alt={`Assinatura de ${witness.employee_name_snapshot}`} width={74} height={34} unoptimized /><span><strong>{witness.employee_name_snapshot}</strong><small>Matrícula {witness.employee_registration_snapshot}{witness.employee_job_title_snapshot ? ` · ${witness.employee_job_title_snapshot}` : ""}</small></span></div>)}</div>
+              </article>)}
+            </section>}
             {item.status === "pending_review" && <div className="discount-review-form"><label>Valor aprovado (R$)<input inputMode="decimal" value={amountDraft[item.id] ?? ""} onChange={(event) => setAmountDraft((current) => ({ ...current, [item.id]: event.target.value }))} placeholder="0,00" /></label><label>Justificativa da análise<textarea required value={notesDraft[item.id] ?? ""} onChange={(event) => setNotesDraft((current) => ({ ...current, [item.id]: event.target.value }))} placeholder="Registre apuração, evidências consideradas e base de cálculo" rows={2} /></label><div className="discount-actions"><button type="button" className="secondary-button discount-reject" onClick={() => void reviewCase(item, "rejected")} disabled={busyId === item.id}>{busyId === item.id ? <LoaderCircle className="spin" size={15} /> : <X size={15} />} Não aprovar</button><button type="button" className="primary-button" onClick={() => void reviewCase(item, "approved")} disabled={busyId === item.id}>{busyId === item.id ? <LoaderCircle className="spin" size={15} /> : <Check size={15} />} Aprovar análise</button></div></div>}
-            {item.status === "approved" && <div className="discount-actions discount-signature-actions">{activeLink && <span className="discount-link-expiry">Link ativo até {formatDateTime(activeLink.expires_at)}</span>}{generatedUrl && <input className="discount-generated-link" readOnly value={generatedUrl} aria-label="Link para assinatura" />}<button type="button" className="primary-button" onClick={() => void createSignatureLink(item)} disabled={busyId === item.id}>{busyId === item.id ? <LoaderCircle className="spin" size={15} /> : <FileText size={15} />}{activeLink ? "Gerar novo link" : "Gerar link para assinatura"}</button>{generatedUrl && <><button type="button" className="secondary-button" onClick={() => void copyLink(item)}><ClipboardCopy size={15} /> Copiar link</button><button type="button" className="secondary-button" onClick={() => { try { printDraft(activeLink?.snapshot ?? ({} as DeductionSnapshot)); } catch (error) { setFeedback(error instanceof Error ? error.message : "Não foi possível imprimir o termo."); } }} disabled={!activeLink}><Download size={15} /> Imprimir minuta</button></>}{activeLink && <button type="button" className="secondary-button discount-reject" onClick={() => void cancelSignatureLink(item)} disabled={busyId === item.id}><RotateCcw size={15} /> Cancelar link</button>}</div>}
+            {item.status === "approved" && <div className="discount-actions discount-signature-actions">{activeLink && <span className="discount-link-expiry">Link ativo até {formatDateTime(activeLink.expires_at)}</span>}{generatedUrl && <input className="discount-generated-link" readOnly value={generatedUrl} aria-label="Link para assinatura" />}<button type="button" className="primary-button" onClick={() => void createSignatureLink(item)} disabled={busyId === item.id}>{busyId === item.id ? <LoaderCircle className="spin" size={15} /> : <FileText size={15} />}{activeLink ? "Gerar novo link" : "Gerar link para assinatura"}</button>{generatedUrl && <><button type="button" className="secondary-button" onClick={() => void copyLink(item)}><ClipboardCopy size={15} /> Copiar link</button><button type="button" className="secondary-button" onClick={() => { try { printDraft(activeLink?.snapshot ?? ({} as DeductionSnapshot)); } catch (error) { setFeedback(error instanceof Error ? error.message : "Não foi possível imprimir o termo."); } }} disabled={!activeLink}><Download size={15} /> Imprimir minuta</button></>}{activeLink && <button type="button" className="secondary-button discount-reject" onClick={() => void cancelSignatureLink(item)} disabled={busyId === item.id}><RotateCcw size={15} /> Cancelar link</button>}<button type="button" className="secondary-button" onClick={() => setRefusalCase({ caseId: item.id, employeeId: item.employee_id, employeeName: employee?.full_name || "Colaborador", returnDate: formatDate(returnData?.returned_at), activeLinkId: activeLink?.id ?? null })} disabled={busyId === item.id}><FileText size={15} /> Registrar apresentação / recusa</button></div>}
             {item.status === "signed" && <div className="discount-signed-footer"><span><Check size={16} /> Assinado por {activeLink?.snapshot?.employee_name || employee?.full_name} em {formatDateTime(item.signed_at)}</span><button type="button" className="secondary-button" onClick={() => void downloadSignedTerm(item)} disabled={busyId === item.id}>{busyId === item.id ? <LoaderCircle className="spin" size={15} /> : <ExternalLink size={15} />} Visualizar termo assinado</button></div>}
           </article>;
         })}
       </section>}
+    {refusalCase && <DiscountRefusalModal caseId={refusalCase.caseId} employeeId={refusalCase.employeeId} employeeName={refusalCase.employeeName} returnDate={refusalCase.returnDate} activeLinkId={refusalCase.activeLinkId} onClose={() => setRefusalCase(null)} onSaved={onRefusalSaved} />}
   </main>;
 }
