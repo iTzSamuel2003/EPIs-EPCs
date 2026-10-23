@@ -27,7 +27,7 @@ type SnapshotItem = {
 };
 
 type Snapshot = {
-  type: "delivery" | "return" | "deduction";
+  type: "delivery" | "return" | "deduction" | "witness";
   pre_delivery_signature?: boolean;
   organization_id?: string;
   organization_name: string;
@@ -45,6 +45,13 @@ type Snapshot = {
   reason: string;
   notes?: string | null;
   approved_amount?: number;
+  recipient_name?: string;
+  recipient_registration?: string | null;
+  outcome?: string;
+  presentation_channel?: string;
+  event_recorded_at?: string;
+  event_recorded_by?: string;
+  attestation?: string;
   items: SnapshotItem[];
 };
 
@@ -108,6 +115,11 @@ export function PublicTermSignature({ token }: { token: string }) {
   const [saving, setSaving] = useState(false);
   const [success, setSuccess] = useState(false);
   const [error, setError] = useState("");
+  const isDelivery = snapshot?.type === "delivery";
+  const isDeduction = snapshot?.type === "deduction";
+  const isWitness = snapshot?.type === "witness";
+  const isPreDelivery = snapshot?.pre_delivery_signature === true;
+  const hasReturnIncident = !isDelivery && !isDeduction && !isWitness && Boolean(snapshot?.items.some((item) => item.incident_type && item.incident_type !== "normal"));
 
   useEffect(() => {
     let active = true;
@@ -220,7 +232,7 @@ export function PublicTermSignature({ token }: { token: string }) {
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     if (!snapshot || saving || submitLockRef.current || success) return;
-    if (cpf.replace(/\D/g, "").length !== 11) { setError("Informe o CPF completo do colaborador."); return; }
+    if (cpf.replace(/\D/g, "").length !== 11) { setError(isWitness ? "Informe o CPF completo da testemunha." : "Informe o CPF completo do colaborador."); return; }
     if (!hasSignature || !canvasRef.current) { setError("Faça sua assinatura no campo indicado."); return; }
     if (!accepted) { setError("Confirme que leu e conferiu as informações da ficha."); return; }
     submitLockRef.current = true;
@@ -240,34 +252,34 @@ export function PublicTermSignature({ token }: { token: string }) {
     }
   }
 
-  const isDelivery = snapshot?.type === "delivery";
-  const isDeduction = snapshot?.type === "deduction";
-  const isPreDelivery = snapshot?.pre_delivery_signature === true;
-  const hasReturnIncident = !isDelivery && !isDeduction && Boolean(snapshot?.items.some((item) => item.incident_type && item.incident_type !== "normal"));
-
   return <main className="public-term-signature-page">
     <section className="public-term-card">
-      <div className={`public-term-brand${snapshot?.organization_logo_url ? " public-term-brand-organization" : ""}`}>{snapshot?.organization_logo_url ? <div className="public-term-org-logo" role="img" aria-label={`Logo de ${snapshot.organization_name}`} style={{ backgroundImage: `url(${JSON.stringify(snapshot.organization_logo_url)})` }} /> : <span><ShieldCheck size={22} aria-hidden="true" /></span>}<strong>{snapshot?.organization_name || <>EPIS<span>+</span></>}</strong><small>{isDeduction ? "Autorização específica de desconto" : isPreDelivery ? "Recibo de entrega de EPI/EPC" : "Registro de movimentação de EPI/EPC"}</small></div>
+      <div className={`public-term-brand${snapshot?.organization_logo_url ? " public-term-brand-organization" : ""}`}>{snapshot?.organization_logo_url ? <div className="public-term-org-logo" role="img" aria-label={`Logo de ${snapshot.organization_name}`} style={{ backgroundImage: `url(${JSON.stringify(snapshot.organization_logo_url)})` }} /> : <span><ShieldCheck size={22} aria-hidden="true" /></span>}<strong>{snapshot?.organization_name || <>EPIS<span>+</span></>}</strong><small>{isWitness ? "Declaração de testemunha" : isDeduction ? "Autorização específica de desconto" : isPreDelivery ? "Recibo de entrega de EPI/EPC" : "Registro de movimentação de EPI/EPC"}</small></div>
       {loading ? <div className="module-loading" role="status"><LoaderCircle className="spin" size={22} aria-hidden="true" /> Validando link de uso único...</div>
-        : success ? <div className="public-term-success" role="status"><Check size={38} aria-hidden="true" /><h1>{isDeduction ? "Autorização registrada" : isPreDelivery ? "Recebimento registrado" : "Assinatura registrada"}</h1><p>{isDeduction ? `Obrigado, ${snapshot?.employee_name}. A autorização específica foi registrada e encaminhada ao RH.` : isPreDelivery ? `Obrigado, ${snapshot?.employee_name}. O recebimento dos materiais foi registrado e o responsável pelo controle foi informado.` : `Obrigado, ${snapshot?.employee_name}. A ficha assinada foi encaminhada ao responsável pelo controle de equipamentos.`}</p><small>Este link não poderá ser usado novamente.</small></div>
+        : success ? <div className="public-term-success" role="status"><Check size={38} aria-hidden="true" /><h1>{isWitness ? "Assinatura da testemunha registrada" : isDeduction ? "Autorização registrada" : isPreDelivery ? "Recebimento registrado" : "Assinatura registrada"}</h1><p>{isWitness ? `Obrigado, ${snapshot?.employee_name}. Sua declaração foi registrada como testemunha da apresentação.` : isDeduction ? `Obrigado, ${snapshot?.employee_name}. A autorização específica foi registrada e encaminhada ao RH.` : isPreDelivery ? `Obrigado, ${snapshot?.employee_name}. O recebimento dos materiais foi registrado e o responsável pelo controle foi informado.` : `Obrigado, ${snapshot?.employee_name}. A ficha assinada foi encaminhada ao responsável pelo controle de equipamentos.`}</p><small>Este link não poderá ser usado novamente.</small></div>
           : error && !snapshot ? <div className="public-term-error" role="alert"><X size={18} aria-hidden="true" /><span>{error}</span></div>
             : snapshot && <>
-              <header className="public-term-heading"><p className="eyebrow">CONFIRMAÇÃO DO COLABORADOR</p><h1>{isDeduction ? "Autorização específica de desconto" : isPreDelivery ? "Recibo de entrega e responsabilidade" : isDelivery ? "Assinatura da ficha de entrega" : hasReturnIncident ? "Ciência da ocorrência e ficha de devolução" : "Assinatura da ficha de devolução"}</h1><p>{isDeduction ? "Confira a ocorrência, os itens e o valor autorizado antes de assinar." : isPreDelivery ? "Confira os itens e assine somente no ato em que estiver recebendo os materiais." : hasReturnIncident ? "Confira os materiais, a ocorrência e o encaminhamento para análise individual antes de assinar." : "Confira os dados abaixo antes de assinar."}</p></header>
+              <header className="public-term-heading"><p className="eyebrow">{isWitness ? "DECLARAÇÃO DA TESTEMUNHA" : "CONFIRMAÇÃO DO COLABORADOR"}</p><h1>{isWitness ? "Assinatura da testemunha" : isDeduction ? "Autorização específica de desconto" : isPreDelivery ? "Recibo de entrega e responsabilidade" : isDelivery ? "Assinatura da ficha de entrega" : hasReturnIncident ? "Ciência da ocorrência e ficha de devolução" : "Assinatura da ficha de devolução"}</h1><p>{isWitness ? "Confira o registro e assine somente se presenciou a apresentação descrita. Sua assinatura não substitui a do colaborador." : isDeduction ? "Confira a ocorrência, os itens e o valor autorizado antes de assinar." : isPreDelivery ? "Confira os itens e assine somente no ato em que estiver recebendo os materiais." : hasReturnIncident ? "Confira os materiais, a ocorrência e o encaminhamento para análise individual antes de assinar." : "Confira os dados abaixo antes de assinar."}</p></header>
               <div className="public-term-expiry">Link de uso único · expira em {formatDateTime(expiresAt)}</div>
               {isPreDelivery && <div className="public-term-expiry">Sua assinatura confirma o recebimento descrito nesta ficha. O sistema registrará a entrega e atualizará o estoque após a confirmação.</div>}
               <section className="public-term-summary" aria-label="Resumo da ficha">
                 <div className="public-term-meta">
-                  <div><small>Colaborador</small><strong>{snapshot.employee_name}</strong></div>
-                  {snapshot.employee_registration && <div><small>Matrícula</small><strong>{snapshot.employee_registration}</strong></div>}
+                  <div><small>{isWitness ? "Testemunha" : "Colaborador"}</small><strong>{snapshot.employee_name}</strong></div>
+                  {snapshot.employee_registration && <div><small>{isWitness ? "Matrícula da testemunha" : "Matrícula"}</small><strong>{snapshot.employee_registration}</strong></div>}
+                  {isWitness && snapshot.recipient_name && <div><small>Colaborador relacionado</small><strong>{snapshot.recipient_name}{snapshot.recipient_registration ? ` · matrícula ${snapshot.recipient_registration}` : ""}</strong></div>}
                   {snapshot.employee_function && <div><small>Cargo / função</small><strong>{snapshot.employee_function}</strong></div>}
                   {snapshot.employee_department && <div><small>Setor</small><strong>{snapshot.employee_department}</strong></div>}
                   {snapshot.employee_admission_date && <div><small>Admissão</small><strong>{formatDate(snapshot.employee_admission_date)}</strong></div>}
                   {snapshot.employee_termination_date && <div><small>Desligamento</small><strong>{formatDate(snapshot.employee_termination_date)}</strong></div>}
-                  <div><small>{isDelivery ? "Data da entrega" : isDeduction ? "Data da ocorrência" : "Data da devolução"}</small><strong>{formatDate(snapshot.date)}</strong></div>
-                  <div><small>Motivo</small><strong>{reasonLabels[snapshot.reason] || snapshot.reason}</strong></div>
+                  <div><small>{isDelivery ? "Data da entrega" : isDeduction || isWitness ? "Data da ocorrência" : "Data da devolução"}</small><strong>{formatDate(snapshot.date)}</strong></div>
+                  {!isWitness && <div><small>Motivo</small><strong>{reasonLabels[snapshot.reason] || snapshot.reason}</strong></div>}
+                  {isWitness && snapshot.outcome && <div><small>Resultado registrado</small><strong>{snapshot.outcome === "employee_refused" ? "Recusa expressa" : snapshot.outcome === "employee_absent" ? "Colaborador ausente" : "Apresentação não concluída"}</strong></div>}
+                  {isWitness && snapshot.presentation_channel && <div><small>Como foi apresentado</small><strong>{snapshot.presentation_channel === "digital_link" ? "Link individual" : snapshot.presentation_channel === "printed_term" ? "Termo impresso" : "Presencialmente"}</strong></div>}
+                  {isWitness && snapshot.event_recorded_at && <div><small>Registro realizado em</small><strong>{formatDateTime(snapshot.event_recorded_at)}</strong></div>}
+                  {isWitness && snapshot.event_recorded_by && <div><small>Registrado por</small><strong>{snapshot.event_recorded_by}</strong></div>}
                   {isDeduction && <div><small>Valor específico autorizado</small><strong>R$ {Number(snapshot.approved_amount || 0).toLocaleString("pt-BR", { minimumFractionDigits: 2 })}</strong></div>}
                 </div>
-                <h2>{isDeduction ? "Itens relacionados à ocorrência" : isPreDelivery ? "Materiais recebidos nesta entrega" : isDelivery ? "Materiais entregues" : "Materiais devolvidos"}</h2>
+                <h2>{isWitness || isDeduction ? "Itens relacionados à ocorrência" : isPreDelivery ? "Materiais recebidos nesta entrega" : isDelivery ? "Materiais entregues" : "Materiais devolvidos"}</h2>
                 <ul className="public-term-items">{snapshot.items.map((item, index) => <li key={`${item.material}-${index}`}>
                   <div className="public-term-item-heading"><strong>{item.material}</strong><span>{item.quantity} {item.unit}{item.size ? ` · Tamanho ${item.size}` : ""}</span></div>
                   {isDelivery && <>
@@ -292,6 +304,11 @@ export function PublicTermSignature({ token }: { token: string }) {
                 <p>Comprometo-me a utilizar os equipamentos somente para a finalidade indicada, seguir as orientações recebidas, cuidar da guarda e conservação e comunicar prontamente qualquer dano, alteração ou extravio. Devolverei os materiais quando solicitado, na substituição, transferência ou desligamento, conforme os procedimentos da organização.</p>
                 <p>Estou ciente de que perda, extravio, dano ou mau uso poderá ser apurado individualmente. Eventual ressarcimento ou desconto dependerá da apuração e dos requisitos legais aplicáveis; esta assinatura, por si só, não autoriza desconto automático.</p>
               </section>}
+              {isWitness && <section className="public-term-responsibilities" aria-labelledby="public-witness-attestation-title">
+                <h2 id="public-witness-attestation-title">Limites da declaração</h2>
+                <p>{snapshot.attestation || "Confirmo somente o fato que presenciei durante a apresentação. Esta assinatura não é feita em nome do colaborador, não reconhece dívida e não autoriza desconto em folha."}</p>
+                <p>Assine somente se tiver presenciado a apresentação descrita. Se o registro não corresponder ao que você viu, não confirme e comunique o responsável.</p>
+              </section>}
               {hasReturnIncident && <section className="public-term-responsibilities" aria-labelledby="public-return-incident-title">
                 <h2 id="public-return-incident-title">Ciência da ocorrência e análise</h2>
                 <p>Confirmo que consultei os materiais, os dados da devolução e a ocorrência descritos nesta ficha. Esta assinatura registra ciência da ocorrência, não constitui reconhecimento de dívida nem autoriza desconto em folha.</p>
@@ -305,12 +322,12 @@ export function PublicTermSignature({ token }: { token: string }) {
               </section>}
               <form className="public-term-form" onSubmit={(event) => void submit(event)}>
                 <label>Nome completo<input value={signerName} onChange={(event) => setSignerName(event.target.value)} autoComplete="name" required maxLength={160} /></label>
-                <label>CPF do colaborador<input value={cpf} onChange={(event) => setCpf(formatCpf(event.target.value))} inputMode="numeric" autoComplete="off" placeholder="000.000.000-00" required /></label>
+                <label>{isWitness ? "CPF da testemunha" : "CPF do colaborador"}<input value={cpf} onChange={(event) => setCpf(formatCpf(event.target.value))} inputMode="numeric" autoComplete="off" placeholder="000.000.000-00" required /></label>
                 <div className="public-term-signature-label"><strong>Assinatura</strong><div className="public-term-signature-controls"><button type="button" className={signatureActive ? "is-active" : ""} aria-pressed={signatureActive} onClick={() => setSignatureActive((current) => !current)}>{signatureActive ? "Desativar para rolar" : "Ativar para assinar"}</button><button type="button" onClick={clearSignature} disabled={!hasSignature}><Eraser size={14} aria-hidden="true" /> Limpar</button></div></div>
                 <small id="public-term-signature-hint" className="public-term-signature-hint">{signatureActive ? "Campo ativo: escreva dentro da área. Para rolar a página, desative o campo ou arraste fora dele." : "Toque no campo ou em “Ativar para assinar”. Enquanto estiver inativo, arraste para rolar a página."}</small>
                 <canvas ref={canvasRef} width={640} height={180} className={`signature-pad public-term-signature-pad${signatureActive ? " is-active" : ""}`} aria-label="Área de desenho da assinatura" aria-describedby="public-term-signature-hint" onClick={activateSignature} onPointerDown={startDrawing} onPointerMove={draw} onPointerUp={stopDrawing} onPointerCancel={stopDrawing} />
-                <label className="public-term-acceptance"><input type="checkbox" checked={accepted} onChange={(event) => setAccepted(event.target.checked)} />{isDeduction ? `Confirmo que li o termo, reconheço o valor de R$ ${Number(snapshot.approved_amount || 0).toLocaleString("pt-BR", { minimumFractionDigits: 2 })} e autorizo especificamente o desconto referente a esta ocorrência.` : isPreDelivery ? "Confirmo que li e compreendi as condições acima, conferi os itens e estou recebendo os materiais listados nesta ficha." : hasReturnIncident ? "Confirmo que li e conferi os materiais e a ocorrência descrita, ciente de que a assinatura não aplica desconto automático." : "Confirmo que li e conferi os materiais e as informações desta ficha."}</label>
-                <p className="public-term-legal-note">{isDeduction ? "Ao confirmar, o sistema registra a autorização individual, a identificação informada, a data e hora e os itens e valores desta ficha. O processamento deve observar os requisitos legais e os procedimentos da organização." : isDelivery ? "Ao confirmar, o sistema registra seu aceite, a identificação informada, a data e hora e os itens desta ficha para rastreabilidade do fornecimento de EPI, conforme o registro previsto na NR-06, item 6.5.1(d)." : "Ao confirmar, o sistema registra seu aceite, a identificação informada, a data e hora e os itens desta ficha para rastreabilidade da devolução."} Assinatura eletrônica por link individual de uso único; não utiliza certificado ICP-Brasil.</p>
+                <label className="public-term-acceptance"><input type="checkbox" checked={accepted} onChange={(event) => setAccepted(event.target.checked)} />{isWitness ? "Confirmo que li o registro e que minha assinatura representa somente o fato que presenciei; não assino pelo colaborador, não reconheço dívida e não autorizo desconto." : isDeduction ? `Confirmo que li o termo, reconheço o valor de R$ ${Number(snapshot.approved_amount || 0).toLocaleString("pt-BR", { minimumFractionDigits: 2 })} e autorizo especificamente o desconto referente a esta ocorrência.` : isPreDelivery ? "Confirmo que li e compreendi as condições acima, conferi os itens e estou recebendo os materiais listados nesta ficha." : hasReturnIncident ? "Confirmo que li e conferi os materiais e a ocorrência descrita, ciente de que a assinatura não aplica desconto automático." : "Confirmo que li e conferi os materiais e as informações desta ficha."}</label>
+                <p className="public-term-legal-note">{isWitness ? "Ao confirmar, ficam registrados no sistema o aceite da testemunha, a identificação informada, a data e hora do servidor e o registro da apresentação. Esta assinatura não substitui a do colaborador nem autoriza desconto." : isDeduction ? "Ao confirmar, o sistema registra a autorização individual, a identificação informada, a data e hora e os itens e valores desta ficha. O processamento deve observar os requisitos legais e os procedimentos da organização." : isDelivery ? "Ao confirmar, o sistema registra seu aceite, a identificação informada, a data e hora e os itens desta ficha para rastreabilidade do fornecimento de EPI, conforme o registro previsto na NR-06, item 6.5.1(d)." : "Ao confirmar, o sistema registra seu aceite, a identificação informada, a data e hora e os itens desta ficha para rastreabilidade da devolução."} Assinatura eletrônica por link individual de uso único; não utiliza certificado ICP-Brasil.</p>
                 {error && <div className="public-term-error" role="alert"><X size={16} aria-hidden="true" /><span>{error}</span></div>}
                 <button type="submit" className="primary-button public-term-submit" disabled={saving || !hasSignature || !accepted} aria-busy={saving}>{saving ? <><LoaderCircle className="spin" size={16} aria-hidden="true" /> Registrando assinatura...</> : <>Confirmar assinatura<Check size={16} aria-hidden="true" /></>}</button>
               </form>

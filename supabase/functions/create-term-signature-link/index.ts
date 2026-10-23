@@ -229,12 +229,14 @@ Deno.serve(async (request) => {
   const recordType = text(body.record_type);
   const recordId = text(body.record_id);
   const action = text(body.action) || "create";
-  if (!(recordType === "delivery" || recordType === "pending_delivery" || recordType === "return" || recordType === "deduction") || !isUuid(recordId)) return respond({ error: "Ficha inválida." }, 400, origin);
-  if (!(action === "create" || action === "cancel") || (action === "cancel" && recordType !== "return" && recordType !== "deduction")) return respond({ error: "Ação de link inválida." }, 400, origin);
+  if (!(recordType === "delivery" || recordType === "pending_delivery" || recordType === "return" || recordType === "deduction" || recordType === "witness") || !isUuid(recordId)) return respond({ error: "Ficha inválida." }, 400, origin);
+  if (!(action === "create" || action === "cancel") || (action === "cancel" && recordType !== "return" && recordType !== "deduction") || (recordType === "witness" && action !== "create")) return respond({ error: "Ação de link inválida." }, 400, origin);
 
-  const table = recordType === "pending_delivery" ? "pending_deliveries" : recordType === "delivery" ? "deliveries" : recordType === "deduction" ? "return_deduction_cases" : "returns";
+  const table = recordType === "witness" ? "return_deduction_refusal_witnesses" : recordType === "pending_delivery" ? "pending_deliveries" : recordType === "delivery" ? "deliveries" : recordType === "deduction" ? "return_deduction_cases" : "returns";
   const select = action === "cancel"
     ? recordType === "deduction" ? "id,organization_id,employee_id,status,signed_at" : "id,organization_id,term_signed_at"
+    : recordType === "witness"
+      ? "id,organization_id,employee_id,refusal_record_id,employee_name_snapshot,employee_registration_snapshot,employee_job_title_snapshot,signed_at"
     : recordType === "pending_delivery"
       ? "id,organization_id,employee_id,delivered_at,reason,notes,request_items,lot_plan,status,snapshot,employee:employees(full_name,registration,phone,job_title,function_name,department,admission_date,termination_date,status)"
       : recordType === "delivery"
@@ -247,7 +249,7 @@ Deno.serve(async (request) => {
     : userClient.from("profiles").select("organization_id,role,full_name,organization:organizations(name,logo_url,cnpj,address,phone)").eq("id", user.id).maybeSingle();
   const { data: profile, error: profileError } = await profileQuery;
   if (profileError || !profile?.organization_id) return respond({ error: "Não foi possível identificar a organização." }, 403, origin);
-  const requiredPage = recordType === "return" ? "/returns" : recordType === "deduction" ? "/discounts" : "/deliveries";
+  const requiredPage = recordType === "return" ? "/returns" : recordType === "deduction" || recordType === "witness" ? "/discounts" : "/deliveries";
   let pagePaths: unknown = null;
   const transactionQuery = userClient.from(table).select(select).eq("id", recordId).maybeSingle();
   let transactionResponse: Awaited<typeof transactionQuery>;
@@ -267,6 +269,94 @@ Deno.serve(async (request) => {
   if (transactionError || !transaction) return respond({ error: "A ficha não foi encontrada nesta organização." }, 404, origin);
   const transactionRecord = transaction as unknown as Record<string, unknown>;
   if (transactionRecord.organization_id !== profile.organization_id) return respond({ error: "A ficha não foi encontrada nesta organização." }, 404, origin);
+  if (recordType === "witness") {
+    if (transactionRecord.signed_at) return respond({ error: "Esta testemunha já concluiu a assinatura." }, 409, origin);
+    const organization = object("organization" in profile ? profile.organization : null);
+    const { data: eventRecord, error: eventError } = await admin.from("return_deduction_refusal_records")
+      .select("id,organization_id,deduction_case_id,outcome,presentation_channel,recorded_at,recorded_by_name,case_snapshot,presented_term_snapshot")
+      .eq("id", transactionRecord.refusal_record_id).eq("organization_id", profile.organization_id).maybeSingle();
+    if (eventError || !eventRecord) return respond({ error: "O registro da ocorrência não foi encontrado." }, 404, origin);
+    const { data: employee, error: employeeError } = await admin.from("employees")
+      .select("id,organization_id,full_name,registration,cpf,job_title,function_name,department,admission_date,termination_date,status")
+      .eq("id", transactionRecord.employee_id).eq("organization_id", profile.organization_id).maybeSingle();
+    if (employeeError || !employee || !text(employee.cpf)) return respond({ error: "A testemunha precisa ter CPF cadastrado para receber o link." }, 409, origin);
+    const caseSnapshot = object(eventRecord.case_snapshot);
+    const witnessName = text(transactionRecord.employee_name_snapshot) || text(employee.full_name) || "Testemunha";
+    const witnessRegistration = text(transactionRecord.employee_registration_snapshot) || text(employee.registration) || null;
+    const snapshot = {
+      version: 1,
+      type: "witness",
+      organization_id: String(profile.organization_id),
+      organization_name: text(organization.name) || text(caseSnapshot.organization_name) || "Organização",
+      organization_logo_url: text(organization.logo_url) || text(caseSnapshot.organization_logo_url) || null,
+      organization_cnpj: text(organization.cnpj) || text(caseSnapshot.organization_cnpj) || null,
+      organization_address: text(organization.address) || text(caseSnapshot.organization_address) || null,
+      organization_phone: text(organization.phone) || text(caseSnapshot.organization_phone) || null,
+      responsible_name: text(profile.full_name) || "Responsável pelo registro",
+      employee_name: witnessName,
+      employee_registration: witnessRegistration,
+      employee_function: text(transactionRecord.employee_job_title_snapshot) || text(employee.job_title) || text(employee.function_name) || null,
+      employee_department: text(employee.department) || null,
+      employee_admission_date: text(employee.admission_date) || null,
+      employee_termination_date: text(employee.status) === "terminated" ? text(employee.termination_date) || null : null,
+      date: text(caseSnapshot.return_date),
+      reason: text(caseSnapshot.return_reason),
+      notes: null,
+      witness_record_id: String(transactionRecord.id),
+      refusal_record_id: String(eventRecord.id),
+      recipient_name: text(caseSnapshot.employee_name) || "Colaborador",
+      recipient_registration: text(caseSnapshot.employee_registration) || null,
+      outcome: text(eventRecord.outcome),
+      presentation_channel: text(eventRecord.presentation_channel),
+      event_recorded_at: text(eventRecord.recorded_at),
+      event_recorded_by: text(eventRecord.recorded_by_name),
+      items: Array.isArray(caseSnapshot.items) ? caseSnapshot.items.map((value) => {
+        const item = object(value);
+        return {
+          material: text(item.material_name) || "Material",
+          quantity: Number(item.quantity) || 0,
+          unit: text(item.unit) || "un.",
+          incident_type: text(item.incident_type),
+          incident_description: text(item.incident_description) || null,
+          condition: text(item.condition) || null,
+          destination: text(item.destination) || null,
+        };
+      }) : [],
+      attestation: "Confirmo somente o fato que presenciei durante a apresentação. Esta assinatura não é feita em nome do colaborador, não reconhece dívida e não autoriza desconto em folha.",
+    };
+    const now = new Date();
+    const expiresAt = new Date(now.getTime() + 48 * 60 * 60 * 1000).toISOString();
+    const token = createToken();
+    const tokenHash = await sha256(token);
+    const snapshotHash = await sha256(stableJson(snapshot));
+    const { data: link, error: insertError } = await admin.from("term_signature_links").insert({
+      organization_id: profile.organization_id,
+      employee_id: String(transactionRecord.employee_id),
+      refusal_witness_id: String(transactionRecord.id),
+      created_by: user.id,
+      token_hash: tokenHash,
+      snapshot,
+      snapshot_hash: snapshotHash,
+      expires_at: expiresAt,
+    }).select("id,expires_at").single();
+    if (insertError || !link) return respond({ error: "Não foi possível gerar o link da testemunha." }, 500, origin);
+    const { error: revokeError } = await admin.from("term_signature_links").update({ revoked_at: now.toISOString() })
+      .eq("organization_id", profile.organization_id).eq("refusal_witness_id", String(transactionRecord.id))
+      .neq("id", link.id).is("used_at", null).is("revoked_at", null);
+    if (revokeError) {
+      await admin.from("term_signature_links").update({ revoked_at: new Date().toISOString() }).eq("id", link.id);
+      return respond({ error: "Não foi possível preparar o link da testemunha." }, 500, origin);
+    }
+    const safeOrigin = origin && allowedOrigins.has(origin) ? origin : productionOrigin;
+    return respond({
+      id: link.id,
+      url: `${safeOrigin}/assinar/${token}`,
+      expires_at: link.expires_at,
+      employee_name: witnessName,
+      witness_name: witnessName,
+      snapshot,
+    }, 200, origin);
+  }
   if (recordType === "pending_delivery" && transactionRecord.status !== "pending_signature") return respond({ error: "Esta ficha não está mais pendente de assinatura." }, 409, origin);
   if (recordType === "deduction" && action === "create" && (transactionRecord.status !== "approved" || transactionRecord.signed_at)) return respond({ error: "A autorização precisa estar aprovada e ainda não assinada." }, 409, origin);
   if (recordType === "deduction" && transactionRecord.status === "signed") return respond({ error: "Esta autorização já foi assinada." }, 409, origin);

@@ -18,7 +18,7 @@ const destinationLabels: Record<string, string> = { stock: "Retorno ao estoque",
 
 type Snapshot = {
   version: number;
-  type: "delivery" | "return" | "deduction";
+  type: "delivery" | "return" | "deduction" | "witness";
   pre_delivery_signature?: boolean;
   organization_id?: string;
   organization_name: string;
@@ -38,6 +38,15 @@ type Snapshot = {
   notes: string | null;
   case_id?: string;
   approved_amount?: number;
+  witness_record_id?: string;
+  refusal_record_id?: string;
+  recipient_name?: string;
+  recipient_registration?: string | null;
+  outcome?: string;
+  presentation_channel?: string;
+  event_recorded_at?: string;
+  event_recorded_by?: string;
+  attestation?: string;
   items: Array<Record<string, unknown>>;
 };
 
@@ -761,7 +770,161 @@ async function createSignedDeductionPdf(snapshot: Snapshot, signatureBytes: Uint
   return document.save();
 }
 
+async function createSignedWitnessPdf(snapshot: Snapshot, signatureBytes: Uint8Array, signerName: string, signerCpf: string, signedAt: Date, linkId: string) {
+  const document = await PDFDocument.create();
+  document.setTitle(`Declaracao de testemunha - ${snapshot.employee_name}`);
+  document.setSubject(`Assinatura da testemunha por link individual. Registro ${linkId}.`);
+  document.setCreator("EPIS+ Gestao inteligente");
+  const regular = await document.embedFont(StandardFonts.Helvetica);
+  const bold = await document.embedFont(StandardFonts.HelveticaBold);
+  const signature = await document.embedPng(signatureBytes);
+  const size: [number, number] = [595.28, 841.89];
+  const margin = 42;
+  const width = size[0] - margin * 2;
+  const ink = rgb(0.14, 0.18, 0.25);
+  const muted = rgb(0.36, 0.4, 0.47);
+  const gold = rgb(0.82, 0.79, 0.03);
+  const pale = rgb(0.985, 0.982, 0.93);
+  const safe = (value: unknown) => String(value ?? "").replace(/[\r\n\t]+/g, " ").replace(/\s+/g, " ").trim()
+    .normalize("NFKD").replace(/[\u0300-\u036f]/g, "").replace(/[^\x20-\x7e]/g, "-");
+  const wrap = (value: unknown, font: typeof regular, fontSize: number, maxWidth: number) => {
+    const lines: string[] = [];
+    let current = "";
+    for (const word of safe(value).split(/\s+/).filter(Boolean)) {
+      const candidate = current ? `${current} ${word}` : word;
+      if (current && font.widthOfTextAtSize(candidate, fontSize) > maxWidth) { lines.push(current); current = word; }
+      else current = candidate;
+    }
+    if (current) lines.push(current);
+    return lines;
+  };
+  const date = (value: unknown) => {
+    const text = String(value ?? "");
+    const parsed = /^\d{4}-\d{2}-\d{2}$/.test(text) ? new Date(`${text}T12:00:00Z`) : new Date(text);
+    return Number.isNaN(parsed.getTime()) ? "Nao informada" : new Intl.DateTimeFormat("pt-BR", { dateStyle: "short", timeStyle: text.includes("T") ? "short" : undefined, timeZone: "America/Cuiaba" }).format(parsed);
+  };
+  const outcomeLabel = snapshot.outcome === "employee_refused" ? "Recusa expressa" : snapshot.outcome === "employee_absent" ? "Colaborador ausente" : "Apresentacao nao concluida";
+  const presentationLabel = snapshot.presentation_channel === "digital_link" ? "Link individual" : snapshot.presentation_channel === "printed_term" ? "Termo impresso" : "Presencial";
+  const incidentLabels: Record<string, string> = { misuse: "Mau uso", loss: "Extravio / perda", theft: "Furto", damage: "Dano", other: "Outra ocorrencia" };
+  const conditionLabels: Record<string, string> = { good: "Bom", used: "Usado", damaged: "Danificado", unusable: "Inutilizado" };
+  const destinationLabels: Record<string, string> = { not_returned: "Nao devolvido", disposal: "Descarte", maintenance: "Manutencao", stock: "Retorno ao estoque" };
+  let logo: PDFImage | null = null;
+  try {
+    if (snapshot.organization_id && snapshot.organization_logo_url) {
+      const logoUrl = new URL(snapshot.organization_logo_url);
+      const expectedPath = `/storage/v1/object/public/organization-logos/${snapshot.organization_id}/logo`;
+      if (logoUrl.origin === new URL(supabaseUrl).origin && logoUrl.pathname === expectedPath) {
+        const { data: file, error } = await admin.storage.from("organization-logos").download(`${snapshot.organization_id}/logo`);
+        if (!error && file && file.size <= 2 * 1024 * 1024) {
+          const bytes = new Uint8Array(await file.arrayBuffer());
+          const mime = file.type.split(";")[0].trim().toLowerCase();
+          logo = mime === "image/png" ? await document.embedPng(bytes) : mime === "image/jpeg" ? await document.embedJpg(bytes) : null;
+        }
+      }
+    }
+  } catch { /* A logo indisponivel nao impede a assinatura. */ }
+
+  let page = document.addPage(size);
+  let y = size[1] - 126;
+  function drawHeader(target: typeof page) {
+    target.drawRectangle({ x: 0, y: size[1] - 98, width: size[0], height: 98, color: pale });
+    target.drawRectangle({ x: 0, y: size[1] - 103, width: size[0], height: 5, color: gold });
+    target.drawText(safe(snapshot.organization_name.toLocaleUpperCase("pt-BR")), { x: margin, y: size[1] - 32, size: 10.5, font: bold, color: ink, maxWidth: width - (logo ? 155 : 0) });
+    target.drawText("REGISTRO DE APRESENTACAO - DECLARACAO DE TESTEMUNHA", { x: margin, y: size[1] - 56, size: 10.2, font: bold, color: ink, maxWidth: width - (logo ? 155 : 0) });
+    target.drawText("ASSINATURA INDIVIDUAL PARA CONFIRMAR SOMENTE O FATO PRESENCIADO", { x: margin, y: size[1] - 75, size: 6.8, font: regular, color: muted, maxWidth: width - (logo ? 155 : 0) });
+    if (logo) {
+      const scale = Math.min(132 / logo.width, 55 / logo.height);
+      target.drawImage(logo, { x: size[0] - margin - logo.width * scale, y: size[1] - 79, width: logo.width * scale, height: logo.height * scale });
+    }
+  }
+  function drawFooter(target: typeof page, index: number) {
+    const isDsx = snapshot.organization_name.toLowerCase().includes("dsx");
+    const contact = [snapshot.organization_cnpj ? `CNPJ ${snapshot.organization_cnpj}` : "", snapshot.organization_address || (isDsx ? "Rua Harrison de Figueiredo, 132, Dourados-MS" : ""), snapshot.organization_phone || (isDsx ? "+55 67 3425-2324" : ""), isDsx ? "www.dsxenergia.com.br" : ""].filter(Boolean).join(" | ");
+    target.drawLine({ start: { x: margin, y: 38 }, end: { x: size[0] - margin, y: 38 }, thickness: 2.2, color: gold });
+    if (contact) target.drawText(safe(contact), { x: margin, y: 25, size: 5.5, font: regular, color: muted, maxWidth: width });
+    target.drawText(safe(`Registro ${linkId} - ${index + 1}/${document.getPageCount()} - assinatura nao representa o colaborador nem autoriza desconto.`), { x: margin, y: 13, size: 5.1, font: regular, color: muted, maxWidth: width });
+  }
+  function nextPage() {
+    drawFooter(page, document.getPages().indexOf(page));
+    page = document.addPage(size);
+    drawHeader(page);
+    y = size[1] - 126;
+  }
+  function ensureSpace(height: number) { if (y - height < 66) nextPage(); }
+  function writeLines(value: unknown, fontSize = 8, isBold = false, lineHeight = 11) {
+    const font = isBold ? bold : regular;
+    const lines = wrap(value, font, fontSize, width);
+    ensureSpace(lines.length * lineHeight + 2);
+    for (const line of lines) {
+      page.drawText(line, { x: margin, y, size: fontSize, font, color: ink, maxWidth: width });
+      y -= lineHeight;
+    }
+    return lines.length * lineHeight;
+  }
+  drawHeader(page);
+  const meta = [
+    ["TESTEMUNHA", snapshot.employee_name],
+    ["COLABORADOR RELACIONADO", snapshot.recipient_name || "Nao informado"],
+    ["DATA DA OCORRENCIA", date(snapshot.date)],
+    ["RESULTADO REGISTRADO", outcomeLabel],
+    ["FORMA DE APRESENTACAO", presentationLabel],
+    ["REGISTRADO EM", date(snapshot.event_recorded_at)],
+  ];
+  const cellGap = 12;
+  const cellWidth = (width - cellGap * 2) / 3;
+  for (let row = 0; row < meta.length; row += 3) {
+    ensureSpace(42);
+    const current = meta.slice(row, row + 3);
+    current.forEach(([label, value], column) => {
+      const x = margin + column * (cellWidth + cellGap);
+      page.drawText(safe(label), { x, y, size: 5.8, font: bold, color: muted, maxWidth: cellWidth });
+      const lines = wrap(value, bold, 7.4, cellWidth);
+      lines.slice(0, 2).forEach((line, index) => page.drawText(line, { x, y: y - 12 - index * 9, size: 7.4, font: bold, color: ink, maxWidth: cellWidth }));
+    });
+    y -= 40;
+  }
+  y -= 4;
+  const statement = snapshot.attestation || "Confirmo somente o fato que presenciei durante a apresentacao. Esta assinatura nao e feita em nome do colaborador, nao reconhece divida e nao autoriza desconto em folha.";
+  const statementLines = wrap(statement, regular, 8, width - 22);
+  const statementHeight = statementLines.length * 10.5 + 28;
+  ensureSpace(statementHeight + 12);
+  page.drawRectangle({ x: margin, y: y - statementHeight, width, height: statementHeight, color: pale, borderColor: rgb(0.72, 0.75, 0.78), borderWidth: 0.6 });
+  page.drawRectangle({ x: margin, y: y - statementHeight, width: 3, height: statementHeight, color: gold });
+  page.drawText("DECLARACAO DA TESTEMUNHA", { x: margin + 10, y: y - 14, size: 7.2, font: bold, color: ink });
+  statementLines.forEach((line, index) => page.drawText(line, { x: margin + 10, y: y - 29 - index * 10.5, size: 8, font: regular, color: ink, maxWidth: width - 22 }));
+  y -= statementHeight + 14;
+  writeLines("ITENS E FATOS DO REGISTRO", 8.5, true, 13);
+  for (const item of snapshot.items) {
+    const title = `${Number(item.quantity) || 0} ${safe(item.unit) || "un."} - ${safe(item.material) || "Material"}`;
+    const detail = [
+      item.incident_type ? incidentLabels[String(item.incident_type)] || safe(item.incident_type) : "",
+      item.incident_description ? safe(item.incident_description) : "",
+      item.condition ? conditionLabels[String(item.condition)] || safe(item.condition) : "",
+      item.destination ? destinationLabels[String(item.destination)] || safe(item.destination) : "",
+    ].filter(Boolean).join(" - ");
+    const lines = [...wrap(title, bold, 7.5, width - 12), ...wrap(detail, regular, 6.8, width - 12)];
+    ensureSpace(lines.length * 9 + 5);
+    page.drawRectangle({ x: margin, y: y - lines.length * 9 - 5, width, height: lines.length * 9 + 5, borderColor: rgb(0.82, 0.84, 0.87), borderWidth: 0.45, color: rgb(1, 1, 1) });
+    lines.forEach((line, index) => page.drawText(line, { x: margin + 6, y: y - 11 - index * 9, size: index < wrap(title, bold, 7.5, width - 12).length ? 7.5 : 6.8, font: index < wrap(title, bold, 7.5, width - 12).length ? bold : regular, color: ink, maxWidth: width - 12 }));
+    y -= lines.length * 9 + 8;
+  }
+  y -= 5;
+  ensureSpace(115);
+  const lineY = y - 48;
+  const scale = Math.min((width * 0.6 - 14) / signature.width, 34 / signature.height);
+  const signatureWidth = signature.width * scale;
+  const signatureHeight = signature.height * scale;
+  page.drawImage(signature, { x: margin + (width * 0.6 - signatureWidth) / 2, y: lineY + 3, width: signatureWidth, height: signatureHeight });
+  page.drawLine({ start: { x: margin, y: lineY }, end: { x: margin + width * 0.6, y: lineY }, thickness: 0.75, color: muted });
+  page.drawText(safe(signerName), { x: margin + 4, y: lineY - 12, size: 7.5, font: bold, color: ink });
+  page.drawText(`CPF ${maskedCpf(signerCpf)} - Assinado em ${new Intl.DateTimeFormat("pt-BR", { dateStyle: "short", timeStyle: "short", timeZone: "America/Cuiaba" }).format(signedAt)}`, { x: margin + 4, y: lineY - 23, size: 5.8, font: regular, color: muted });
+  page.drawText("ASSINATURA ELETRONICA DA TESTEMUNHA", { x: margin + width * 0.64, y: lineY - 9, size: 6.3, font: bold, color: ink, maxWidth: width * 0.36 });
+  for (const [index, currentPage] of document.getPages().entries()) drawFooter(currentPage, index);
+  return document.save();
+}
+
 async function createSignedPdf(snapshot: Snapshot, signatureBytes: Uint8Array, signerName: string, signerCpf: string, signedAt: Date, linkId: string) {
+  if (snapshot.type === "witness") return createSignedWitnessPdf(snapshot, signatureBytes, signerName, signerCpf, signedAt, linkId);
   if (snapshot.type === "deduction") return createSignedDeductionPdf(snapshot, signatureBytes, signerName, signerCpf, signedAt, linkId);
   if (snapshot.pre_delivery_signature) return createPreDeliverySignedPdf(snapshot, signatureBytes, signerName, signerCpf, signedAt, linkId);
   if (snapshot.type === "return") return createSignedReturnPdf(snapshot, signatureBytes, signerName, signerCpf, signedAt, linkId);
@@ -980,7 +1143,7 @@ Deno.serve(async (request) => {
   if (!isToken(token)) return respond({ error: "Este link é inválido, expirou ou já foi utilizado." }, 404, origin);
   const tokenHash = await sha256(token);
   const { data: link, error: linkError } = await admin.from("term_signature_links")
-    .select("id,organization_id,employee_id,delivery_id,return_id,pending_delivery_id,deduction_case_id,expires_at,used_at,revoked_at,failed_attempts,locked_until,accessed_at,snapshot,snapshot_hash")
+    .select("id,organization_id,employee_id,delivery_id,return_id,pending_delivery_id,deduction_case_id,refusal_witness_id,expires_at,used_at,revoked_at,failed_attempts,locked_until,accessed_at,snapshot,snapshot_hash")
     .eq("token_hash", tokenHash).maybeSingle();
   if (linkError || !link) return respond({ error: "Este link é inválido, expirou ou já foi utilizado." }, 404, origin);
 
@@ -989,15 +1152,32 @@ Deno.serve(async (request) => {
   if (link.locked_until && new Date(link.locked_until).getTime() > Date.now()) return respond({ error: "O link foi bloqueado temporariamente após tentativas inválidas. Solicite outro ao responsável." }, 423, origin);
 
   const snapshot = object(link.snapshot) as Snapshot;
-  if (!snapshot || snapshot.version !== 1 || !(snapshot.type === "delivery" || snapshot.type === "return" || snapshot.type === "deduction") || await sha256(stableJson(snapshot)) !== link.snapshot_hash) {
+  if (!snapshot || snapshot.version !== 1 || !(snapshot.type === "delivery" || snapshot.type === "return" || snapshot.type === "deduction" || snapshot.type === "witness") || await sha256(stableJson(snapshot)) !== link.snapshot_hash) {
     return respond({ error: "Não foi possível validar a integridade desta ficha. Solicite um novo link." }, 409, origin);
   }
-  if ((snapshot.type === "deduction") !== Boolean(link.deduction_case_id)) {
+  if ((snapshot.type === "deduction") !== Boolean(link.deduction_case_id)
+    || (snapshot.type === "witness") !== Boolean(link.refusal_witness_id)
+    || (snapshot.type === "witness" && snapshot.witness_record_id !== link.refusal_witness_id)) {
     return respond({ error: "O tipo de autorização não corresponde ao link. Solicite um novo link ao RH." }, 409, origin);
   }
 
+  let witnessRefusalRecordId = "";
+  if (link.refusal_witness_id) {
+    const { data: witness, error: witnessError } = await admin.from("return_deduction_refusal_witnesses")
+      .select("id,organization_id,refusal_record_id,signed_at")
+      .eq("id", link.refusal_witness_id).eq("organization_id", link.organization_id)
+      .eq("employee_id", link.employee_id).maybeSingle();
+    if (witnessError || !witness || witness.signed_at || witness.id !== snapshot.witness_record_id
+      || witness.refusal_record_id !== snapshot.refusal_record_id) {
+      return respond({ error: "Esta assinatura de testemunha não está mais pendente." }, 410, origin);
+    }
+    witnessRefusalRecordId = String(witness.refusal_record_id);
+  }
+
   if (action === "preview") {
-    if (link.pending_delivery_id) {
+    if (link.refusal_witness_id) {
+      // The witness row and its parent record were validated above.
+    } else if (link.pending_delivery_id) {
       const { data: pending, error: pendingError } = await admin.from("pending_deliveries").select("status").eq("id", link.pending_delivery_id).eq("organization_id", link.organization_id).maybeSingle();
       if (pendingError || !pending || pending.status !== "pending_signature") return respond({ error: "Esta ficha não está mais pendente de assinatura." }, 410, origin);
     } else if (link.deduction_case_id) {
@@ -1044,8 +1224,9 @@ Deno.serve(async (request) => {
   }
 
   const signedAt = new Date();
-  const recordId = String(link.pending_delivery_id ?? link.delivery_id ?? link.return_id ?? link.deduction_case_id);
-  const path = `${link.organization_id}/${recordId}/whatsapp-signature-${link.id}-${crypto.randomUUID()}.pdf`;
+  const recordId = link.refusal_witness_id ? witnessRefusalRecordId : String(link.pending_delivery_id ?? link.delivery_id ?? link.return_id ?? link.deduction_case_id);
+  const pathPrefix = link.refusal_witness_id ? "witness-signature" : "whatsapp-signature";
+  const path = `${link.organization_id}/${recordId}/${pathPrefix}-${link.id}-${crypto.randomUUID()}.pdf`;
   let pdfBytes: Uint8Array;
   try { pdfBytes = await createSignedPdf(snapshot, signatureBytes, String(employee.full_name), signerCpf, signedAt, String(link.id)); }
   catch (error) {
@@ -1056,12 +1237,13 @@ Deno.serve(async (request) => {
   const { error: uploadError } = await admin.storage.from("delivery-terms").upload(path, pdfBytes, { contentType: "application/pdf", upsert: false });
   if (uploadError) return respond({ error: "Não foi possível salvar o documento assinado. Tente novamente." }, 500, origin);
 
-  const completionFunction = link.deduction_case_id ? "complete_employee_deduction_signature" : "complete_employee_term_signature";
+  const completionFunction = link.refusal_witness_id ? "complete_employee_witness_signature" : link.deduction_case_id ? "complete_employee_deduction_signature" : "complete_employee_term_signature";
   const { data: completedAt, error: completeError } = await admin.rpc(completionFunction, {
     p_link_id: link.id,
     p_signature_file_path: path,
     p_signer_name: String(employee.full_name),
     p_signer_cpf: signerCpf,
+    ...(link.refusal_witness_id ? { p_signature_data_url: signatureDataUrl } : {}),
   });
   if (completeError || !completedAt) {
     await admin.storage.from("delivery-terms").remove([path]);
@@ -1070,13 +1252,15 @@ Deno.serve(async (request) => {
     if (/lote.*saldo|saldo.*lote|estoque insuficiente|plano de lotes/i.test(completionMessage)) {
       return respond({ error: "O saldo de um dos lotes mudou desde a criação da ficha. Nenhuma entrega foi registrada; solicite uma nova ficha ao responsável." }, 409, origin);
     }
-    if (/link de assinatura inválido|link.*expirado|link.*utilizado|ficha.*não está mais pendente|ficha.*já foi assinada|autorização.*não está mais pendente/i.test(completionMessage)) {
+    if (/link de assinatura inválido|link.*expirado|link.*utilizado|ficha.*não está mais pendente|ficha.*já foi assinada|autorização.*não está mais pendente|link de testemunha invalido|testemunha ja assinou|testemunha nao esta mais pendente/i.test(completionMessage)) {
       return respond({ error: "Esta ficha não está mais disponível para assinatura. Se você ainda não assinou, solicite ao responsável um novo link." }, 410, origin);
     }
-    return respond({ error: link.deduction_case_id
+    return respond({ error: link.refusal_witness_id
+      ? "Não foi possível registrar a assinatura da testemunha agora. Ela não foi salva. Tente novamente em instantes ou solicite outro link ao responsável."
+      : link.deduction_case_id
       ? "Não foi possível registrar a autorização agora. Ela não foi salva. Tente novamente em instantes ou avise o RH."
       : "Não foi possível registrar a assinatura agora. Ela não foi salva e o estoque não foi baixado. Tente novamente em instantes; se o erro continuar, avise o responsável pelo controle." }, 500, origin);
   }
 
-  return respond({ success: true, signed_at: completedAt }, 200, origin);
+  return respond({ success: true, signed_at: completedAt, signature_kind: link.refusal_witness_id ? "witness" : null }, 200, origin);
 });
