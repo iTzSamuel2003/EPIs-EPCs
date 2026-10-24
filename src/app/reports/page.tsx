@@ -12,6 +12,11 @@ type Movement = { id: string; movement_type: string; quantity: number; created_a
 
 function localDateKey(value: Date) { return `${value.getFullYear()}-${String(value.getMonth() + 1).padStart(2, "0")}-${String(value.getDate()).padStart(2, "0")}`; }
 function daysUntil(value: string | null) { return value ? Math.ceil((new Date(value + "T00:00:00").getTime() - new Date(`${localDateKey(new Date())}T00:00:00`).getTime()) / 86400000) : null; }
+function escapeCsvCell(value: string) {
+  const formulaPrefix = /^[\u0000-\u0020\uFEFF]*[=+\-@]/.test(value) || /^[\t\r\n]/.test(value);
+  const safeValue = formulaPrefix ? `'${value}` : value;
+  return `"${safeValue.replaceAll('"', '""')}"`;
+}
 
 const reportTypes = [["stock", "Relatório de estoque"], ["low", "Estoque abaixo do mínimo"], ["validity", "Lotes próximos do vencimento"], ["movements", "Movimentações do estoque"]] as const;
 
@@ -114,7 +119,7 @@ export default function ReportsPage() {
     if (report === "movements") rows = [["Data", "Material", "Tipo", "Quantidade"], ...filteredMovements.map((item) => [new Date(item.created_at).toLocaleString("pt-BR"), item.material?.name ?? "", item.movement_type, String(item.quantity)])];
     else if (report === "validity") rows = [["Material", "Lote", "Saldo", "Validade"], ...filteredLots.map((item) => [item.material?.name ?? "", item.lot_number, String(item.available_quantity), item.expires_at ?? ""] )];
     else rows = [["Código", "Material", "Tipo", "Estoque atual", "Estoque mínimo"], ...filteredMaterials.map((item) => [item.internal_code, item.name, item.type, String(totals[item.id] ?? 0), String(item.minimum_stock)])];
-    const csv = rows.map((row) => row.map((cell) => '"' + cell.replaceAll('"', '""') + '"').join(";")).join("\n");
+    const csv = rows.map((row) => row.map(escapeCsvCell).join(";")).join("\n");
     const url = URL.createObjectURL(new Blob(["\ufeff" + csv], { type: "text/csv;charset=utf-8" }));
     const link = document.createElement("a"); link.href = url; link.download = "relatorio-epis.csv"; document.body.appendChild(link); link.click(); link.remove(); window.setTimeout(() => URL.revokeObjectURL(url), 0);
   }
