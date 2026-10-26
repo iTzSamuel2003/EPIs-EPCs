@@ -86,15 +86,18 @@ Deno.serve(async (req) => {
   const certificateNumber = text(form.get("certificate_number"));
   const attachmentValue = form.get("attachment");
   const attachment = attachmentValue instanceof File && attachmentValue.size > 0 ? attachmentValue : null;
-  if (!registration || !cpf || !name || !completedAt || !expiresAt || !attachment) return response({ error: "Informe curso, datas e comprovante" }, 400, origin);
+  if (!registration || !cpf || !name) return response({ error: "Informe matrícula, CPF e curso" }, 400, origin);
   if (name.length > 200 || provider.length > 200 || certificateNumber.length > 100) return response({ error: "Dados do curso excedem o tamanho permitido" }, 400, origin);
+  if (Boolean(completedAt) !== Boolean(expiresAt)) return response({ error: "Informe as duas datas do curso" }, 400, origin);
   if (!allowAttempt(`${ip}:${registration}:${cpf}`)) return response({ error: "Tente novamente mais tarde" }, 429, origin);
 
-  const extension = allowedTypes.get(attachment.type) ?? "";
-  const filenameExtension = attachment.name.toLowerCase().match(/\.[a-z0-9]+$/)?.[0] ?? "";
-  const validJpegExtension = extension === ".jpg" && (filenameExtension === ".jpg" || filenameExtension === ".jpeg");
-  if (!extension || (!validJpegExtension && filenameExtension !== extension) || attachment.size > maxFileSize || !(await hasValidFileSignature(attachment, attachment.type))) {
-    return response({ error: "Anexo invalido: use PDF, JPG, JPEG, PNG ou WEBP de ate 10 MB" }, 400, origin);
+  if (attachment) {
+    const extension = allowedTypes.get(attachment.type) ?? "";
+    const filenameExtension = attachment.name.toLowerCase().match(/\.[a-z0-9]+$/)?.[0] ?? "";
+    const validJpegExtension = extension === ".jpg" && (filenameExtension === ".jpg" || filenameExtension === ".jpeg");
+    if (!extension || (!validJpegExtension && filenameExtension !== extension) || attachment.size > maxFileSize || !(await hasValidFileSignature(attachment, attachment.type))) {
+      return response({ error: "Anexo invalido: use PDF, JPG, JPEG, PNG ou WEBP de ate 10 MB" }, 400, origin);
+    }
   }
 
   const { data: profiles, error: profileError } = await admin.rpc("get_employee_portal_data_v3", { p_registration: registration, p_cpf: cpf });
@@ -105,23 +108,26 @@ Deno.serve(async (req) => {
   const { data: employee, error: employeeError } = await admin.from("employees").select("organization_id").eq("id", profile.employee_id).single();
   if (employeeError || !employee?.organization_id) return response({ error: "Nao foi possivel identificar a organizacao do colaborador" }, 500, origin);
 
-  const path = `${employee.organization_id}/portal/${crypto.randomUUID()}-${safeFileName(attachment.name)}`;
-  const { error: uploadError } = await admin.storage.from(bucket).upload(path, attachment, { contentType: attachment.type, upsert: false });
-  if (uploadError) return response({ error: "Nao foi possivel salvar o comprovante" }, 500, origin);
+  let path: string | null = null;
+  if (attachment) {
+    path = `${employee.organization_id}/portal/${crypto.randomUUID()}-${safeFileName(attachment.name)}`;
+    const { error: uploadError } = await admin.storage.from(bucket).upload(path, attachment, { contentType: attachment.type, upsert: false });
+    if (uploadError) return response({ error: "Nao foi possivel salvar o comprovante" }, 500, origin);
+  }
 
   const { data: courseId, error: courseError } = await admin.rpc("submit_employee_portal_course", {
     p_registration: registration,
     p_cpf: cpf,
     p_name: name,
     p_provider: provider,
-    p_completed_at: completedAt,
-    p_expires_at: expiresAt,
+    p_completed_at: completedAt || null,
+    p_expires_at: expiresAt || null,
     p_certificate_number: certificateNumber,
     p_certificate_file_path: path,
   });
   if (courseError || !courseId) {
-    await admin.storage.from(bucket).remove([path]);
+    if (path) await admin.storage.from(bucket).remove([path]);
     return response({ error: "Nao foi possivel registrar o curso" }, 400, origin);
   }
-  return response({ id: courseId, has_attachment: true }, 200, origin);
+  return response({ id: courseId, has_attachment: Boolean(path) }, 200, origin);
 });

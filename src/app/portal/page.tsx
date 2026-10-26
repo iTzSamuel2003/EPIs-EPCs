@@ -52,20 +52,17 @@ export default function EmployeePortalPage() {
     portalMutationLockRef.current = true;
     setSaving(true); setError(""); setSuccess("");
     try {
-      if (courseFile) {
-        if (!allowedFileTypes.includes(courseFile.type)) throw new Error("Anexo inválido: use PDF, JPG, PNG ou WEBP.");
-        if (courseFile.size > maxFileSize) throw new Error("O arquivo deve ter no máximo 10 MB.");
-        const { supabaseUrl: url, supabasePublishableKey: key } = getSupabaseConfig();
-        const formData = new FormData();
-        formData.append("registration", registration); formData.append("cpf", cpf); formData.append("name", requirement.course_name);
-        formData.append("provider", courseProvider); formData.append("completed_at", courseCompleted); formData.append("expires_at", courseExpires);
-        formData.append("certificate_number", courseCertificate); formData.append("attachment", courseFile, courseFile.name);
-        const response = await fetch(`${url}/functions/v1/submit-employee-portal-course`, { method: "POST", headers: { apikey: key, Authorization: `Bearer ${key}` }, body: formData });
-        const result = await response.json().catch(() => null) as { error?: string } | null;
-        if (!response.ok) throw new Error(result?.error || "Não foi possível registrar o curso.");
-      } else {
-        await portalRpc("submit_employee_portal_course", { p_registration: registration, p_cpf: cpf, p_name: requirement.course_name, p_provider: courseProvider, p_completed_at: courseCompleted || null, p_expires_at: courseExpires || null, p_certificate_number: courseCertificate, p_certificate_file_path: "" });
-      }
+      if (courseFile && !allowedFileTypes.includes(courseFile.type)) throw new Error("Anexo inválido: use PDF, JPG, PNG ou WEBP.");
+      if (courseFile && courseFile.size > maxFileSize) throw new Error("O arquivo deve ter no máximo 10 MB.");
+      const { supabaseUrl: url, supabasePublishableKey: key } = getSupabaseConfig();
+      const formData = new FormData();
+      formData.append("registration", registration); formData.append("cpf", cpf); formData.append("name", requirement.course_name);
+      formData.append("provider", courseProvider); formData.append("completed_at", courseCompleted); formData.append("expires_at", courseExpires);
+      formData.append("certificate_number", courseCertificate);
+      if (courseFile) formData.append("attachment", courseFile, courseFile.name);
+      const response = await fetch(`${url}/functions/v1/submit-employee-portal-course`, { method: "POST", headers: { apikey: key, Authorization: `Bearer ${key}` }, body: formData });
+      const result = await response.json().catch(() => null) as { error?: string } | null;
+      if (!response.ok) throw new Error(result?.error || "Não foi possível registrar o curso.");
       if (!await refreshProfile()) return;
       setCourseProvider(""); setCourseCompleted(""); setCourseExpires(""); setCourseCertificate(""); setCourseFile(null);
       setSuccess("Curso enviado para aprovação do RH. Ele ficará pendente até a análise do certificado.");
