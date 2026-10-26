@@ -169,16 +169,8 @@ export function ReturnSignatureModal({ returnId, employee, employeeName, employe
       uploadedPath = path;
       const { error: uploadError } = await supabase.storage.from("delivery-terms").upload(path, doc.output("blob"), { contentType: "application/pdf", upsert: false });
       if (uploadError) throw uploadError;
-      const { data: updatedReturn, error: updateError } = await supabase.from("returns").update({
-        term_file_path: path,
-        term_uploaded_at: signedAt,
-        term_uploaded_by: auth.user.id,
-        term_signature_method: "assisted",
-        term_signed_at: signedAt,
-        term_signer_name: signer.name,
-        term_signer_cpf: digits(cpf),
-      }).eq("id", returnId).is("term_signed_at", null).select("id").maybeSingle();
-      if (updateError || !updatedReturn) throw updateError ?? new Error("A ficha já foi assinada ou não está mais pendente.");
+      const { error: updateError } = await supabase.rpc("record_hr_return_term_signature", { p_return_id: returnId, p_term_file_path: path, p_signed_at: signedAt, p_signature_method: "assisted", p_signer_name: signer.name, p_signer_cpf: digits(cpf) });
+      if (updateError) throw updateError;
       uploadedPath = "";
       if (currentPath) await supabase.storage.from("delivery-terms").remove([currentPath]);
       onComplete(path);

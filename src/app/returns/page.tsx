@@ -10,7 +10,7 @@ import { friendlyError } from "@/lib/ui-feedback";
 import { FeedbackMessage } from "@/components/feedback-message";
 import { ReturnTermOrganization } from "@/lib/return-term-document";
 
-type Employee = { id: string; full_name: string; registration: string; cpf?: string | null; job_title?: string | null; function_name?: string | null; department?: string | null; admission_date?: string | null; termination_date?: string | null; status?: string | null };
+type Employee = { id: string; full_name: string; registration: string; job_title?: string | null; function_name?: string | null; department?: string | null; admission_date?: string | null; termination_date?: string | null; status?: string | null };
 type DeliveredItem = { id: string; quantity: number; returned: number; pending_return: number; variant_id: string | null; variant: { name: string; size: string | null } | null; material: { name: string; internal_code: string; unit: string } | null; lot: { lot_number: string | null; ca_number: string | null; ca_expires_at: string | null; test_number: string | null; test_report_number: string | null; test_performed_at: string | null; test_expires_at: string | null; unit_cost: number | null } | null; units: Array<{ unit_identifier: string | null; valid_until: string | null; test_number: string | null; test_report_number: string | null; test_performed_at: string | null; ca_number: string | null; ca_expires_at: string | null }> | null; delivery: { employee_id: string; delivered_at: string; employee: { full_name: string; registration: string } | null } | null };
 type ReturnLine = { delivery_item_id: string; quantity: number; equipment_condition: string; destination: string; incident_type: string; incident_description: string; deduction_requested: boolean };
 type ReturnSignatureLink = { url: string; expiresAt: string };
@@ -41,7 +41,7 @@ export default function ReturnsPage() {
     try {
       const supabase = createClient();
       const [{ data: employeeData, error: employeeError }, { data: itemData, error: itemError }, { data: returnData, error: returnError }] = await Promise.all([
-        supabase.from("employees").select("id,full_name,registration,cpf,job_title,function_name,department,admission_date,termination_date,status").order("full_name"),
+        supabase.from("employees").select("id,full_name,registration,job_title,function_name,department,admission_date,termination_date,status").order("full_name"),
         supabase.from("delivery_items").select("id,quantity,variant_id,variant:material_variants(name,size),material:materials(name,internal_code,unit),lot:material_lots(lot_number,ca_number,ca_expires_at,test_number,test_report_number,test_performed_at,test_expires_at,unit_cost),units:material_units(unit_identifier,valid_until,test_number,test_report_number,test_performed_at,ca_number,ca_expires_at),delivery:deliveries(employee_id,delivered_at,employee:employees(full_name,registration))").order("created_at", { ascending: false }),
         supabase.from("return_items").select("delivery_item_id,quantity,destination,return:returns(term_signed_at)"),
       ]);

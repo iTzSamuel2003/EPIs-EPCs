@@ -9,7 +9,7 @@ import { FeedbackMessage } from "@/components/feedback-message";
 import { createReturnTermDocument, ReturnTermOrganization } from "@/lib/return-term-document";
 
 type ReturnItem = { quantity: number; equipment_condition: string; destination: string; incident_type: string; incident_description: string | null; deduction_requested: boolean; material: { name: string; unit: string } | null; delivery_item: { variant: { name: string; size: string | null } | null; delivery: { delivered_at: string } | null; lot: { lot_number: string | null; ca_number: string | null; ca_expires_at: string | null; test_number: string | null; test_report_number: string | null; test_performed_at: string | null; test_expires_at: string | null } | null; units: Array<{ unit_identifier: string | null; valid_until: string | null; ca_number: string | null; ca_expires_at: string | null; test_number: string | null; test_report_number: string | null; test_performed_at: string | null }> | null } | null };
-type ReturnRecord = { id: string; returned_at: string; reason: string; notes: string | null; term_file_path: string | null; term_signature_method: string | null; term_signed_at: string | null; term_signer_name?: string | null; term_signer_cpf?: string | null; employee: { full_name: string; registration: string | null; cpf: string; job_title?: string | null; function_name?: string | null; department?: string | null; admission_date?: string | null; termination_date?: string | null; status?: string | null } | null; return_accountability: { responsible_name: string | null; employee_signature_name: string | null; signed_at: string | null } | null; return_items: ReturnItem[] };
+type ReturnRecord = { id: string; returned_at: string; reason: string; notes: string | null; term_file_path: string | null; term_signature_method: string | null; term_signed_at: string | null; term_signer_name?: string | null; employee: { full_name: string; registration: string | null; job_title?: string | null; function_name?: string | null; department?: string | null; admission_date?: string | null; termination_date?: string | null; status?: string | null } | null; return_accountability: { responsible_name: string | null; employee_signature_name: string | null; signed_at: string | null } | null; return_items: ReturnItem[] };
 
 const reasons: Record<string, string> = { replacement: "Substituição", termination: "Desligamento", role_change: "Alteração de função", damaged: "Equipamento danificado", voluntary: "Devolução voluntária", other: "Outro" };
 const date = (value: string) => new Date(`${value}T00:00:00`).toLocaleDateString("pt-BR");
@@ -56,7 +56,7 @@ export function RecentReturns({ organization }: { organization: ReturnTermOrgani
         if (!silent && active && requestId === requestRef.current) { setError(friendlyError(authError, "Sua sessão expirou. Entre novamente.")); setLoading(false); }
         return;
       }
-      const { data, error: loadError } = await supabase.from("returns").select("id,returned_at,reason,notes,term_file_path,term_signature_method,term_signed_at,term_signer_name,term_signer_cpf,employee:employees(full_name,registration,cpf,job_title,function_name,department,admission_date,termination_date,status),return_accountability(responsible_name,employee_signature_name,signed_at),return_items(quantity,equipment_condition,destination,incident_type,incident_description,deduction_requested,material:materials(name,unit),delivery_item:delivery_items(variant:material_variants(name,size),delivery:deliveries(delivered_at),lot:material_lots(lot_number,ca_number,ca_expires_at,test_number,test_report_number,test_performed_at,test_expires_at),units:material_units(unit_identifier,valid_until,ca_number,ca_expires_at,test_number,test_report_number,test_performed_at)))").order("returned_at", { ascending: false }).order("created_at", { ascending: false }).limit(10);
+      const { data, error: loadError } = await supabase.from("returns").select("id,returned_at,reason,notes,term_file_path,term_signature_method,term_signed_at,term_signer_name,employee:employees(full_name,registration,job_title,function_name,department,admission_date,termination_date,status),return_accountability(responsible_name,employee_signature_name,signed_at),return_items(quantity,equipment_condition,destination,incident_type,incident_description,deduction_requested,material:materials(name,unit),delivery_item:delivery_items(variant:material_variants(name,size),delivery:deliveries(delivered_at),lot:material_lots(lot_number,ca_number,ca_expires_at,test_number,test_report_number,test_performed_at,test_expires_at),units:material_units(unit_identifier,valid_until,ca_number,ca_expires_at,test_number,test_report_number,test_performed_at)))").order("returned_at", { ascending: false }).order("created_at", { ascending: false }).limit(10);
       if (!active || requestId !== requestRef.current) return;
       if (loadError) {
         if (!silent) setError(friendlyError(loadError, "Não foi possível carregar as devoluções."));
@@ -106,12 +106,11 @@ export function RecentReturns({ organization }: { organization: ReturnTermOrgani
       }
       const doc = await createReturnTermDocument({
         organization,
-        employee: { name: item.employee?.full_name || "Não informado", registration: item.employee?.registration, cpf: item.employee?.cpf, job_title: item.employee?.job_title || item.employee?.function_name, department: item.employee?.department, admission_date: item.employee?.admission_date, termination_date: item.employee?.status === "terminated" ? item.employee.termination_date : null },
+        employee: { name: item.employee?.full_name || "Não informado", registration: item.employee?.registration, job_title: item.employee?.job_title || item.employee?.function_name, department: item.employee?.department, admission_date: item.employee?.admission_date, termination_date: item.employee?.status === "terminated" ? item.employee.termination_date : null },
         responsible_name: item.return_accountability?.responsible_name,
         return_id: item.id, returned_at: item.returned_at, reason: item.reason, notes: item.notes,
         items: item.return_items.map(toTermItem),
         signed_at: item.term_signed_at, signed_name: item.term_signer_name || item.return_accountability?.employee_signature_name,
-        signed_cpf: item.term_signer_cpf,
       });
       doc.save(`termo-devolucao-${safeFileName(item.employee?.full_name || "colaborador") || "colaborador"}.pdf`);
     } catch (caughtError) { setError(friendlyError(caughtError, "Não foi possível gerar o termo.")); }
@@ -135,7 +134,7 @@ export function RecentReturns({ organization }: { organization: ReturnTermOrgani
       const { error: uploadError } = await supabase.storage.from("delivery-terms").upload(path, file, { contentType: file.type, upsert: false });
       if (uploadError) { setError(friendlyError(uploadError, "Não foi possível anexar o termo.")); return; }
       uploadedPath = path; const uploadedAt = new Date().toISOString();
-      const { data: updatedReturn, error: updateError } = await supabase.from("returns").update({ term_file_path: path, term_uploaded_at: uploadedAt, term_uploaded_by: auth.user.id, term_signature_method: "physical_upload", term_signed_at: uploadedAt, term_signer_name: item.employee?.full_name || null, term_signer_cpf: item.employee?.cpf || null }).eq("id", item.id).select("id").maybeSingle();
+      const { data: updatedReturn, error: updateError } = await supabase.from("returns").update({ term_file_path: path, term_uploaded_at: uploadedAt, term_uploaded_by: auth.user.id, term_signature_method: "physical_upload", term_signed_at: uploadedAt, term_signer_name: item.employee?.full_name || null }).eq("id", item.id).select("id").maybeSingle();
       if (updateError || !updatedReturn) { setError(friendlyError(updateError, "Não foi possível atualizar o termo.")); return; }
       uploadedPath = null;
       const previousAttachmentError = item.term_file_path ? (await supabase.storage.from("delivery-terms").remove([item.term_file_path])).error : null;

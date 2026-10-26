@@ -8,7 +8,7 @@ const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
 const supabasePublishableKey = process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY;
 const maxFileSize = 10 * 1024 * 1024;
 const allowedFileTypes = ["application/pdf", "image/jpeg", "image/png", "image/webp"];
-type Course = { id: string; name: string; provider: string | null; completed_at: string | null; expires_at: string | null; certificate_number: string | null; has_attachment: boolean };
+type Course = { id: string; name: string; provider: string | null; completed_at: string | null; expires_at: string | null; certificate_number: string | null; has_attachment: boolean; review_status: "pending" | "approved" | "rejected" };
 type Requirement = { id: string; function_group: string; course_name: string; source_annex: string; mandatory: boolean; validity_months: number | null; notes: string | null };
 type Material = { delivery_item_id: string; material_name: string; lot_number: string | null; quantity: number; unit: string; last_delivery: string };
 type Request = { id: string; request_type: string; material_name: string | null; description: string; status: string; has_attachment: boolean; created_at: string; updated_at?: string };
@@ -44,7 +44,36 @@ export default function EmployeePortalPage() {
   }
   async function saveMeasures(event: FormEvent) { event.preventDefault(); if (saving || portalMutationLockRef.current) return; portalMutationLockRef.current = true; setSaving(true); setError(""); setSuccess(""); try { await portalRpc("submit_employee_portal_measurements", { p_registration: registration, p_cpf: cpf, p_shirt_size: measures.shirt, p_pants_size: measures.pants, p_shoe_size: measures.shoe, p_helmet_size: measures.helmet, p_glove_size: measures.glove, p_notes: measures.notes }); if (await refreshProfile()) setSuccess("Medidas atualizadas com sucesso."); } catch { setError("Não foi possível salvar suas medidas."); } finally { portalMutationLockRef.current = false; setSaving(false); }
   }
-  async function addCourse(event: FormEvent) { event.preventDefault(); const requirement = applicableRequirements.find((item) => item.id === requirementId); if (!requirement || possesses !== "yes") { setError("Selecione um curso e informe se possui o certificado."); return; } if (saving || portalMutationLockRef.current) return; portalMutationLockRef.current = true; setSaving(true); setError(""); setSuccess(""); try { if (courseFile) { if (!allowedFileTypes.includes(courseFile.type)) throw new Error("Anexo inválido: use PDF, JPG, PNG ou WEBP."); if (courseFile.size > maxFileSize) throw new Error("O arquivo deve ter no máximo 10 MB."); const { supabaseUrl: url, supabasePublishableKey: key } = getSupabaseConfig(); const formData = new FormData(); formData.append("registration", registration); formData.append("cpf", cpf); formData.append("name", requirement.course_name); formData.append("provider", courseProvider); formData.append("completed_at", courseCompleted); formData.append("expires_at", courseExpires); formData.append("certificate_number", courseCertificate); formData.append("attachment", courseFile, courseFile.name); const response = await fetch(`${url}/functions/v1/submit-employee-portal-course`, { method: "POST", headers: { apikey: key, Authorization: `Bearer ${key}` }, body: formData }); const result = await response.json().catch(() => null) as { error?: string } | null; if (!response.ok) throw new Error(result?.error || "Não foi possível registrar o curso."); } else { await portalRpc("submit_employee_portal_course", { p_registration: registration, p_cpf: cpf, p_name: requirement.course_name, p_provider: courseProvider, p_completed_at: courseCompleted || null, p_expires_at: courseExpires || null, p_certificate_number: courseCertificate, p_certificate_file_path: "" }); } if (!await refreshProfile()) return; setCourseProvider(""); setCourseCompleted(""); setCourseExpires(""); setCourseCertificate(""); setCourseFile(null); setSuccess("Curso registrado na sua ficha."); } catch (caught) { setError(friendlyError(caught, "Não foi possível registrar o curso.")); } finally { portalMutationLockRef.current = false; setSaving(false); }
+  async function addCourse(event: FormEvent) {
+    event.preventDefault();
+    const requirement = applicableRequirements.find((item) => item.id === requirementId);
+    if (!requirement || possesses !== "yes") { setError("Selecione um curso e informe se possui o certificado."); return; }
+    if (saving || portalMutationLockRef.current) return;
+    portalMutationLockRef.current = true;
+    setSaving(true); setError(""); setSuccess("");
+    try {
+      if (courseFile) {
+        if (!allowedFileTypes.includes(courseFile.type)) throw new Error("Anexo inválido: use PDF, JPG, PNG ou WEBP.");
+        if (courseFile.size > maxFileSize) throw new Error("O arquivo deve ter no máximo 10 MB.");
+        const { supabaseUrl: url, supabasePublishableKey: key } = getSupabaseConfig();
+        const formData = new FormData();
+        formData.append("registration", registration); formData.append("cpf", cpf); formData.append("name", requirement.course_name);
+        formData.append("provider", courseProvider); formData.append("completed_at", courseCompleted); formData.append("expires_at", courseExpires);
+        formData.append("certificate_number", courseCertificate); formData.append("attachment", courseFile, courseFile.name);
+        const response = await fetch(`${url}/functions/v1/submit-employee-portal-course`, { method: "POST", headers: { apikey: key, Authorization: `Bearer ${key}` }, body: formData });
+        const result = await response.json().catch(() => null) as { error?: string } | null;
+        if (!response.ok) throw new Error(result?.error || "Não foi possível registrar o curso.");
+      } else {
+        await portalRpc("submit_employee_portal_course", { p_registration: registration, p_cpf: cpf, p_name: requirement.course_name, p_provider: courseProvider, p_completed_at: courseCompleted || null, p_expires_at: courseExpires || null, p_certificate_number: courseCertificate, p_certificate_file_path: "" });
+      }
+      if (!await refreshProfile()) return;
+      setCourseProvider(""); setCourseCompleted(""); setCourseExpires(""); setCourseCertificate(""); setCourseFile(null);
+      setSuccess("Curso enviado para aprovação do RH. Ele ficará pendente até a análise do certificado.");
+    } catch (caught) {
+      setError(friendlyError(caught, "Não foi possível registrar o curso."));
+    } finally {
+      portalMutationLockRef.current = false; setSaving(false);
+    }
   }
   function handleRequestFile(event: ChangeEvent<HTMLInputElement>) { const file = event.target.files?.[0] ?? null; if (!file) { setRequestFile(null); return; } if (!allowedFileTypes.includes(file.type)) { setRequestFile(null); setError("Anexo inválido: use PDF, JPG, PNG ou WEBP."); event.target.value = ""; return; } if (file.size > maxFileSize) { setRequestFile(null); setError("O anexo deve ter no máximo 10 MB."); event.target.value = ""; return; } setError(""); setRequestFile(file); }
   function changeRequestType(value: string) { setRequestType(value); setReplacementMaterialId(""); setRequestDescription(""); setRequestFile(null); setRequestFileInputKey((current) => current + 1); setError(""); }

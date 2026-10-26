@@ -238,12 +238,12 @@ Deno.serve(async (request) => {
     : recordType === "witness"
       ? "id,organization_id,employee_id,refusal_record_id,employee_name_snapshot,employee_registration_snapshot,employee_job_title_snapshot,signed_at"
     : recordType === "pending_delivery"
-      ? "id,organization_id,employee_id,delivered_at,reason,notes,request_items,lot_plan,status,snapshot,employee:employees(full_name,registration,phone,job_title,function_name,department,admission_date,termination_date,status)"
+      ? "id,organization_id,employee_id,delivered_at,reason,notes,request_items,lot_plan,status,snapshot,employee:employees(full_name,registration,job_title,function_name,department,admission_date,termination_date,status)"
       : recordType === "delivery"
-        ? "id,organization_id,employee_id,delivered_at,reason,notes,term_signed_at,employee:employees(full_name,registration,phone,job_title,function_name,department,admission_date,termination_date,status),delivery_items(quantity,test_performed_at,test_expires_at,expected_replacement_at,material:materials(name,unit,internal_code),lot:material_lots(ca_number,ca_expires_at,test_number,test_report_number,test_performed_at,test_expires_at),variant:material_variants(name,size),material_units(unit_identifier,valid_until,test_performed_at,test_number,test_report_number,ca_number,ca_expires_at))"
+        ? "id,organization_id,employee_id,delivered_at,reason,notes,term_signed_at,employee:employees(full_name,registration,job_title,function_name,department,admission_date,termination_date,status),delivery_items(quantity,test_performed_at,test_expires_at,expected_replacement_at,material:materials(name,unit,internal_code),lot:material_lots(ca_number,ca_expires_at,test_number,test_report_number,test_performed_at,test_expires_at),variant:material_variants(name,size),material_units(unit_identifier,valid_until,test_performed_at,test_number,test_report_number,ca_number,ca_expires_at))"
       : recordType === "deduction"
-        ? "id,organization_id,return_id,employee_id,approved_amount,status,review_notes,employee:employees(full_name,registration,phone,job_title,function_name,department,admission_date,termination_date,status),return:returns(returned_at,reason,return_items(id,quantity,deduction_requested,equipment_condition,destination,incident_type,incident_description,material:materials(name,unit),delivery_item:delivery_items(variant:material_variants(name,size),delivery:deliveries(delivered_at),lot:material_lots(lot_number,ca_number,ca_expires_at,test_number,test_report_number,test_performed_at,test_expires_at),units:material_units(unit_identifier,valid_until,ca_number,ca_expires_at,test_number,test_report_number,test_performed_at))))"
-        : "id,organization_id,employee_id,returned_at,reason,notes,term_signed_at,employee:employees(full_name,registration,phone,cpf,job_title,function_name,department,admission_date,termination_date,status),return_items(quantity,equipment_condition,destination,incident_type,incident_description,deduction_requested,material:materials(name,unit),delivery_item:delivery_items(variant:material_variants(name,size),delivery:deliveries(delivered_at),lot:material_lots(lot_number,ca_number,ca_expires_at,test_number,test_report_number,test_performed_at,test_expires_at),units:material_units(unit_identifier,valid_until,ca_number,ca_expires_at,test_number,test_report_number,test_performed_at)))";
+        ? "id,organization_id,return_id,employee_id,approved_amount,status,review_notes,employee:employees(full_name,registration,job_title,function_name,department,admission_date,termination_date,status),return:returns(returned_at,reason,return_items(id,quantity,deduction_requested,equipment_condition,destination,incident_type,incident_description,material:materials(name,unit),delivery_item:delivery_items(variant:material_variants(name,size),delivery:deliveries(delivered_at),lot:material_lots(lot_number,ca_number,ca_expires_at,test_number,test_report_number,test_performed_at,test_expires_at),units:material_units(unit_identifier,valid_until,ca_number,ca_expires_at,test_number,test_report_number,test_performed_at))))"
+        : "id,organization_id,employee_id,returned_at,reason,notes,term_signed_at,employee:employees(full_name,registration,job_title,function_name,department,admission_date,termination_date,status),return_items(quantity,equipment_condition,destination,incident_type,incident_description,deduction_requested,material:materials(name,unit),delivery_item:delivery_items(variant:material_variants(name,size),delivery:deliveries(delivered_at),lot:material_lots(lot_number,ca_number,ca_expires_at,test_number,test_report_number,test_performed_at,test_expires_at),units:material_units(unit_identifier,valid_until,ca_number,ca_expires_at,test_number,test_report_number,test_performed_at)))";
   const profileQuery = action === "cancel"
     ? userClient.from("profiles").select("organization_id,role,full_name").eq("id", user.id).maybeSingle()
     : userClient.from("profiles").select("organization_id,role,full_name,organization:organizations(name,logo_url,cnpj,address,phone)").eq("id", user.id).maybeSingle();
@@ -269,6 +269,20 @@ Deno.serve(async (request) => {
   if (transactionError || !transaction) return respond({ error: "A ficha não foi encontrada nesta organização." }, 404, origin);
   const transactionRecord = transaction as unknown as Record<string, unknown>;
   if (transactionRecord.organization_id !== profile.organization_id) return respond({ error: "A ficha não foi encontrada nesta organização." }, 404, origin);
+  let employeePhone: string | null = null;
+  if (recordType !== "witness"
+    && (profile.role === "admin" || profile.role === "rh")
+    && allowedToManage(String(profile.role), pagePaths, "/employees")) {
+    const employeeId = text(transactionRecord.employee_id);
+    if (employeeId) {
+      const { data: employeeContact } = await admin.from("employees")
+        .select("phone")
+        .eq("id", employeeId)
+        .eq("organization_id", profile.organization_id)
+        .maybeSingle();
+      employeePhone = text(employeeContact?.phone) || null;
+    }
+  }
   if (recordType === "witness") {
     if (transactionRecord.signed_at) return respond({ error: "Esta testemunha já concluiu a assinatura." }, 409, origin);
     const organization = object("organization" in profile ? profile.organization : null);
@@ -437,7 +451,7 @@ Deno.serve(async (request) => {
       url: `${safeOrigin}/assinar/${token}`,
       expires_at: link.expires_at,
       employee_name: snapshot.employee_name,
-      employee_phone: text(employee.phone) || null,
+      employee_phone: employeePhone,
       snapshot,
     }, 200, origin);
   }
@@ -517,7 +531,7 @@ Deno.serve(async (request) => {
     url: `${safeOrigin}/assinar/${token}`,
     expires_at: link.expires_at,
     employee_name: snapshot.employee_name,
-    employee_phone: text(employee.phone) || null,
+    employee_phone: employeePhone,
   };
   if (recordType === "pending_delivery") result.snapshot = snapshot;
   return respond(result, 200, origin);

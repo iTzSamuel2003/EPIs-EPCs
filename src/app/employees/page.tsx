@@ -8,7 +8,7 @@ import { FeedbackMessage } from "@/components/feedback-message";
 import { createClient } from "@/lib/supabase/client";
 import { friendlyError } from "@/lib/ui-feedback";
 
-type Employee = { id: string; registration: string | null; full_name: string; cpf: string; job_title: string | null; function_name: string | null; function_classification: string | null; department: string | null; unit: string | null; admission_date: string | null; phone: string | null; email: string | null; status: "active" | "away" | "terminated"; notes: string | null };
+type Employee = { id: string; registration: string | null; full_name: string; cpf: string; job_title: string | null; function_name: string | null; function_classification: string | null; department: string | null; unit: string | null; admission_date: string | null; termination_date: string | null; phone: string | null; email: string | null; status: "active" | "away" | "terminated"; notes: string | null };
 type EmployeeForm = { registration: string; full_name: string; cpf: string; cargo_funcao: string; function_classification: string; department: string; unit: string; admission_date: string; phone: string; email: string; status: "active" | "away" | "terminated"; notes: string };
 type FunctionTemplate = { id: string; name: string };
 
@@ -57,7 +57,7 @@ export default function EmployeesPage() {
     try {
       const supabase = createClient();
       const [{ data, error: loadError }, { data: templateData, error: templateError }] = await Promise.all([
-        supabase.from("employees").select("id,registration,full_name,cpf,job_title,function_name,function_classification,department,unit,admission_date,phone,email,status,notes").order("full_name"),
+        supabase.rpc("get_hr_employee_records", { p_employee_id: null }),
         supabase.from("function_templates").select("id,name").order("name"),
       ]);
       if (!mountedRef.current || requestId !== loadRequestRef.current) return;
@@ -116,10 +116,19 @@ export default function EmployeesPage() {
       const { data: profile, error: profileError } = await supabase.from("profiles").select("organization_id").eq("id", auth.user.id).single();
       if (profileError) throw profileError;
       if (!profile?.organization_id) throw new Error("Não foi possível identificar a organização do usuário.");
-      const { error: insertError } = await supabase.from("employees").insert({
-        organization_id: profile.organization_id, registration: form.registration.trim() || null, full_name: form.full_name.trim(), cpf: form.cpf.trim(),
-        job_title: null, function_name: form.cargo_funcao.trim() || null, function_classification: form.function_classification || typedClassification || null, department: form.department.trim() || null, unit: form.unit || null,
-        admission_date: form.admission_date || null, phone: form.phone.trim() || null, email: form.email.trim() || null, status: form.status, notes: form.notes.trim() || null,
+      const { error: insertError } = await supabase.rpc("create_hr_employee", {
+        p_registration: form.registration.trim() || null,
+        p_full_name: form.full_name.trim(),
+        p_cpf: form.cpf.trim(),
+        p_function_name: form.cargo_funcao.trim() || null,
+        p_function_classification: form.function_classification || typedClassification || null,
+        p_department: form.department.trim() || null,
+        p_unit: form.unit || null,
+        p_admission_date: form.admission_date || null,
+        p_phone: form.phone.trim() || null,
+        p_email: form.email.trim() || null,
+        p_status: form.status,
+        p_notes: form.notes.trim() || null,
       });
       if (insertError) throw insertError;
       setSuccess("Funcionário cadastrado com sucesso."); setForm(emptyForm); setShowForm(false); await loadEmployees();

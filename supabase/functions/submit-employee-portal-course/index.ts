@@ -100,10 +100,12 @@ Deno.serve(async (req) => {
   const { data: profiles, error: profileError } = await admin.rpc("get_employee_portal_data_v3", { p_registration: registration, p_cpf: cpf });
   const profile = Array.isArray(profiles) ? profiles[0] : null;
   if (profileError || !profile) return response({ error: "Matricula ou CPF nao conferem" }, 400, origin);
-  const requirements = Array.isArray(profile.requirements) ? profile.requirements : [];
+  const requirements = (Array.isArray(profile.requirements) ? profile.requirements : []) as Array<{ course_name?: string }>;
   if (!requirements.some((item) => item?.course_name === name)) return response({ error: "Curso nao previsto para a funcao do colaborador" }, 400, origin);
+  const { data: employee, error: employeeError } = await admin.from("employees").select("organization_id").eq("id", profile.employee_id).single();
+  if (employeeError || !employee?.organization_id) return response({ error: "Nao foi possivel identificar a organizacao do colaborador" }, 500, origin);
 
-  const path = `portal/${crypto.randomUUID()}-${safeFileName(attachment.name)}`;
+  const path = `${employee.organization_id}/portal/${crypto.randomUUID()}-${safeFileName(attachment.name)}`;
   const { error: uploadError } = await admin.storage.from(bucket).upload(path, attachment, { contentType: attachment.type, upsert: false });
   if (uploadError) return response({ error: "Nao foi possivel salvar o comprovante" }, 500, origin);
 

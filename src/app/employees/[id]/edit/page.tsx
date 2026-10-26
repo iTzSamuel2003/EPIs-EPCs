@@ -53,14 +53,15 @@ export default function EditEmployeePage() {
       try {
         const supabase = createClient();
         const [{ data, error: employeeError }, { data: templateData, error: templateError }] = await Promise.all([
-          supabase.from("employees").select("registration,full_name,cpf,job_title,function_name,function_classification,department,unit,admission_date,termination_date,phone,email,status,notes").eq("id", params.id).single(),
+          supabase.rpc("get_hr_employee_records", { p_employee_id: params.id }),
           supabase.from("function_templates").select("id,name").order("name"),
         ]);
         if (!active || version !== loadVersion.current) return;
-        if (employeeError || !data) { setError(friendlyError(employeeError, "Não foi possível carregar os dados do funcionário.")); return; }
+        if (employeeError || !data?.[0]) { setError(friendlyError(employeeError, "Não foi possível carregar os dados do funcionário.")); return; }
+        const employee = data[0];
         // A lista de funções é auxiliar; uma falha nela não bloqueia a edição.
         setFunctionTemplates(templateError ? [] : (templateData ?? []) as FunctionTemplate[]);
-        setForm({ ...emptyForm, registration: data.registration ?? "", full_name: data.full_name, cpf: data.cpf, cargo_funcao: data.job_title || data.function_name || "", function_classification: data.function_classification ?? "", department: data.department ?? "", unit: data.unit ?? "", admission_date: data.admission_date ?? "", termination_date: data.termination_date ?? "", phone: data.phone ?? "", email: data.email ?? "", status: data.status, notes: data.notes ?? "" });
+        setForm({ ...emptyForm, registration: employee.registration ?? "", full_name: employee.full_name, cpf: employee.cpf, cargo_funcao: employee.job_title || employee.function_name || "", function_classification: employee.function_classification ?? "", department: employee.department ?? "", unit: employee.unit ?? "", admission_date: employee.admission_date ?? "", termination_date: employee.termination_date ?? "", phone: employee.phone ?? "", email: employee.email ?? "", status: employee.status, notes: employee.notes ?? "" });
       } catch (caught) {
         if (active && version === loadVersion.current) setError(friendlyError(caught, "Não foi possível carregar os dados do funcionário."));
       } finally {
@@ -84,8 +85,23 @@ export default function EditEmployeePage() {
     if (form.termination_date && (!isValidDateValue(form.termination_date) || form.termination_date > new Date().toISOString().slice(0, 10) || (form.admission_date && form.termination_date < form.admission_date))) { setError("Informe uma data de desligamento válida, após a admissão e não futura."); return; }
     setSaving(true);
     try {
-      const { data: updatedEmployee, error: updateError } = await createClient().from("employees").update({ registration: form.registration.trim() || null, full_name: form.full_name.trim(), cpf: form.cpf.trim(), job_title: null, function_name: form.cargo_funcao.trim() || null, function_classification: form.function_classification || null, department: form.department.trim() || null, unit: form.unit || null, admission_date: form.admission_date || null, termination_date: form.termination_date || null, phone: form.phone.trim() || null, email: form.email.trim() || null, status: form.status, notes: form.notes.trim() || null }).eq("id", params.id).select("id").maybeSingle();
-      if (updateError || !updatedEmployee) setError(updateError?.code === "23505" ? "Já existe um funcionário com esta matrícula ou CPF." : friendlyError(updateError, "Não foi possível salvar as alterações. Verifique suas permissões."));
+      const { error: updateError } = await createClient().rpc("update_hr_employee", {
+        p_employee_id: params.id,
+        p_registration: form.registration.trim() || null,
+        p_full_name: form.full_name.trim(),
+        p_cpf: form.cpf.trim(),
+        p_function_name: form.cargo_funcao.trim() || null,
+        p_function_classification: form.function_classification || null,
+        p_department: form.department.trim() || null,
+        p_unit: form.unit || null,
+        p_admission_date: form.admission_date || null,
+        p_termination_date: form.termination_date || null,
+        p_phone: form.phone.trim() || null,
+        p_email: form.email.trim() || null,
+        p_status: form.status,
+        p_notes: form.notes.trim() || null,
+      });
+      if (updateError) setError(updateError.code === "23505" ? "Já existe um funcionário com esta matrícula ou CPF." : friendlyError(updateError, "Não foi possível salvar as alterações. Verifique suas permissões."));
       else { setSuccess("Funcionário atualizado com sucesso."); window.setTimeout(() => router.push("/employees"), 500); }
     } catch (caught) {
       setError(friendlyError(caught, "Não foi possível salvar as alterações."));
