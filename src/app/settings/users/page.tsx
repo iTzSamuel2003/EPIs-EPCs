@@ -17,7 +17,7 @@ const roleDescription: Record<ManagedRole, string> = { rh: "Rotinas de pessoal, 
 const pageGroups = [
   { label: "Visão geral", paths: ["/"] },
   { label: "Cadastros", paths: ["/materials", "/employees", "/teams", "/units", "/variants", "/function-templates"] },
-  { label: "Operações", paths: ["/entries", "/deliveries", "/returns", "/requests", "/stock", "/validities"] },
+  { label: "Operações", paths: ["/entries", "/deliveries", "/returns", "/discounts", "/requests", "/stock", "/validities"] },
   { label: "Conformidade", paths: ["/ca", "/contract-requirements", "/tests", "/training-compliance", "/compliance"] },
   { label: "Gestão e suporte", paths: ["/costs", "/reports", "/movements", "/audit", "/settings", "/help"] },
 ];
