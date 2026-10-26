@@ -430,6 +430,12 @@ verify_jwt = false
 import_map = "./functions/submit-employee-portal-course/deno.json"
 entrypoint = "./functions/submit-employee-portal-course/index.ts"
 
+[functions.employee-portal]
+enabled = true
+verify_jwt = false
+import_map = "./functions/employee-portal/deno.json"
+entrypoint = "./functions/employee-portal/index.ts"
+
 [functions.create-term-signature-link]
 enabled = true
 verify_jwt = true

@@ -1,5 +1,9 @@
 import "@supabase/functions-js/edge-runtime.d.ts";
-import { createClient } from "@supabase/supabase-js";
+import {
+  createEmployeePortalAdmin,
+  createEmployeePortalIpAdmin,
+  enforceEmployeePortalIpRateLimit,
+} from "../_shared/employee-portal-security.ts";
 
 const allowedOrigins = new Set(["https://epis-epcs.vercel.app", "http://localhost:3000"]);
 
@@ -20,7 +24,6 @@ const allowedTypes = new Map([
   ["image/png", ".png"],
   ["image/webp", ".webp"],
 ]);
-const attempts = new Map<string, { count: number; resetAt: number }>();
 
 function response(body: unknown, status = 200, origin: string | null = null) {
   return new Response(JSON.stringify(body), { status, headers: { ...corsHeaders(origin), "Content-Type": "application/json" } });
@@ -32,18 +35,6 @@ function cleanText(value: FormDataEntryValue | null) {
 
 function isUuid(value: string) {
   return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(value);
-}
-
-function allowAttempt(key: string) {
-  const now = Date.now();
-  const current = attempts.get(key);
-  if (!current || current.resetAt <= now) {
-    attempts.set(key, { count: 1, resetAt: now + 5 * 60 * 1000 });
-    return true;
-  }
-  if (current.count >= 10) return false;
-  current.count += 1;
-  return true;
 }
 
 function startsWithBytes(bytes: Uint8Array, signature: number[], offset = 0) {
@@ -61,17 +52,15 @@ async function hasValidFileSignature(file: File, mimeType: string) {
 
 const supabaseUrl = Deno.env.get("SUPABASE_URL") ?? "";
 const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? Deno.env.get("SUPABASE_SECRET_KEY") ?? "";
-const admin = createClient(supabaseUrl, serviceKey, { auth: { autoRefreshToken: false, persistSession: false } });
-
-async function registerCleanup(requestId: string | null, path: string, error: unknown) {
+async function registerCleanup(admin: Awaited<ReturnType<typeof createEmployeePortalAdmin>>, requestId: string | null, path: string, error: unknown) {
   await admin.from("employee_request_attachment_cleanup").insert({ request_id: requestId, attachment_path: path, last_error: error instanceof Error ? error.message : String(error) });
 }
 
-async function removeAttachment(path: string, requestId: string, originalError: unknown) {
+async function removeAttachment(admin: Awaited<ReturnType<typeof createEmployeePortalAdmin>>, path: string, requestId: string, originalError: unknown) {
   const { error: removeError } = await admin.storage.from(bucket).remove([path]);
-  if (removeError) await registerCleanup(requestId, path, removeError);
+  if (removeError) await registerCleanup(admin, requestId, path, removeError);
   const { error: deleteError } = await admin.from("employee_portal_requests").delete().eq("id", requestId);
-  if (deleteError) await registerCleanup(requestId, path, deleteError);
+  if (deleteError) await registerCleanup(admin, requestId, path, deleteError);
   if (removeError || deleteError) console.error("request cleanup pending", { requestId, path, originalError, removeError, deleteError });
 }
 
@@ -81,8 +70,16 @@ Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: corsHeaders(origin) });
   if (req.method !== "POST") return response({ error: "Método não permitido" }, 405, origin);
   if (!supabaseUrl || !serviceKey) return response({ error: "Configuração do servidor indisponível" }, 500, origin);
-  const ip = req.headers.get("cf-connecting-ip") ?? req.headers.get("x-forwarded-for")?.split(",")[0]?.trim() ?? "unknown";
-  if (!allowAttempt(ip)) return response({ error: "Tente novamente mais tarde" }, 429, origin);
+
+  try {
+    const ipAdmin = await createEmployeePortalIpAdmin(req, origin, supabaseUrl, serviceKey);
+    await enforceEmployeePortalIpRateLimit(ipAdmin);
+  } catch (error) {
+    if (error instanceof Error && error.message === "PORTAL_RATE_LIMIT_EXCEEDED") return response({ error: "Muitas tentativas. Aguarde 15 minutos e tente novamente." }, 429, origin);
+    console.error("employee request IP limiter unavailable");
+    return response({ error: "Serviço temporariamente indisponível. Tente novamente." }, 503, origin);
+  }
+
   const contentLength = Number(req.headers.get("content-length") ?? 0);
   if (contentLength > maxFileSize + 1024 * 1024) return response({ error: "Arquivo excede o limite de 10 MB" }, 413, origin);
 
@@ -92,9 +89,21 @@ Deno.serve(async (req) => {
   const cpf = cleanText(form.get("cpf"));
   const deliveryItemId = cleanText(form.get("delivery_item_id"));
   const description = cleanText(form.get("description"));
-  if (!allowAttempt(`${ip}:${registration}:${cpf}`)) return response({ error: "Tente novamente mais tarde" }, 429);
   if (!registration || !cpf || !isUuid(deliveryItemId) || !description) return response({ error: "Informe funcionário, material e descrição" }, 400);
   if (description.length > 4000) return response({ error: "Descrição muito longa" }, 400);
+
+  let admin: Awaited<ReturnType<typeof createEmployeePortalAdmin>>;
+  try {
+    admin = await createEmployeePortalAdmin(req, origin, registration, cpf, supabaseUrl, serviceKey);
+  } catch (error) {
+    if (error instanceof Error && error.message === "EMPLOYEE_PORTAL_IP_UNAVAILABLE") {
+      return response({ error: "Nao foi possivel validar a origem. Tente novamente." }, 503, origin);
+    }
+    if (error instanceof Error && error.message === "EMPLOYEE_PORTAL_CREDENTIALS_INVALID") {
+      return response({ error: "Matricula ou CPF invalidos" }, 400, origin);
+    }
+    return response({ error: "Nao foi possivel validar o acesso." }, 500, origin);
+  }
 
   const attachmentValue = form.get("attachment");
   const attachment = attachmentValue instanceof File && attachmentValue.size > 0 ? attachmentValue : null;
@@ -108,6 +117,7 @@ Deno.serve(async (req) => {
 
   const { data: requestId, error: requestError } = await admin.rpc("create_employee_material_request", { p_registration: registration, p_cpf: cpf, p_delivery_item_id: deliveryItemId, p_description: description });
   if (requestError || !requestId) {
+    if (requestError && /muitas tentativas|portal_rate_limit_exceeded/i.test(requestError.message)) return response({ error: "Muitas tentativas. Aguarde 15 minutos e tente novamente." }, 429, origin);
     console.error("request creation failed", requestError);
     return response({ error: "Não foi possível criar a solicitação" }, 409, origin);
   }
@@ -115,18 +125,18 @@ Deno.serve(async (req) => {
 
   const { data: request, error: lookupError } = await admin.from("employee_portal_requests").select("organization_id").eq("id", requestId).single();
   if (lookupError || !request) {
-    await removeAttachment("unresolved-request/" + requestId, requestId, lookupError ?? "request lookup failed");
+    await removeAttachment(admin, "unresolved-request/" + requestId, requestId, lookupError ?? "request lookup failed");
     return response({ error: "Não foi possível finalizar a solicitação" }, 500);
   }
   const path = `${request.organization_id}/${requestId}/attachment${extension}`;
   const { error: uploadError } = await admin.storage.from(bucket).upload(path, attachment, { contentType: attachment.type, upsert: false });
   if (uploadError) {
-    await removeAttachment(path, requestId, uploadError);
+    await removeAttachment(admin, path, requestId, uploadError);
     return response({ error: "Não foi possível salvar o anexo" }, 500);
   }
   const { data: updatedRequest, error: updateError } = await admin.from("employee_portal_requests").update({ attachment_path: path, attachment_uploaded_at: new Date().toISOString() }).eq("id", requestId).select("id").maybeSingle();
   if (updateError || !updatedRequest) {
-    await removeAttachment(path, requestId, updateError);
+    await removeAttachment(admin, path, requestId, updateError);
     return response({ error: "Não foi possível finalizar o anexo" }, 500);
   }
   return response({ id: requestId, has_attachment: true });

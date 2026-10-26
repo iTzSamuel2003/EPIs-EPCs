@@ -1,5 +1,9 @@
 import "@supabase/functions-js/edge-runtime.d.ts";
-import { createClient } from "@supabase/supabase-js";
+import {
+  createEmployeePortalAdmin,
+  createEmployeePortalIpAdmin,
+  enforceEmployeePortalIpRateLimit,
+} from "../_shared/employee-portal-security.ts";
 
 const allowedOrigins = new Set(["https://epis-epcs.vercel.app", "http://localhost:3000"]);
 const bucket = "employee-course-documents";
@@ -10,7 +14,6 @@ const allowedTypes = new Map([
   ["image/png", ".png"],
   ["image/webp", ".webp"],
 ]);
-const attempts = new Map<string, { count: number; resetAt: number }>();
 
 function corsHeaders(origin: string | null) {
   const allowedOrigin = origin && allowedOrigins.has(origin) ? origin : "https://epis-epcs.vercel.app";
@@ -28,18 +31,6 @@ function response(body: unknown, status = 200, origin: string | null = null) {
 
 function text(value: FormDataEntryValue | null) {
   return typeof value === "string" ? value.trim() : "";
-}
-
-function allowAttempt(key: string) {
-  const now = Date.now();
-  const current = attempts.get(key);
-  if (!current || current.resetAt <= now) {
-    attempts.set(key, { count: 1, resetAt: now + 5 * 60 * 1000 });
-    return true;
-  }
-  if (current.count >= 10) return false;
-  current.count += 1;
-  return true;
 }
 
 function safeFileName(value: string) {
@@ -61,8 +52,6 @@ async function hasValidFileSignature(file: File, mimeType: string) {
 
 const supabaseUrl = Deno.env.get("SUPABASE_URL") ?? "";
 const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? Deno.env.get("SUPABASE_SECRET_KEY") ?? "";
-const admin = createClient(supabaseUrl, serviceKey, { auth: { autoRefreshToken: false, persistSession: false } });
-
 Deno.serve(async (req) => {
   const origin = req.headers.get("origin");
   if (origin && !allowedOrigins.has(origin)) return response({ error: "Origem nao autorizada" }, 403, origin);
@@ -70,8 +59,15 @@ Deno.serve(async (req) => {
   if (req.method !== "POST") return response({ error: "Metodo nao permitido" }, 405, origin);
   if (!supabaseUrl || !serviceKey) return response({ error: "Configuracao do servidor indisponivel" }, 500, origin);
 
-  const ip = req.headers.get("cf-connecting-ip") ?? req.headers.get("x-forwarded-for")?.split(",")[0]?.trim() ?? "unknown";
-  if (!allowAttempt(ip)) return response({ error: "Tente novamente mais tarde" }, 429, origin);
+  try {
+    const ipAdmin = await createEmployeePortalIpAdmin(req, origin, supabaseUrl, serviceKey);
+    await enforceEmployeePortalIpRateLimit(ipAdmin);
+  } catch (error) {
+    if (error instanceof Error && error.message === "PORTAL_RATE_LIMIT_EXCEEDED") return response({ error: "Muitas tentativas. Aguarde 15 minutos e tente novamente." }, 429, origin);
+    console.error("employee course IP limiter unavailable");
+    return response({ error: "Servico temporariamente indisponivel. Tente novamente." }, 503, origin);
+  }
+
   const contentLength = Number(req.headers.get("content-length") ?? 0);
   if (contentLength > maxFileSize + 1024 * 1024) return response({ error: "Arquivo excede o limite de 10 MB" }, 413, origin);
 
@@ -89,7 +85,18 @@ Deno.serve(async (req) => {
   if (!registration || !cpf || !name) return response({ error: "Informe matrícula, CPF e curso" }, 400, origin);
   if (name.length > 200 || provider.length > 200 || certificateNumber.length > 100) return response({ error: "Dados do curso excedem o tamanho permitido" }, 400, origin);
   if (Boolean(completedAt) !== Boolean(expiresAt)) return response({ error: "Informe as duas datas do curso" }, 400, origin);
-  if (!allowAttempt(`${ip}:${registration}:${cpf}`)) return response({ error: "Tente novamente mais tarde" }, 429, origin);
+  let admin: Awaited<ReturnType<typeof createEmployeePortalAdmin>>;
+  try {
+    admin = await createEmployeePortalAdmin(req, origin, registration, cpf, supabaseUrl, serviceKey);
+  } catch (error) {
+    if (error instanceof Error && error.message === "EMPLOYEE_PORTAL_IP_UNAVAILABLE") {
+      return response({ error: "Nao foi possivel validar a origem. Tente novamente." }, 503, origin);
+    }
+    if (error instanceof Error && error.message === "EMPLOYEE_PORTAL_CREDENTIALS_INVALID") {
+      return response({ error: "Matricula ou CPF invalidos" }, 400, origin);
+    }
+    return response({ error: "Nao foi possivel validar o acesso." }, 500, origin);
+  }
 
   if (attachment) {
     const extension = allowedTypes.get(attachment.type) ?? "";
@@ -102,7 +109,11 @@ Deno.serve(async (req) => {
 
   const { data: profiles, error: profileError } = await admin.rpc("get_employee_portal_data_v3", { p_registration: registration, p_cpf: cpf });
   const profile = Array.isArray(profiles) ? profiles[0] : null;
-  if (profileError || !profile) return response({ error: "Matricula ou CPF nao conferem" }, 400, origin);
+  if (profileError) {
+    if (/muitas tentativas|portal_rate_limit_exceeded/i.test(profileError.message)) return response({ error: "Muitas tentativas. Aguarde 15 minutos e tente novamente." }, 429, origin);
+    return response({ error: "Matricula ou CPF nao conferem" }, 400, origin);
+  }
+  if (!profile) return response({ error: "Matricula ou CPF nao conferem" }, 400, origin);
   const requirements = (Array.isArray(profile.requirements) ? profile.requirements : []) as Array<{ course_name?: string }>;
   if (!requirements.some((item) => item?.course_name === name)) return response({ error: "Curso nao previsto para a funcao do colaborador" }, 400, origin);
   const { data: employee, error: employeeError } = await admin.from("employees").select("organization_id").eq("id", profile.employee_id).single();
@@ -127,6 +138,7 @@ Deno.serve(async (req) => {
   });
   if (courseError || !courseId) {
     if (path) await admin.storage.from(bucket).remove([path]);
+    if (courseError && /muitas tentativas|portal_rate_limit_exceeded/i.test(courseError.message)) return response({ error: "Muitas tentativas. Aguarde 15 minutos e tente novamente." }, 429, origin);
     return response({ error: "Nao foi possivel registrar o curso" }, 400, origin);
   }
   return response({ id: courseId, has_attachment: Boolean(path) }, 200, origin);
