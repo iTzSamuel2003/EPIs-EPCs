@@ -3,6 +3,7 @@ import {
   createEmployeePortalAdmin,
   createEmployeePortalIpAdmin,
   enforceEmployeePortalIpRateLimit,
+  isMeasurementToken,
 } from "../_shared/employee-portal-security.ts";
 
 const allowedOrigins = new Set([
@@ -135,6 +136,93 @@ Deno.serve(async (request) => {
     : "";
   const cpf = typeof body.cpf === "string" ? body.cpf.trim() : "";
   const action = body.action;
+
+  if (action === "measurement_link") {
+    if (!isMeasurementToken(body.token)) {
+      return response({ error: "Invalid or expired link" }, 400, origin);
+    }
+
+    let result: unknown;
+    let error: { message: string } | null = null;
+    if (body.operation === "load") {
+      ({ data: result, error } = await ipAdmin.rpc("get_measurement_request", {
+        p_token: body.token,
+      }));
+    } else if (body.operation === "submit") {
+      const fields = [
+        "shirt_size",
+        "pants_size",
+        "shoe_size",
+        "helmet_size",
+        "glove_size",
+        "notes",
+      ] as const;
+      if (
+        fields.some((field) =>
+          body[field] !== null && body[field] !== undefined &&
+          typeof body[field] !== "string"
+        )
+      ) {
+        return response({ error: "Invalid measurement values" }, 400, origin);
+      }
+      const values = Object.fromEntries(
+        fields.map((field) => [
+          field,
+          typeof body[field] === "string" ? body[field] as string : "",
+        ]),
+      ) as Record<(typeof fields)[number], string>;
+      if (
+        [
+          values.shirt_size,
+          values.pants_size,
+          values.shoe_size,
+          values.helmet_size,
+          values.glove_size,
+        ].some((value) => value.length > 50) || values.notes.length > 1000
+      ) {
+        return response(
+          { error: "Measurement values exceed the allowed length" },
+          400,
+          origin,
+        );
+      }
+      ({ data: result, error } = await ipAdmin.rpc(
+        "submit_measurement_request",
+        {
+          p_token: body.token,
+          p_shirt_size: values.shirt_size,
+          p_pants_size: values.pants_size,
+          p_shoe_size: values.shoe_size,
+          p_helmet_size: values.helmet_size,
+          p_glove_size: values.glove_size,
+          p_notes: values.notes,
+        },
+      ));
+    } else {
+      return response({ error: "Operation not allowed" }, 400, origin);
+    }
+
+    if (error) {
+      if (isRateLimitError(error.message)) {
+        return response(
+          { error: "Too many attempts. Wait 15 minutes and try again." },
+          429,
+          origin,
+        );
+      }
+      console.error("employee measurement link operation failed", {
+        operation: body.operation,
+        code: (error as { code?: string }).code,
+      });
+      return response(
+        { error: "Invalid, expired, or already used link" },
+        400,
+        origin,
+      );
+    }
+    return response(result, 200, origin);
+  }
+
   if (!registration || registration.length > 100 || !cpf || cpf.length > 64) {
     return response({ error: "Informe matrícula e CPF válidos" }, 400, origin);
   }

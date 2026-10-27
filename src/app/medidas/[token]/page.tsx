@@ -7,7 +7,26 @@ const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
 const supabasePublishableKey = process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY;
 async function publicRpc<T>(functionName: string, body: Record<string, unknown>) {
   if (!supabaseUrl || !supabasePublishableKey) throw new Error("O formulário não está configurado. Solicite ao responsável a correção das variáveis do Supabase.");
-  const response = await fetch(`${supabaseUrl}/rest/v1/rpc/${functionName}`, { method: "POST", headers: { apikey: supabasePublishableKey, Authorization: `Bearer ${supabasePublishableKey}`, "Content-Type": "application/json" }, body: JSON.stringify(body) });
+  const operation = functionName === "get_measurement_request"
+    ? "load"
+    : functionName === "submit_measurement_request"
+    ? "submit"
+    : null;
+  if (!operation) throw new Error("Operação de medidas não permitida.");
+  const payload = operation === "load"
+    ? { action: "measurement_link", operation, token: body.p_token }
+    : {
+      action: "measurement_link",
+      operation,
+      token: body.p_token,
+      shirt_size: body.p_shirt_size,
+      pants_size: body.p_pants_size,
+      shoe_size: body.p_shoe_size,
+      helmet_size: body.p_helmet_size,
+      glove_size: body.p_glove_size,
+      notes: body.p_notes,
+    };
+  const response = await fetch(`${supabaseUrl}/functions/v1/employee-portal`, { method: "POST", headers: { apikey: supabasePublishableKey, "Content-Type": "application/json" }, body: JSON.stringify(payload) });
   if (!response.ok) throw new Error(`RPC ${response.status}`);
   return response.json() as Promise<T>;
 }

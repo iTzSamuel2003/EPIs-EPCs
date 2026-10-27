@@ -1,5 +1,21 @@
 import { assertEquals, assertThrows } from "jsr:@std/assert@1";
-import { getTrustedEmployeePortalIp } from "./employee-portal-security.ts";
+import {
+  getTrustedEmployeePortalIp,
+  isMeasurementToken,
+} from "./employee-portal-security.ts";
+
+Deno.test("accepts only well-formed UUID measurement tokens", () => {
+  assertEquals(
+    isMeasurementToken("123e4567-e89b-42d3-a456-426614174000"),
+    true,
+  );
+  assertEquals(isMeasurementToken("not-a-token"), false);
+  assertEquals(
+    isMeasurementToken("00000000-0000-0000-0000-000000000000"),
+    false,
+  );
+  assertEquals(isMeasurementToken(null), false);
+});
 
 Deno.test("uses the gateway-provided client IP", () => {
   const request = new Request(
