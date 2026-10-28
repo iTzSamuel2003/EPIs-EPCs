@@ -20,7 +20,9 @@ type Employee = {
 
 type FunctionRule = {
   id: string;
+  scope_name: string;
   function_name: string;
+  source_note: string | null;
   receives_attendance: boolean;
   monthly_amount: number | string;
   active: boolean;
@@ -29,10 +31,10 @@ type FunctionRule = {
 type OccurrenceType = "late" | "absence_justified" | "absence_unjustified" | "convocation_absence" | "medical_certificate" | "warning";
 type Occurrence = { id: string; occurrence_type: OccurrenceType; occurred_on: string; occurred_at: string | null; days_count: number };
 type OccurrenceDraft = { id: string; occurrence_type: OccurrenceType; occurred_on: string; occurred_at: string; days_count: string };
-type ReductionRule = { id: string; function_rule_id: string; criterion_key: string; reduction_amount: number | string };
+type ReductionRule = { id: string; function_rule_id: string; criterion_key: string; reduction_amount: number | string; active: boolean };
 type CollectiveField = "quality_status" | "service_cancellation_status" | "safety_status";
 type Collective = Record<CollectiveField, "not_evaluated" | "meets" | "does_not_meet">;
-type SavedSnapshot = { receives_attendance_snapshot: boolean; monthly_amount_snapshot: number | string; reduction_amount_snapshot: number | string; estimated_amount_snapshot: number | string };
+type SavedSnapshot = { scope_name_snapshot: string; receives_attendance_snapshot: boolean; monthly_amount_snapshot: number | string; reduction_amount_snapshot: number | string; estimated_amount_snapshot: number | string };
 
 const occurrenceOptions: Array<[OccurrenceType, string]> = [
   ["late", "Atraso na jornada"],
@@ -88,7 +90,37 @@ function parseInputMoney(value: string) {
   const normalized = value.trim().includes(",") ? value.trim().replace(/\./g, "").replace(",", ".") : value.trim();
   return Number(normalized);
 }
-function ruleKey(value: string) { return value.toLocaleLowerCase("pt-BR").replace(/\s+/g, " ").trim(); }
+function ruleKey(value: string) {
+  return value.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLocaleLowerCase("pt-BR").replace(/[^a-z0-9]+/g, " ").trim().replace(/\s+/g, " ");
+}
+function functionMatchRank(ruleName: string, employeeFunction: string) {
+  const rule = ruleKey(ruleName);
+  const employee = ruleKey(employeeFunction);
+  if (rule === employee) return 0;
+  if (rule === "eletricista" && employee.startsWith("eletricista ") && !employee.startsWith("eletricista podador")) return 1;
+  if (rule === "eletricista podador" && employee.startsWith("eletricista podador")) return 1;
+  if (rule === "ajudante" && employee.startsWith("ajudante")) return 1;
+  if (rule === "motorista" && employee.startsWith("motorista")) return 1;
+  if (["encarregado", "encarregada"].includes(rule) && employee.startsWith("encarregad")) return 1;
+  return null;
+}
+function findFunctionRule(rules: FunctionRule[], functionName: string, scopeName: string) {
+  return rules
+    .map((rule) => ({ rule, match: functionMatchRank(rule.function_name, functionName), scope: ruleKey(rule.scope_name) === ruleKey(scopeName) ? 0 : ruleKey(rule.scope_name) === "geral" ? 1 : 2 }))
+    .filter((candidate) => candidate.match !== null && candidate.scope < 2)
+    .sort((a, b) => a.scope - b.scope || a.match! - b.match! || ruleKey(b.rule.function_name).length - ruleKey(a.rule.function_name).length || ruleKey(a.rule.function_name).localeCompare(ruleKey(b.rule.function_name)))[0]?.rule ?? null;
+}
+function suggestedScopeForEmployee(employee: Employee, scopes: string[]) {
+  const unitKey = ruleKey(employee.unit ?? "");
+  if (!unitKey) return "Geral";
+  const unitTokens = unitKey.split(" ");
+  const matches = scopes.filter((scope) => {
+    const scopeKey = ruleKey(scope);
+    const scopeTokens = scopeKey.split(" ");
+    return scopeKey !== "geral" && (scopeKey.includes(unitKey) || unitKey.includes(scopeKey) || unitTokens.some((token) => token.length >= 3 && scopeTokens.includes(token)));
+  });
+  return matches.length === 1 ? matches[0] : "Geral";
+}
 function employeeFunction(employee: Employee) {
   const name = (employee.function_name || employee.job_title || "Função não informada").trim();
   const classification = employee.function_classification?.trim();
@@ -108,8 +140,10 @@ export default function AttendancePage() {
   const [reductionRules, setReductionRules] = useState<ReductionRule[]>([]);
   const [amountDrafts, setAmountDrafts] = useState<Record<string, string>>({});
   const [reductionDrafts, setReductionDrafts] = useState<Record<string, string>>({});
+  const [reductionDirtyIds, setReductionDirtyIds] = useState<string[]>([]);
   const [organizationId, setOrganizationId] = useState("");
   const [selectedEmployeeId, setSelectedEmployeeId] = useState("");
+  const [scopeName, setScopeName] = useState("Geral");
   const [employeeSearch, setEmployeeSearch] = useState("");
   const [periodStart, setPeriodStart] = useState("");
   const [periodEnd, setPeriodEnd] = useState("");
@@ -119,6 +153,7 @@ export default function AttendancePage() {
   const [savedRecord, setSavedRecord] = useState(false);
   const [tab, setTab] = useState<"records" | "functions">("records");
   const [newFunctionName, setNewFunctionName] = useState("");
+  const [newScopeName, setNewScopeName] = useState("Geral");
   const [loading, setLoading] = useState(true);
   const [periodLoading, setPeriodLoading] = useState(false);
   const [savingRecord, setSavingRecord] = useState(false);
@@ -131,7 +166,8 @@ export default function AttendancePage() {
 
   const selectedEmployee = employees.find((employee) => employee.id === selectedEmployeeId) ?? null;
   const selectedFunctionName = selectedEmployee ? employeeFunction(selectedEmployee) : "";
-  const selectedRule = rules.find((rule) => ruleKey(rule.function_name) === ruleKey(selectedFunctionName)) ?? null;
+  const selectedRule = selectedEmployee ? findFunctionRule(rules, selectedFunctionName, scopeName) : null;
+  const scopeOptions = useMemo(() => ["Geral", ...Array.from(new Map(rules.filter((rule) => ruleKey(rule.scope_name) !== "geral").map((rule) => [ruleKey(rule.scope_name), rule.scope_name])).values()).sort((a, b) => a.localeCompare(b, "pt-BR"))], [rules]);
   const validPeriod = Boolean(periodStart && periodEnd && periodEnd >= periodStart && daysInPeriod(periodStart, periodEnd) <= 31);
   const filteredEmployees = useMemo(() => {
     const query = employeeSearch.toLocaleLowerCase("pt-BR").trim();
@@ -159,9 +195,9 @@ export default function AttendancePage() {
   const attendanceBaseAmount = attendanceEligible
     ? savedRecord && savedSnapshot ? Number(savedSnapshot.monthly_amount_snapshot) : Number(selectedRule?.monthly_amount ?? 0)
     : 0;
-  const amountFor = (criterion: string) => Number(reductionRules.find((rule) =>
-    rule.function_rule_id === selectedRule?.id && rule.criterion_key === criterion
-  )?.reduction_amount ?? 0);
+  const amountFor = (criterion: string) => selectedRule?.active && selectedRule.receives_attendance
+    ? Number(reductionRules.find((rule) => rule.function_rule_id === selectedRule.id && rule.criterion_key === criterion && rule.active)?.reduction_amount ?? 0)
+    : 0;
   const individualReduction = occurrences.reduce((total, item) => {
     const units = isMultiDay(item.occurrence_type) ? Number(item.days_count || 0) : 1;
     return total + amountFor(item.occurrence_type) * units;
@@ -202,8 +238,8 @@ export default function AttendancePage() {
       }
       const [employeeResult, ruleResult, reductionResult] = await Promise.all([
         supabase.from("employees").select("id,registration,full_name,job_title,function_name,function_classification,department,unit,admission_date,termination_date,status").order("full_name"),
-        supabase.from("attendance_function_rules").select("id,function_name,receives_attendance,monthly_amount,active").order("function_name"),
-        supabase.from("attendance_reduction_rules").select("id,function_rule_id,criterion_key,reduction_amount").order("criterion_key"),
+        supabase.from("attendance_function_rules").select("id,scope_name,function_name,source_note,receives_attendance,monthly_amount,active").order("scope_name").order("function_name"),
+        supabase.from("attendance_reduction_rules").select("id,function_rule_id,criterion_key,reduction_amount,active").order("criterion_key"),
       ]);
       if (!active) return;
       if (employeeResult.error || ruleResult.error || reductionResult.error) {
@@ -217,6 +253,7 @@ export default function AttendancePage() {
         const loadedReductions = (reductionResult.data ?? []) as ReductionRule[];
         setReductionRules(loadedReductions);
         setReductionDrafts(Object.fromEntries(loadedReductions.map((rule) => [rule.id, String(rule.reduction_amount)])));
+        setReductionDirtyIds([]);
       }
       setLoading(false);
     }
@@ -245,7 +282,7 @@ export default function AttendancePage() {
       setSavedRecord(false);
       const supabase = createClient();
       const recordPromise = selectedEmployeeId
-        ? supabase.from("attendance_period_records").select("id,receives_attendance_snapshot,monthly_amount_snapshot,reduction_amount_snapshot,estimated_amount_snapshot").eq("employee_id", selectedEmployeeId).eq("period_start", periodStart).eq("period_end", periodEnd).maybeSingle()
+        ? supabase.from("attendance_period_records").select("id,scope_name_snapshot,receives_attendance_snapshot,monthly_amount_snapshot,reduction_amount_snapshot,estimated_amount_snapshot").eq("employee_id", selectedEmployeeId).eq("period_start", periodStart).eq("period_end", periodEnd).maybeSingle()
         : Promise.resolve({ data: null, error: null });
       const collectivePromise = supabase.from("attendance_collective_assessments").select("quality_status,service_cancellation_status,safety_status").eq("period_start", periodStart).eq("period_end", periodEnd).maybeSingle();
       const [recordResult, collectiveResult] = await Promise.all([recordPromise, collectivePromise]);
@@ -273,6 +310,7 @@ export default function AttendancePage() {
         })));
         setSavedSnapshot(saved);
         setSavedRecord(true);
+        setScopeName(saved.scope_name_snapshot || "Geral");
       }
       setCollective(collectiveResult.data ? collectiveResult.data as Collective : emptyCollective);
       setPeriodLoading(false);
@@ -305,10 +343,11 @@ export default function AttendancePage() {
     if (invalid) { setError("Confira as datas, horários dos atrasos e quantidades de dias das ocorrências."); return; }
     setSavingRecord(true);
     const supabase = createClient();
-    const { data, error: saveError } = await supabase.rpc("save_attendance_period_record", {
+    const { data, error: saveError } = await supabase.rpc("save_attendance_period_record_scoped", {
       p_employee_id: selectedEmployee.id,
       p_period_start: periodStart,
       p_period_end: periodEnd,
+      p_scope_name: scopeName,
       p_events: occurrences.map((item) => ({
         type: item.occurrence_type,
         date: item.occurred_on,
@@ -320,7 +359,7 @@ export default function AttendancePage() {
       setError(saveError?.message?.includes("RH") ? "Seu perfil não tem acesso para registrar assiduidade." : "Não foi possível salvar o registro. Confira o período e as ocorrências.");
     } else {
       setSavedRecord(true);
-      setSavedSnapshot({ receives_attendance_snapshot: Boolean(selectedRule?.active && selectedRule.receives_attendance), monthly_amount_snapshot: selectedRule?.active && selectedRule.receives_attendance ? selectedRule.monthly_amount : 0, reduction_amount_snapshot: reductionAmount, estimated_amount_snapshot: estimatedAttendanceAmount });
+      setSavedSnapshot({ scope_name_snapshot: scopeName, receives_attendance_snapshot: Boolean(selectedRule?.active && selectedRule.receives_attendance), monthly_amount_snapshot: selectedRule?.active && selectedRule.receives_attendance ? selectedRule.monthly_amount : 0, reduction_amount_snapshot: reductionAmount, estimated_amount_snapshot: estimatedAttendanceAmount });
       setSuccess("Registro individual salvo para este período.");
     }
     setSavingRecord(false);
@@ -345,20 +384,21 @@ export default function AttendancePage() {
 
   async function addFunctionRule() {
     const name = newFunctionName.trim().replace(/\s+/g, " ");
-    if (!name || addingFunction) return;
-    if (rules.some((rule) => ruleKey(rule.function_name) === ruleKey(name))) {
-      setError("Essa função já está cadastrada.");
+    const scope = newScopeName.trim().replace(/\s+/g, " ");
+    if (!name || !scope || addingFunction) return;
+    if (rules.some((rule) => ruleKey(rule.function_name) === ruleKey(name) && ruleKey(rule.scope_name) === ruleKey(scope))) {
+      setError("Essa função já está cadastrada para esse centro/unidade.");
       return;
     }
     setAddingFunction(true);
     setError("");
     const supabase = createClient();
-    const { data, error: insertError } = await supabase.from("attendance_function_rules").insert({ organization_id: organizationId, function_name: name }).select("id,function_name,receives_attendance,monthly_amount,active").single();
-    if (insertError || !data) setError("Não foi possível adicionar a função. Confira se ela já existe.");
+    const { data, error: insertError } = await supabase.from("attendance_function_rules").insert({ organization_id: organizationId, scope_name: scope, function_name: name, receives_attendance: false, monthly_amount: 0, active: false }).select("id,scope_name,function_name,source_note,receives_attendance,monthly_amount,active").single();
+    if (insertError || !data) setError("Não foi possível adicionar a regra. Confira se a combinação de centro/unidade e função já existe.");
     else {
       const added = data as FunctionRule;
-      const { data: seededRules, error: seededRulesError } = await supabase.from("attendance_reduction_rules").select("id,function_rule_id,criterion_key,reduction_amount").eq("function_rule_id", added.id);
-      setRules((current) => [...current, added].sort((a, b) => a.function_name.localeCompare(b.function_name, "pt-BR")));
+      const { data: seededRules, error: seededRulesError } = await supabase.from("attendance_reduction_rules").select("id,function_rule_id,criterion_key,reduction_amount,active").eq("function_rule_id", added.id);
+      setRules((current) => [...current, added].sort((a, b) => a.scope_name.localeCompare(b.scope_name, "pt-BR") || a.function_name.localeCompare(b.function_name, "pt-BR")));
       setAmountDrafts((current) => ({ ...current, [added.id]: toInputMoney(added.monthly_amount) }));
       if (seededRulesError) setError("Função adicionada, mas não foi possível carregar suas regras zeradas. Atualize a página para conferir.");
       else {
@@ -367,7 +407,8 @@ export default function AttendancePage() {
         setReductionDrafts((current) => ({ ...current, ...Object.fromEntries(addedRules.map((rule) => [rule.id, String(rule.reduction_amount)])) }));
       }
       setNewFunctionName("");
-      if (!seededRulesError) setSuccess("Função adicionada. Ela começa sem assiduidade habilitada e com todas as reduções em R$ 0,00.");
+      setNewScopeName("Geral");
+      if (!seededRulesError) setSuccess("Regra adicionada inativa, sem assiduidade habilitada e com todas as reduções zeradas e desativadas.");
     }
     setAddingFunction(false);
   }
@@ -376,9 +417,16 @@ export default function AttendancePage() {
     if (savingRuleId) return;
     const amount = parseInputMoney(amountDrafts[rule.id] ?? toInputMoney(rule.monthly_amount));
     if (!Number.isFinite(amount) || amount < 0) { setError("Informe um valor mensal válido para a função."); return; }
+    const scope = rule.scope_name.trim().replace(/\s+/g, " ");
+    if (!scope || scope.length > 150) { setError("Informe um centro/unidade com até 150 caracteres."); return; }
+    if (rules.some((item) => item.id !== rule.id && ruleKey(item.scope_name) === ruleKey(scope) && ruleKey(item.function_name) === ruleKey(rule.function_name))) {
+      setError("Já existe essa função configurada para o centro/unidade informado.");
+      return;
+    }
     setSavingRuleId(rule.id);
     setError("");
     const { data, error: updateError } = await createClient().from("attendance_function_rules").update({
+      scope_name: scope,
       receives_attendance: rule.receives_attendance,
       monthly_amount: amount,
       active: rule.active,
@@ -386,7 +434,7 @@ export default function AttendancePage() {
     }).eq("id", rule.id).select("id").maybeSingle();
     if (updateError || !data) setError("Não foi possível salvar a regra da função.");
     else {
-      setRules((current) => current.map((item) => item.id === rule.id ? { ...item, monthly_amount: amount } : item));
+      setRules((current) => current.map((item) => item.id === rule.id ? { ...item, scope_name: scope, monthly_amount: amount } : item).sort((a, b) => a.scope_name.localeCompare(b.scope_name, "pt-BR") || a.function_name.localeCompare(b.function_name, "pt-BR")));
       setAmountDrafts((current) => ({ ...current, [rule.id]: toInputMoney(amount) }));
       setSuccess(`Regra de ${rule.function_name} salva.`);
     }
@@ -403,21 +451,41 @@ export default function AttendancePage() {
       setError("Informe valores válidos em reais, a partir de R$ 0,00.");
       return;
     }
+    const dirtyIds = new Set(reductionDirtyIds);
+    const changedValues = values.filter((rule) => dirtyIds.has(rule.id));
+    if (changedValues.length === 0) {
+      setSuccess("Não há alterações de redução para salvar.");
+      return;
+    }
     setSavingReductions(true);
     setError("");
-    const payload = values.map((rule) => ({
+    const payload = changedValues.map((rule) => ({
       organization_id: organizationId,
       function_rule_id: rule.function_rule_id,
       criterion_key: rule.criterion_key,
       reduction_amount: rule.parsed,
+      active: rule.active,
       updated_at: new Date().toISOString(),
     }));
-    const { data, error: saveError } = await createClient().from("attendance_reduction_rules").upsert(payload, { onConflict: "organization_id,function_rule_id,criterion_key" }).select("id,function_rule_id,criterion_key,reduction_amount");
+    const supabase = createClient();
+    const { data, error: saveError } = await supabase.from("attendance_reduction_rules").upsert(payload, { onConflict: "organization_id,function_rule_id,criterion_key" }).select("id,function_rule_id,criterion_key,reduction_amount,active");
     if (saveError || !data || data.length !== payload.length) setError("Não foi possível salvar as regras de redução.");
     else {
       const saved = data as ReductionRule[];
-      setReductionRules(saved);
-      setReductionDrafts(Object.fromEntries(saved.map((rule) => [rule.id, String(rule.reduction_amount)])));
+      const savedById = new Map(saved.map((rule) => [rule.id, rule]));
+      setReductionRules((current) => current.map((rule) => savedById.get(rule.id) ?? rule));
+      setReductionDrafts((current) => ({ ...current, ...Object.fromEntries(saved.map((rule) => [rule.id, String(rule.reduction_amount)])) }));
+      setReductionDirtyIds((current) => current.filter((id) => !savedById.has(id)));
+      if (selectedEmployeeId) {
+        const { data: refreshedSnapshot } = await supabase.from("attendance_period_records").select("scope_name_snapshot,receives_attendance_snapshot,monthly_amount_snapshot,reduction_amount_snapshot,estimated_amount_snapshot").eq("employee_id", selectedEmployeeId).eq("period_start", periodStart).eq("period_end", periodEnd).maybeSingle();
+        if (refreshedSnapshot) {
+          setSavedSnapshot(refreshedSnapshot as SavedSnapshot);
+          setSavedRecord(true);
+        } else {
+          setSavedSnapshot(null);
+          setSavedRecord(false);
+        }
+      }
       setSuccess("Regras de redução salvas. O cálculo é uma estimativa para conferência do RH.");
     }
     setSavingReductions(false);
@@ -425,6 +493,14 @@ export default function AttendancePage() {
 
   function updateRule(id: string, field: "receives_attendance" | "active", value: boolean) {
     setRules((current) => current.map((rule) => rule.id === id ? { ...rule, [field]: value } : rule));
+  }
+  function updateReductionRule(id: string, field: "active", value: boolean) {
+    setReductionRules((current) => current.map((rule) => rule.id === id ? { ...rule, [field]: value } : rule));
+    setReductionDirtyIds((current) => current.includes(id) ? current : [...current, id]);
+  }
+  function updateReductionDraft(id: string, value: string) {
+    setReductionDrafts((current) => ({ ...current, [id]: value }));
+    setReductionDirtyIds((current) => current.includes(id) ? current : [...current, id]);
   }
 
   return <main className="page-content attendance-page">
@@ -453,7 +529,13 @@ export default function AttendancePage() {
         <div className="attendance-section-heading"><div><h2>Colaborador</h2><p>Selecione a pessoa para consultar os dados e registrar o período.</p></div></div>
         <div className="attendance-picker-fields">
           <label><span>Buscar por nome ou matrícula</span><div className="attendance-search"><Search size={16} aria-hidden="true" /><input value={employeeSearch} onChange={(event) => setEmployeeSearch(event.target.value)} placeholder="Digite o nome ou a matrícula" /></div></label>
-          <label><span>Funcionário</span><select value={selectedEmployeeId} onChange={(event) => setSelectedEmployeeId(event.target.value)}><option value="">Selecione um colaborador</option>{filteredEmployees.map((employee) => <option key={employee.id} value={employee.id}>{employee.full_name}{employee.registration ? ` · ${employee.registration}` : ""}</option>)}</select></label>
+          <label><span>Funcionário</span><select value={selectedEmployeeId} onChange={(event) => {
+            const employee = employees.find((item) => item.id === event.target.value);
+            setSelectedEmployeeId(event.target.value);
+            setScopeName(employee ? suggestedScopeForEmployee(employee, scopeOptions) : "Geral");
+            setSavedRecord(false);
+            setSavedSnapshot(null);
+          }}><option value="">Selecione um colaborador</option>{filteredEmployees.map((employee) => <option key={employee.id} value={employee.id}>{employee.full_name}{employee.registration ? ` · ${employee.registration}` : ""}</option>)}</select></label>
         </div>
         {selectedEmployee && <div className="attendance-employee-card">
           <div className="attendance-avatar">{selectedEmployee.full_name.split(/\s+/).slice(0, 2).map((part) => part[0]).join("").toLocaleUpperCase("pt-BR")}</div>
@@ -461,6 +543,7 @@ export default function AttendancePage() {
           <span className={`attendance-status status-${selectedEmployee.status}`}>{statusLabels[selectedEmployee.status]}</span>
           <dl><div><dt>Setor</dt><dd>{selectedEmployee.department || "Não informado"}</dd></div><div><dt>Unidade</dt><dd>{selectedEmployee.unit || "Não informada"}</dd></div><div><dt>Admissão</dt><dd>{displayDate(selectedEmployee.admission_date)}</dd></div>{selectedEmployee.termination_date && <div><dt>Desligamento</dt><dd>{displayDate(selectedEmployee.termination_date)}</dd></div>}</dl>
         </div>}
+        {selectedEmployee && <label className="attendance-scope-picker"><span>Centro / unidade considerado neste período</span><select value={scopeName} onChange={(event) => { setScopeName(event.target.value); setSavedRecord(false); setSavedSnapshot(null); }}><option value="Geral">Geral — sem centro/unidade específico</option>{scopeOptions.filter((scope) => ruleKey(scope) !== "geral").map((scope) => <option key={ruleKey(scope)} value={scope}>{scope}</option>)}</select><small>Quando possível, sugerimos com base na unidade do cadastro. Confirme o centro correto antes de salvar.</small></label>}
       </section>
 
       {!selectedEmployee ? <section className="panel attendance-empty"><UserRound size={25} /><strong>Selecione um colaborador</strong><span>Os dados funcionais e os registros do período aparecerão aqui.</span></section> : <>
@@ -495,7 +578,7 @@ export default function AttendancePage() {
             </div>)}
           </div>}
           <div className="attendance-value-summary"><ShieldCheck size={18} /><div><strong>Prévia estimada da assiduidade</strong><div className="attendance-estimate-grid"><div><small>Valor fixo da função</small><strong>{displayMoney(attendanceBaseAmount)}</strong></div><div><small>Redução estimada</small><strong>{displayMoney(reductionAmount)}</strong></div><div className="is-final"><small>Estimativa após critérios</small><strong>{displayMoney(estimatedAttendanceAmount)}</strong></div></div><small className="attendance-estimate-breakdown">{savedRecord ? `Redução registrada nesta gravação: ${displayMoney(reductionAmount)}` : `Individual: ${displayMoney(reductionBreakdown.individual)} · Coletivo: ${displayMoney(reductionBreakdown.collective)}${attendanceBaseAmount > 0 && reductionBreakdown.individual + reductionBreakdown.collective > attendanceBaseAmount ? " · limitado ao valor mensal" : ""}`}</small><span>{savedRecord ? "Exibindo os valores registrados nesta gravação. Ao alterar os dados, a prévia será recalculada com as regras atuais." : "Prévia para conferência do RH; não é cálculo de folha nem autoriza desconto automático."}</span></div></div>
-          {!attendanceEligible && <div className="attendance-rule-warning">{selectedRule ? "Esta função não está habilitada para receber assiduidade; a base considerada é R$ 0,00." : "A função ainda não tem regra configurada. Cadastre-a em “Funções e valores”; sem regra ativa, a base considerada é R$ 0,00."}</div>}
+          {!attendanceEligible && <div className="attendance-rule-warning">{selectedRule ? `A regra “${selectedRule.scope_name} · ${selectedRule.function_name}” está aguardando confirmação do RH ou não habilita o benefício; a base considerada é R$ 0,00.` : "Não há regra ativa para esta combinação de centro/unidade e função. Cadastre ou confirme em “Funções e valores”; a base considerada é R$ 0,00."}</div>}
           <div className="attendance-form-actions"><span>{savedRecord ? "Registro já salvo neste período; salvar novamente substitui suas ocorrências." : "O registro será salvo com a data e o horário do sistema no histórico de auditoria."}</span><button type="button" className="primary-button" onClick={() => void saveRecord()} disabled={periodLoading || savingRecord || !validPeriod}><Save size={15} />{savingRecord ? "Salvando..." : savedRecord ? "Salvar alterações" : "Salvar registro"}</button></div>
         </section>
 
@@ -509,35 +592,50 @@ export default function AttendancePage() {
       </section>
     </> : <section className="panel attendance-function-panel">
       <div className="attendance-section-heading"><div><h2>Elegibilidade e valor por função</h2><p>As funções são sugeridas pelos cadastros de funcionários. Valores são apenas referências configuradas, sem lançamento automático em folha.</p></div></div>
-      <form className="attendance-add-function" onSubmit={(event) => { event.preventDefault(); void addFunctionRule(); }}><label><span>Adicionar função</span><input value={newFunctionName} onChange={(event) => setNewFunctionName(event.target.value)} maxLength={150} placeholder="Nome da função / classificação" /></label><button type="submit" className="primary-button" disabled={addingFunction || !newFunctionName.trim()}><Plus size={15} />{addingFunction ? "Adicionando..." : "Adicionar função"}</button></form>
-      {rules.length === 0 ? <div className="attendance-empty"><strong>Nenhuma função configurada</strong><span>Adicione uma função ou confirme se a migração do banco já foi aplicada.</span></div> : <div className="attendance-rules-list">
-        {rules.map((rule) => <article className="attendance-rule-row" key={rule.id}>
-          <div className="attendance-rule-name"><strong>{rule.function_name}</strong>{!rule.active && <small>Inativa</small>}</div>
-          <label className="attendance-toggle"><input type="checkbox" checked={rule.active} onChange={(event) => updateRule(rule.id, "active", event.target.checked)} /><span>Disponível</span></label>
-          <label className="attendance-toggle"><input type="checkbox" checked={rule.receives_attendance} onChange={(event) => updateRule(rule.id, "receives_attendance", event.target.checked)} disabled={!rule.active} /><span>Recebe assiduidade</span></label>
-          <label className="attendance-amount"><span>Valor mensal</span><div><span>R$</span><input inputMode="decimal" aria-label={`Valor mensal para ${rule.function_name}`} value={amountDrafts[rule.id] ?? toInputMoney(rule.monthly_amount)} onChange={(event) => setAmountDrafts((current) => ({ ...current, [rule.id]: event.target.value }))} disabled={!rule.active || !rule.receives_attendance} /></div></label>
-          <button type="button" className="secondary-button" onClick={() => void saveFunctionRule(rule)} disabled={savingRuleId === rule.id}><Save size={14} />{savingRuleId === rule.id ? "Salvando..." : "Salvar"}</button>
-        </article>)}
+      <form className="attendance-add-function" onSubmit={(event) => { event.preventDefault(); void addFunctionRule(); }}>
+        <label><span>Centro / unidade</span><input value={newScopeName} onChange={(event) => setNewScopeName(event.target.value)} maxLength={150} placeholder="Ex.: C&M - Dourados" /></label>
+        <label><span>Função / grupo</span><input value={newFunctionName} onChange={(event) => setNewFunctionName(event.target.value)} maxLength={150} placeholder="Ex.: ELETRICISTA" /></label>
+        <button type="submit" className="primary-button" disabled={addingFunction || !newFunctionName.trim() || !newScopeName.trim()}><Plus size={15} />{addingFunction ? "Adicionando..." : "Adicionar regra"}</button>
+      </form>
+      <div className="attendance-proposal-warning" role="note"><strong>Valores importados como propostas — ainda não aprovados pelo RH</strong><span>Os valores da planilha de setembro/2026 começam inativos e não entram na estimativa até a regra ser ativada e “Recebe assiduidade” ser confirmado. Em Dourados, há um valor divergente para ELETRICISTA (23 registros indicam R$ 210,00 e 1 indica R$ 472,50).</span></div>
+      {rules.length === 0 ? <div className="attendance-empty"><strong>Nenhuma regra configurada</strong><span>Adicione uma combinação de centro/unidade e função ou confirme se a migração do banco já foi aplicada.</span></div> : <div className="attendance-scope-groups">
+        {Array.from(new Set(rules.map((rule) => rule.scope_name))).sort((a, b) => a.localeCompare(b, "pt-BR")).map((scope, index) => {
+          const scopedRules = rules.filter((rule) => rule.scope_name === scope);
+          const pending = scopedRules.filter((rule) => !rule.active || !rule.receives_attendance).length;
+          return <details className="attendance-scope-group" key={scope} open={index === 0 || ruleKey(scope) !== "geral"}>
+            <summary><strong>{scope}</strong><span>{scopedRules.length} funções · {pending} aguardando confirmação</span></summary>
+            <div className="attendance-rules-list">
+              {scopedRules.map((rule) => <article className="attendance-rule-row" key={rule.id}>
+                <div className="attendance-rule-name"><strong>{rule.function_name}</strong><small className="attendance-rule-scope">{rule.source_note || (!rule.active || !rule.receives_attendance ? "Aguardando confirmação do RH" : "Regra configurada")}</small></div>
+                <label className="attendance-toggle"><input type="checkbox" checked={rule.active} onChange={(event) => updateRule(rule.id, "active", event.target.checked)} /><span>Regra ativa</span></label>
+                <label className="attendance-toggle"><input type="checkbox" checked={rule.receives_attendance} onChange={(event) => updateRule(rule.id, "receives_attendance", event.target.checked)} /><span>Recebe assiduidade</span></label>
+                <label className="attendance-amount"><span>Valor mensal proposto</span><div><span>R$</span><input inputMode="decimal" aria-label={`Valor mensal para ${scope} · ${rule.function_name}`} value={amountDrafts[rule.id] ?? toInputMoney(rule.monthly_amount)} onChange={(event) => setAmountDrafts((current) => ({ ...current, [rule.id]: event.target.value }))} /></div></label>
+                <button type="button" className="secondary-button" onClick={() => void saveFunctionRule(rule)} disabled={savingRuleId === rule.id}><Save size={14} />{savingRuleId === rule.id ? "Salvando..." : "Salvar"}</button>
+              </article>)}
+            </div>
+          </details>;
+        })}
       </div>}
       <div className="attendance-reduction-panel">
         <div className="attendance-section-heading"><div><h2>Redução por ocorrência e critério coletivo</h2><p>Configure quanto cada evento reduz do valor fixo da função.</p></div></div>
-        <p className="attendance-reduction-note">Informe um valor fixo em reais para cada ocorrência; faltas e atestados são calculados por dia, e cada critério coletivo “Não atende” conta uma vez. A soma é limitada ao valor mensal da função. Tudo começa em R$ 0,00 e nenhuma regra autoriza desconto automático em folha.</p>
+        <p className="attendance-reduction-note">Configure um valor fixo em reais por ocorrência; faltas e atestados são calculados por dia, e cada critério coletivo “Não atende” conta uma vez. Cada regra começa zerada e desativada; somente regras marcadas “Aplicar na estimativa” entram no cálculo. A planilha não define regras consistentes de desconto e contém 10 linhas em que o desconto supera a assiduidade prevista, por isso nenhum desconto foi inferido. A estimativa não autoriza desconto automático em folha.</p>
         <div className="attendance-reduction-functions">
           {rules.map((functionRule, index) => {
             const functionReductions = reductionRules.filter((rule) => rule.function_rule_id === functionRule.id);
             return <details className="attendance-reduction-function" key={functionRule.id} open={index === 0}>
-              <summary><strong>{functionRule.function_name}</strong><span>{functionReductions.length} critérios · todos em reais</span></summary>
+              <summary><strong>{functionRule.scope_name} · {functionRule.function_name}</strong><span>{functionReductions.filter((rule) => rule.active).length}/{functionReductions.length} critérios ativos</span></summary>
               <div className="attendance-reduction-list">
                 {functionReductions.map((rule) => <label className="attendance-reduction-row" key={rule.id}>
                   <strong>{reductionLabels[rule.criterion_key] ?? rule.criterion_key}</strong>
-                  <span className="attendance-reduction-input"><span>R$</span><input type="number" min="0" max="9999999999.99" step="0.01" inputMode="decimal" aria-label={`Valor fixo por evento para ${functionRule.function_name}: ${reductionLabels[rule.criterion_key] ?? rule.criterion_key}`} value={reductionDrafts[rule.id] ?? String(rule.reduction_amount)} onChange={(event) => setReductionDrafts((current) => ({ ...current, [rule.id]: event.target.value }))} /></span>
+                  <span className="attendance-reduction-input"><span>R$</span><input type="number" min="0" max="9999999999.99" step="0.01" inputMode="decimal" aria-label={`Valor fixo por evento para ${functionRule.function_name}: ${reductionLabels[rule.criterion_key] ?? rule.criterion_key}`} value={reductionDrafts[rule.id] ?? String(rule.reduction_amount)} onChange={(event) => updateReductionDraft(rule.id, event.target.value)} /></span>
+                  <span className="attendance-reduction-activation"><input type="checkbox" checked={rule.active} onChange={(event) => updateReductionRule(rule.id, "active", event.target.checked)} /><span>Aplicar na estimativa (após confirmação do RH)</span></span>
                 </label>)}
                 {functionReductions.length === 0 && <p className="attendance-reduction-empty">Regras ainda não carregadas. Atualize a página para tentar novamente.</p>}
               </div>
             </details>;
           })}
         </div>
-        <div className="attendance-form-actions"><span>O valor configurado é abatido por ocorrência ou dia e nunca ultrapassa a assiduidade mensal.</span><button type="button" className="primary-button" onClick={() => void saveReductionRules()} disabled={savingReductions || reductionRules.length === 0}><Save size={15} />{savingReductions ? "Salvando..." : "Salvar regras de redução"}</button></div>
+        <div className="attendance-form-actions"><span>Somente regras ativas são abatidas por ocorrência/dia e o total é limitado à assiduidade mensal. Isso é apenas uma estimativa para análise do RH.</span><button type="button" className="primary-button" onClick={() => void saveReductionRules()} disabled={savingReductions || reductionRules.length === 0}><Save size={15} />{savingReductions ? "Salvando..." : "Salvar regras de redução"}</button></div>
       </div>
     </section>}
   </main>;
