@@ -4,13 +4,15 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { ArrowDownAZ, ArrowUpAZ, Boxes, LoaderCircle, Search } from "lucide-react";
 import Link from "next/link";
 import { FeedbackMessage } from "@/components/feedback-message";
+import { BaseSelect } from "@/components/base-select";
 import { friendlyError } from "@/lib/ui-feedback";
 import { createClient } from "@/lib/supabase/client";
+import { useBaseContext } from "@/lib/use-base-context";
 
 type StockMaterial = { id: string; internal_code: string; name: string; type: "EPI" | "EPC" | "FERRAMENTAL"; unit: string; minimum_stock: number; location: string | null; status: "active" | "inactive"; ca_required: boolean; test_required: boolean; report_required: boolean };
 type StockBalance = { totalQuantity: number; availableQuantity: number; totalCost: number; availableCost: number };
 type VariantBalance = { id: string; label: string; totalQuantity: number; availableQuantity: number };
-type StockLot = { id: string; material_id: string; variant_id: string | null; lot_number: string; received_quantity: number; available_quantity: number; entry_date: string; unit_cost: number | null; ca_number: string | null; ca_expires_at: string | null; test_number: string | null; test_performed_at: string | null; test_expires_at: string | null; test_report_number: string | null };
+type StockLot = { id: string; base_id: string; material_id: string; variant_id: string | null; lot_number: string; received_quantity: number; available_quantity: number; entry_date: string; unit_cost: number | null; ca_number: string | null; ca_expires_at: string | null; test_number: string | null; test_performed_at: string | null; test_expires_at: string | null; test_report_number: string | null };
 type CaCertificate = { ca_number: string; valid_until: string | null; status: string | null };
 
 function currency(value: number) { return value.toLocaleString("pt-BR", { style: "currency", currency: "BRL" }); }
@@ -31,6 +33,7 @@ function caSituation(lot: StockLot, certificate?: CaCertificate) {
 }
 
 export default function StockPage() {
+  const { accessibleBases, selectedBaseId, chooseBase, loading: basesLoading, error: basesError } = useBaseContext();
   const [materials, setMaterials] = useState<StockMaterial[]>([]);
   const [balances, setBalances] = useState<Record<string, StockBalance>>({});
   const [variantBalances, setVariantBalances] = useState<Record<string, VariantBalance[]>>({});
@@ -48,6 +51,7 @@ export default function StockPage() {
 
   async function load() {
     const version = ++loadVersion.current;
+    if (!selectedBaseId) { setLoading(false); return; }
     if (mountedRef.current) { setLoading(true); setError(""); }
     setMaterials([]);
     setBalances({});
@@ -56,15 +60,18 @@ export default function StockPage() {
     setCaCertificates({});
     try {
       const supabase = createClient();
-      const [{ data, error: materialError }, { data: lots, error: lotError }, { data: variants, error: variantError }] = await Promise.all([
+      const lotQuery = supabase.from("material_lots").select("id,base_id,material_id,variant_id,lot_number,received_quantity,available_quantity,entry_date,ca_number,ca_expires_at,test_number,test_performed_at,test_expires_at,test_report_number,unit_cost").eq("base_id", selectedBaseId);
+      const [{ data, error: materialError }, { data: lots, error: lotError }, { data: variants, error: variantError }, { data: inTransit, error: transferError }] = await Promise.all([
         supabase.from("materials").select("id,internal_code,name,type,unit,minimum_stock,location,status,ca_required,test_required,report_required").eq("status", "active").order("name"),
-        supabase.from("material_lots").select("id,material_id,variant_id,lot_number,received_quantity,available_quantity,entry_date,ca_number,ca_expires_at,test_number,test_performed_at,test_expires_at,test_report_number,unit_cost"),
+        lotQuery,
         supabase.from("material_variants").select("id,material_id,name,size,active").eq("active", true).order("size"),
+        supabase.rpc("get_pending_stock_transfer_quantities", { p_base_id: selectedBaseId }),
       ]);
       if (!mountedRef.current || version !== loadVersion.current) return;
-      if (materialError || lotError || variantError) { setError(friendlyError(materialError ?? lotError ?? variantError, "Não foi possível carregar o estoque.")); return; }
+      if (materialError || lotError || variantError || transferError) { setError(friendlyError(materialError ?? lotError ?? variantError ?? transferError, "Não foi possível carregar o estoque.")); return; }
 
       const lotRows = (lots ?? []) as StockLot[];
+      const inTransitByLot = ((inTransit ?? []) as Array<{ source_lot_id: string; quantity: number }>).reduce<Record<string, number>>((result, row) => { result[row.source_lot_id] = Number(row.quantity); return result; }, {});
       const caNumbers = [...new Set(lotRows.map((lot) => lot.ca_number?.trim()).filter((number): number is string => Boolean(number)))];
       if (caNumbers.length) {
         const { data: certificates } = await supabase.from("ca_certificates").select("ca_number,valid_until,status").in("ca_number", caNumbers);
@@ -74,7 +81,7 @@ export default function StockPage() {
       setLotsByMaterial(lotRows.reduce<Record<string, StockLot[]>>((result, lot) => { result[lot.material_id] = [...(result[lot.material_id] ?? []), lot]; return result; }, {}));
       setMaterials((data ?? []) as StockMaterial[]);
       setBalances(lotRows.reduce<Record<string, StockBalance>>((result, lot) => {
-        const totalQuantity = Number(lot.received_quantity);
+        const totalQuantity = Math.max(Number(lot.available_quantity), Number(lot.received_quantity) - (inTransitByLot[lot.id] ?? 0));
         const availableQuantity = Number(lot.available_quantity);
         const unitCost = Number(lot.unit_cost ?? 0);
         result[lot.material_id] = {
@@ -86,7 +93,7 @@ export default function StockPage() {
         return result;
       }, {}));
       const variantMap = (variants ?? []).reduce<Record<string, VariantBalance>>((result, variant) => { result[variant.id] = { id: variant.id, label: variant.size || variant.name, totalQuantity: 0, availableQuantity: 0 }; return result; }, {});
-      lotRows.forEach((lot) => { if (lot.variant_id && variantMap[lot.variant_id]) { variantMap[lot.variant_id].totalQuantity += Number(lot.received_quantity); variantMap[lot.variant_id].availableQuantity += Number(lot.available_quantity); } });
+      lotRows.forEach((lot) => { if (lot.variant_id && variantMap[lot.variant_id]) { variantMap[lot.variant_id].totalQuantity += Math.max(Number(lot.available_quantity), Number(lot.received_quantity) - (inTransitByLot[lot.id] ?? 0)); variantMap[lot.variant_id].availableQuantity += Number(lot.available_quantity); } });
       setVariantBalances((variants ?? []).reduce<Record<string, VariantBalance[]>>((result, variant) => { result[variant.material_id] = [...(result[variant.material_id] ?? []), variantMap[variant.id]]; return result; }, {}));
     } catch (caught) {
       if (mountedRef.current && version === loadVersion.current) setError(friendlyError(caught, "Não foi possível carregar o estoque."));
@@ -98,11 +105,11 @@ export default function StockPage() {
   useEffect(() => {
     mountedRef.current = true;
     const refresh = () => void load();
-    const events = ["delivery-created", "return-created", "stock-entry-created", "stock-entry-updated", "stock-entry-deleted"];
+    const events = ["delivery-created", "return-created", "stock-entry-created", "stock-entry-updated", "stock-entry-deleted", "stock-transfer-updated"];
     events.forEach((eventName) => window.addEventListener(eventName, refresh));
     void load();
     return () => { mountedRef.current = false; loadVersion.current += 1; events.forEach((eventName) => window.removeEventListener(eventName, refresh)); };
-  }, []);
+  }, [selectedBaseId, basesLoading]);
 
   function retryLoad() { void load(); }
   useEffect(() => { const requestedFilter = new URLSearchParams(window.location.search).get("filter"); if (["normal", "low", "empty"].includes(requestedFilter ?? "")) setFilter(requestedFilter!); }, []);
@@ -127,8 +134,8 @@ export default function StockPage() {
 
   return <main className="module-shell">
     <header className="module-header"><div><p className="eyebrow">CONTROLE OPERACIONAL</p><h1>Estoque</h1><p className="module-subtitle">Acompanhe saldos consolidados por material, lote e variação.</p></div><Link className="primary-button" href="/entries">Registrar entrada</Link></header>
-    {error && <FeedbackMessage onRetry={retryLoad}>{error}</FeedbackMessage>}
-    <section className="module-toolbar"><div className="module-search"><Search size={17} /><input aria-label="Buscar material ou código" value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Buscar material ou código" /></div><select aria-label="Filtrar estoque por situação" value={filter} onChange={(event) => setFilter(event.target.value)}><option value="all">Todas as situações</option><option value="normal">Normal</option><option value="low">Estoque baixo</option><option value="empty">Sem estoque</option></select></section>
+    {(error || basesError) && <FeedbackMessage onRetry={retryLoad}>{error || basesError}</FeedbackMessage>}
+    <section className="module-toolbar"><div className="module-search"><Search size={17} /><input aria-label="Buscar material ou código" value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Buscar material ou código" /></div><BaseSelect bases={accessibleBases} value={selectedBaseId} onChange={chooseBase} /><select aria-label="Filtrar estoque por situação" value={filter} onChange={(event) => setFilter(event.target.value)}><option value="all">Todas as situações</option><option value="normal">Normal</option><option value="low">Estoque baixo</option><option value="empty">Sem estoque</option></select></section>
     {!loading && <section className="module-summary"><div><strong>{materials.length}</strong><span>materiais</span></div><div><strong>{normalCount}</strong><span>estoque normal</span></div><div><strong>{lowCount}</strong><span>estoque baixo</span></div><div><strong>{emptyCount}</strong><span>sem estoque</span></div></section>}
     <section className="panel module-table-card"><div className="panel-header"><div><h2>Posição atual do estoque</h2><p>{rows.length} material(is) listados · disponibilidade atualizada pelas entregas</p></div><button className="select-button" aria-label={sortLabel} onClick={toggleSort}>{sortLabel} {ascending ? <ArrowUpAZ size={15} /> : <ArrowDownAZ size={15} />}</button></div>
       {loading ? <div className="module-loading"><LoaderCircle className="spin" size={22} /> Carregando estoque...</div> : <div className="table-wrap"><table className="stock-table" aria-label="Posição atual do estoque"><thead><tr><th scope="col">MATERIAL / CÓDIGO</th><th scope="col">TIPO</th><th scope="col">SITUAÇÃO</th><th scope="col">TOTAL RECEBIDO</th><th scope="col">DISPONÍVEL</th><th scope="col">EM USO / ENTREGUE</th><th scope="col">CUSTO UNITÁRIO</th><th scope="col">VALOR DISPONÍVEL</th><th scope="col">VALOR TOTAL</th><th scope="col">ESTOQUE MÍNIMO</th><th scope="col">LOCALIZAÇÃO</th></tr></thead><tbody>

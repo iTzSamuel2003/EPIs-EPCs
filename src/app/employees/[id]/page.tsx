@@ -418,7 +418,7 @@ export default function EmployeeMaterialsPage() {
           {employee.status === "terminated" && <div><small>Data de demissão</small><strong>{date(employee.termination_date)}</strong></div>}
           <div><small>Cargo / função</small><strong>{employee.function_name || employee.job_title || "Não informado"}{employee.function_classification ? ` · Classe ${employee.function_classification}` : ""}</strong></div>
           <div><small>Setor</small><strong>{employee.department || "Não informado"}</strong></div>
-          <div><small>Unidade</small><strong>{employee.unit || "Não informada"}</strong></div>
+          <div><small>Base operacional</small><strong>{employee.unit || "Sem base atribuída"}</strong></div>
         </section>
 
         <section className="employee-epi-declaration" aria-labelledby="employee-epi-declaration-title">

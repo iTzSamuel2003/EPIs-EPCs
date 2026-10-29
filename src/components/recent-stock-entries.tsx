@@ -22,7 +22,7 @@ type CaCertificate = {
   synced_at: string | null;
 };
 type EntryItem = { lot_id: string; lot_number: string; material_name: string; material_code: string; unit: string; quantity: string; available: number; unit_cost: string; manufactured_at: string; expires_at: string; ca_number: string; ca_expires_at: string; ca_certificate: CaCertificate | null; ca_lookup_failed: boolean };
-type Entry = { id: string; invoice_number: string | null; without_invoice: boolean; issued_at: string | null; notes: string | null; created_by: string | null; created_at: string | null; created_by_name: string; items: EntryItem[] };
+type Entry = { id: string; base_id: string; base_name: string; invoice_number: string | null; without_invoice: boolean; issued_at: string | null; notes: string | null; created_by: string | null; created_at: string | null; created_by_name: string; items: EntryItem[] };
 type Props = { refreshKey?: number };
 
 function date(value: string | null) { return value ? new Date(`${value}T00:00:00`).toLocaleDateString("pt-BR") : "—"; }
@@ -92,10 +92,14 @@ export function RecentStockEntries({ refreshKey = 0 }: Props) {
     setEntries([]);
     try {
     const supabase = createClient();
-    const { data: invoiceData, error: invoiceError } = await supabase.from("stock_invoices").select("id,invoice_number,without_invoice,issued_at,notes,created_by,created_at").order("created_at", { ascending: false }).limit(10);
+    const [{ data: invoiceData, error: invoiceError }, { data: baseData, error: baseError }] = await Promise.all([
+      supabase.from("stock_invoices").select("id,base_id,invoice_number,without_invoice,issued_at,notes,created_by,created_at").order("created_at", { ascending: false }).limit(10),
+      supabase.from("organization_bases").select("id,name"),
+    ]);
     if (!isCurrent()) return;
-    if (invoiceError) { setError(friendlyError(invoiceError, "Não foi possível carregar as entradas.")); return; }
-    const invoices = (invoiceData ?? []) as Array<{ id: string; invoice_number: string | null; without_invoice: boolean; issued_at: string | null; notes: string | null; created_by: string | null; created_at: string | null }>;
+    if (invoiceError || baseError) { setError(friendlyError(invoiceError ?? baseError, "Não foi possível carregar as entradas.")); return; }
+    const baseNames = new Map(((baseData ?? []) as Array<{ id: string; name: string }>).map((base) => [base.id, base.name]));
+    const invoices = (invoiceData ?? []) as Array<{ id: string; base_id: string; invoice_number: string | null; without_invoice: boolean; issued_at: string | null; notes: string | null; created_by: string | null; created_at: string | null }>;
     const ids = invoices.map((invoice) => invoice.id);
     const { data: lotData, error: lotError } = ids.length ? await supabase.from("material_lots").select("id,invoice_id,lot_number,received_quantity,available_quantity,unit_cost,manufactured_at,expires_at,ca_number,ca_expires_at,materials(name,internal_code,unit)").in("invoice_id", ids).order("created_at") : { data: [], error: null };
     if (!isCurrent()) return;
@@ -119,6 +123,8 @@ export function RecentStockEntries({ refreshKey = 0 }: Props) {
     );
     setEntries(invoices.map((invoice) => ({
       id: invoice.id,
+      base_id: invoice.base_id,
+      base_name: baseNames.get(invoice.base_id) || "Base não identificada",
       invoice_number: invoice.invoice_number,
       without_invoice: invoice.without_invoice,
       issued_at: invoice.issued_at,
@@ -238,7 +244,7 @@ export function RecentStockEntries({ refreshKey = 0 }: Props) {
                   <td>{date(entry.issued_at)}</td>
                   <td>
                     <strong>{entry.without_invoice ? "Sem nota fiscal" : entry.invoice_number}</strong>
-                    <small>{entry.notes || "Sem observações"}</small>
+                    <small>{entry.base_name} · {entry.notes || "Sem observações"}</small>
                   </td>
                   <td>{entry.items.reduce((sum, item) => sum + Number(item.quantity), 0)}</td>
                   <td className="recent-entry-creator">

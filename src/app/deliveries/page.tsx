@@ -10,10 +10,10 @@ import { DeliveryTermPrintSheet, type DeliveryTermSnapshot } from "@/components/
 import { uploadTransactionPhotos } from "@/lib/transaction-attachments";
 import { FeedbackMessage } from "@/components/feedback-message";
 
-type Employee = { id: string; full_name: string; registration: string; department: string | null; job_title?: string | null; function_name?: string | null };
-type Material = { id: string; name: string; internal_code: string; unit: string; available_quantity: number; replacement_interval_days: number | null; test_required: boolean; report_required: boolean; ca_required: boolean };
+type Employee = { id: string; full_name: string; registration: string; department: string | null; unit: string | null; base_id: string | null; job_title?: string | null; function_name?: string | null };
+type Material = { id: string; name: string; internal_code: string; unit: string; replacement_interval_days: number | null; test_required: boolean; report_required: boolean; ca_required: boolean };
 type MaterialVariant = { id: string; material_id: string; name: string; size: string | null; active: boolean };
-type TestLot = { material_id: string; variant_id: string | null; lot_number: string; entry_date: string; available_quantity: number; expires_at: string | null; ca_number: string | null; ca_expires_at: string | null; test_number: string | null; test_performed_at: string | null; test_expires_at: string | null; test_report_number: string | null };
+type TestLot = { base_id: string; material_id: string; variant_id: string | null; lot_number: string; entry_date: string; available_quantity: number; expires_at: string | null; ca_number: string | null; ca_expires_at: string | null; test_number: string | null; test_performed_at: string | null; test_expires_at: string | null; test_report_number: string | null };
 type CaCertificate = { ca_number: string; valid_until: string | null; status: string | null };
 type DeliveryItem = { material_id: string; materialQuery: string; variant_id: string; quantity: string; expected_replacement_at: string };
 type FunctionTemplate = { id: string; name: string; items: Array<{ material_name: string; material_id: string | null; quantity: number }> };
@@ -64,9 +64,9 @@ export default function DeliveriesPage() {
     try {
       const supabase = createClient();
       const [{ data: employeeData, error: employeeError }, { data: materialData, error: materialError }, { data: lotData, error: lotError }, { data: templateData, error: templateError }] = await Promise.all([
-        supabase.from("employees").select("id, full_name, registration, department, job_title, function_name").eq("status", "active").order("full_name"),
+        supabase.from("employees").select("id, full_name, registration, department, unit, base_id, job_title, function_name").eq("status", "active").order("full_name"),
         supabase.from("materials").select("id, name, internal_code, unit, replacement_interval_days, test_required, report_required, ca_required").eq("status", "active").order("name"),
-        supabase.from("material_lots").select("material_id, variant_id, lot_number, entry_date, expires_at, available_quantity, ca_number, ca_expires_at, test_number, test_performed_at, test_expires_at, test_report_number"),
+        supabase.from("material_lots").select("base_id, material_id, variant_id, lot_number, entry_date, expires_at, available_quantity, ca_number, ca_expires_at, test_number, test_performed_at, test_expires_at, test_report_number"),
         supabase.from("function_templates").select("id, name, function_template_items(material_name, material_id, quantity)").order("name"),
       ]);
       if (!mountedRef.current || requestId !== loadOptionsRequestRef.current) return;
@@ -77,10 +77,6 @@ export default function DeliveriesPage() {
         setError(friendlyError(firstError, "Não foi possível carregar os dados."));
         return;
       }
-      const availableByMaterial = (lotData ?? []).reduce<Record<string, number>>((sum, lot) => {
-        sum[lot.material_id] = (sum[lot.material_id] ?? 0) + Number(lot.available_quantity);
-        return sum;
-      }, {});
       const caNumbers = [...new Set((lotData ?? []).map((lot) => lot.ca_number?.trim()).filter((number): number is string => Boolean(number)))];
       if (caNumbers.length) {
         const { data: certificateData } = await supabase.from("ca_certificates").select("ca_number,valid_until,status").in("ca_number", caNumbers);
@@ -91,7 +87,7 @@ export default function DeliveriesPage() {
       }
       setEmployees((employeeData ?? []) as Employee[]);
       setTestLots((lotData ?? []) as TestLot[]);
-      setMaterials(((materialData ?? []) as Array<Omit<Material, "available_quantity">>).map((material) => ({ ...material, available_quantity: availableByMaterial[material.id] ?? 0 })));
+      setMaterials((materialData ?? []) as Material[]);
       setTemplates(((templateData ?? []) as Array<{ id: string; name: string; function_template_items: Array<{ material_name: string; material_id: string | null; quantity: number }> }>).map((template) => ({ id: template.id, name: template.name, items: template.function_template_items })));
     } catch (unexpectedError) {
       if (mountedRef.current && requestId === loadOptionsRequestRef.current) {
@@ -183,9 +179,10 @@ export default function DeliveriesPage() {
   function variantsFor(materialId: string) { return variants.filter((variant) => variant.material_id === materialId && variant.active); }
   function eligibleLotsFor(materialId: string, variantId: string | null = null) {
     const material = materials.find((candidate) => candidate.id === materialId);
-    if (!material) return [];
+    const selectedEmployee = employees.find((employee) => employee.id === employeeId);
+    if (!material || !selectedEmployee?.base_id) return [];
     return testLots.filter((lot) => {
-      if (lot.material_id !== materialId || lot.variant_id !== variantId || Number(lot.available_quantity) <= 0) return false;
+      if (lot.base_id !== selectedEmployee.base_id || lot.material_id !== materialId || lot.variant_id !== variantId || Number(lot.available_quantity) <= 0) return false;
       if (lot.expires_at && lot.expires_at < deliveredAt) return false;
       if (material.ca_required) {
         const caNumber = lot.ca_number?.trim() ?? "";
@@ -224,6 +221,7 @@ export default function DeliveriesPage() {
   const requestedByStockKey = items.reduce<Record<string, number>>((sum, item) => { const key = item.variant_id || item.material_id; const quantity = Number(item.quantity); if (key) sum[key] = (sum[key] ?? 0) + (Number.isFinite(quantity) ? quantity : 0); return sum; }, {});
   const formLoading = loading || variantsLoading;
   const hasInsufficientStock = items.some((item) => { const available = availableFor(item); const requested = requestedByStockKey[item.variant_id || item.material_id] ?? Number(item.quantity); return !item.material_id || !Number.isInteger(Number(item.quantity)) || available <= 0 || requested <= 0 || requested > available; });
+  const selectedEmployee = employees.find((employee) => employee.id === employeeId);
   const hasMissingRequiredVariant = items.some((item) => variantsFor(item.material_id).length > 0 && !item.variant_id);
   async function generatePendingLink(pendingId: string) {
     setPendingBusyId(pendingId); setPendingError(""); setPendingFeedback("");
@@ -305,8 +303,8 @@ export default function DeliveriesPage() {
       setError("Aguarde o carregamento completo do catálogo e do estoque.");
       return;
     }
-    if (!employeeId) {
-      setError("Selecione o funcionário que receberá os equipamentos.");
+    if (!employeeId || !selectedEmployee?.base_id) {
+      setError(!employeeId ? "Selecione o funcionário que receberá os equipamentos." : "Este funcionário ainda não tem base atribuída. Solicite ao RH a vinculação antes de gerar a entrega.");
       return;
     }
     if (!isValidDateValue(deliveredAt)) {
@@ -390,7 +388,7 @@ export default function DeliveriesPage() {
       <div className="entry-intro"><div className="entry-icon"><ClipboardCheck size={22} /></div><div><h2>Ficha de entrega</h2><p>Prepare o recibo com os dados do lote (CA e ensaio). O colaborador assina no ato em que recebe os materiais.</p></div></div>
       <form className="material-form" onSubmit={submit}>
         <div className="form-grid three">
-          <label className="employee-picker">Funcionário<div className="employee-picker-control"><input value={employeeQuery} onChange={(event) => { setEmployeeQuery(event.target.value); setEmployeeId(""); setEmployeeFunction(""); setEmployeeSuggestionsOpen(true); }} onFocus={() => { if (!employeeId) setEmployeeSuggestionsOpen(true); }} placeholder="Digite nome, matrícula ou setor" required disabled={loading} autoComplete="off" />{employeeSuggestionsOpen && employeeQuery && <div className="employee-suggestions">{filteredEmployees.map((employee) => <button type="button" key={employee.id} onMouseDown={() => selectEmployee(employee)}><strong>{employee.full_name}</strong><small>{employee.registration}{employee.department ? ` · ${employee.department}` : ""}</small></button>)}{!filteredEmployees.length && <span>Nenhum funcionário encontrado.</span>}</div>}</div>{employeeId && <><small className="employee-function-info">Matrícula: {employees.find((employee) => employee.id === employeeId)?.registration || "Não informada"}</small><small className="employee-function-info">Função: {employeeFunction || "Não informada"}</small></>}</label>
+          <label className="employee-picker">Funcionário<div className="employee-picker-control"><input value={employeeQuery} onChange={(event) => { setEmployeeQuery(event.target.value); setEmployeeId(""); setEmployeeFunction(""); setEmployeeSuggestionsOpen(true); }} onFocus={() => { if (!employeeId) setEmployeeSuggestionsOpen(true); }} placeholder="Digite nome, matrícula ou setor" required disabled={loading} autoComplete="off" />{employeeSuggestionsOpen && employeeQuery && <div className="employee-suggestions">{filteredEmployees.map((employee) => <button type="button" key={employee.id} onMouseDown={() => selectEmployee(employee)}><strong>{employee.full_name}</strong><small>{employee.registration}{employee.department ? ` · ${employee.department}` : ""}{employee.unit ? ` · ${employee.unit}` : " · Sem base atribuída"}</small></button>)}{!filteredEmployees.length && <span>Nenhum funcionário encontrado.</span>}</div>}</div>{employeeId && <><small className="employee-function-info">Matrícula: {selectedEmployee?.registration || "Não informada"}</small><small className="employee-function-info">Função: {employeeFunction || "Não informada"}</small><small className="employee-function-info">Base: {selectedEmployee?.unit || "Sem base atribuída"}</small></>}</label>
           <label>Data da entrega<input type="date" value={deliveredAt} onChange={(event) => updateDeliveryDate(event.target.value)} required /></label>
           <label>Motivo<select value={reason} onChange={(event) => setReason(event.target.value)}>{reasons.map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select></label>
         </div>
@@ -422,7 +420,7 @@ export default function DeliveriesPage() {
         })}</div>
         <div className="transaction-photo-field"><div><strong>Fotos da entrega</strong><span>Opcional: registre os materiais entregues.</span></div><label className="action-button upload-term-button">Adicionar fotos<input type="file" accept="image/jpeg,image/png,image/webp" multiple onChange={selectPhotos} /></label>{photoFiles.length > 0 && <div className="transaction-photo-list">{photoFiles.map((file, index) => <span key={`${file.name}-${index}`}>{file.name}<button type="button" onClick={() => setPhotoFiles((current) => current.filter((_, fileIndex) => fileIndex !== index))}>×</button></span>)}</div>}</div>
         <label>Observações<textarea value={notes} onChange={(event) => setNotes(event.target.value)} placeholder="Termo, condições ou observações da entrega" rows={3} /></label>
-        <div className="modal-actions"><Link className="secondary-button" href="/stock">Consultar estoque</Link><button className="primary-button" disabled={saving || loading || !employees.length || !materials.length || hasInsufficientStock || hasMissingRequiredVariant}>{saving ? "Gerando ficha..." : "Gerar ficha para assinatura"}<Check size={16} /></button></div>
+        <div className="modal-actions"><Link className="secondary-button" href="/stock">Consultar estoque</Link><button className="primary-button" disabled={saving || loading || !employees.length || !materials.length || !selectedEmployee?.base_id || hasInsufficientStock || hasMissingRequiredVariant}>{saving ? "Gerando ficha..." : "Gerar ficha para assinatura"}<Check size={16} /></button></div>
       </form>
     </section>
     <RecentDeliveries onPrintTerm={printDeliverySheet} />

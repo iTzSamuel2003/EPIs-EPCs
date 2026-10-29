@@ -9,7 +9,7 @@ import { FeedbackMessage } from "@/components/feedback-message";
 import { createReturnTermDocument, ReturnTermOrganization } from "@/lib/return-term-document";
 
 type ReturnItem = { quantity: number; equipment_condition: string; destination: string; incident_type: string; incident_description: string | null; deduction_requested: boolean; material: { name: string; unit: string } | null; delivery_item: { variant: { name: string; size: string | null } | null; delivery: { delivered_at: string } | null; lot: { lot_number: string | null; ca_number: string | null; ca_expires_at: string | null; test_number: string | null; test_report_number: string | null; test_performed_at: string | null; test_expires_at: string | null } | null; units: Array<{ unit_identifier: string | null; valid_until: string | null; ca_number: string | null; ca_expires_at: string | null; test_number: string | null; test_report_number: string | null; test_performed_at: string | null }> | null } | null };
-type ReturnRecord = { id: string; returned_at: string; reason: string; notes: string | null; term_file_path: string | null; term_signature_method: string | null; term_signed_at: string | null; term_signer_name?: string | null; employee: { full_name: string; registration: string | null; job_title?: string | null; function_name?: string | null; department?: string | null; admission_date?: string | null; termination_date?: string | null; status?: string | null } | null; return_accountability: { responsible_name: string | null; employee_signature_name: string | null; signed_at: string | null } | null; return_items: ReturnItem[] };
+type ReturnRecord = { id: string; base_id: string; returned_at: string; reason: string; notes: string | null; term_file_path: string | null; term_signature_method: string | null; term_signed_at: string | null; term_signer_name?: string | null; employee: { full_name: string; registration: string | null; job_title?: string | null; function_name?: string | null; department?: string | null; admission_date?: string | null; termination_date?: string | null; status?: string | null } | null; return_accountability: { responsible_name: string | null; employee_signature_name: string | null; signed_at: string | null } | null; return_items: ReturnItem[] };
 
 const reasons: Record<string, string> = { replacement: "Substituição", termination: "Desligamento", role_change: "Alteração de função", damaged: "Equipamento danificado", voluntary: "Devolução voluntária", other: "Outro" };
 const date = (value: string) => new Date(`${value}T00:00:00`).toLocaleDateString("pt-BR");
@@ -35,6 +35,7 @@ function toTermItem(item: ReturnItem) {
 
 export function RecentReturns({ organization }: { organization: ReturnTermOrganization }) {
   const [returns, setReturns] = useState<ReturnRecord[]>([]);
+  const [baseNames, setBaseNames] = useState<Record<string, string>>({});
   const [uploadingId, setUploadingId] = useState("");
   const [downloadingId, setDownloadingId] = useState("");
   const [loading, setLoading] = useState(true);
@@ -56,12 +57,16 @@ export function RecentReturns({ organization }: { organization: ReturnTermOrgani
         if (!silent && active && requestId === requestRef.current) { setError(friendlyError(authError, "Sua sessão expirou. Entre novamente.")); setLoading(false); }
         return;
       }
-      const { data, error: loadError } = await supabase.from("returns").select("id,returned_at,reason,notes,term_file_path,term_signature_method,term_signed_at,term_signer_name,employee:employees(full_name,registration,job_title,function_name,department,admission_date,termination_date,status),return_accountability(responsible_name,employee_signature_name,signed_at),return_items(quantity,equipment_condition,destination,incident_type,incident_description,deduction_requested,material:materials(name,unit),delivery_item:delivery_items(variant:material_variants(name,size),delivery:deliveries(delivered_at),lot:material_lots(lot_number,ca_number,ca_expires_at,test_number,test_report_number,test_performed_at,test_expires_at),units:material_units(unit_identifier,valid_until,ca_number,ca_expires_at,test_number,test_report_number,test_performed_at)))").order("returned_at", { ascending: false }).order("created_at", { ascending: false }).limit(10);
+      const [{ data, error: loadError }, { data: bases, error: basesError }] = await Promise.all([
+        supabase.from("returns").select("id,base_id,returned_at,reason,notes,term_file_path,term_signature_method,term_signed_at,term_signer_name,employee:employees(full_name,registration,job_title,function_name,department,admission_date,termination_date,status),return_accountability(responsible_name,employee_signature_name,signed_at),return_items(quantity,equipment_condition,destination,incident_type,incident_description,deduction_requested,material:materials(name,unit),delivery_item:delivery_items(variant:material_variants(name,size),delivery:deliveries(delivered_at),lot:material_lots(lot_number,ca_number,ca_expires_at,test_number,test_report_number,test_performed_at,test_expires_at),units:material_units(unit_identifier,valid_until,ca_number,ca_expires_at,test_number,test_report_number,test_performed_at)))").order("returned_at", { ascending: false }).order("created_at", { ascending: false }).limit(10),
+        supabase.from("organization_bases").select("id,name"),
+      ]);
       if (!active || requestId !== requestRef.current) return;
-      if (loadError) {
-        if (!silent) setError(friendlyError(loadError, "Não foi possível carregar as devoluções."));
+      if (loadError || basesError) {
+        if (!silent) setError(friendlyError(loadError ?? basesError, "Não foi possível carregar as devoluções."));
       } else {
         setReturns((data ?? []) as unknown as ReturnRecord[]);
+        setBaseNames(Object.fromEntries((bases ?? []).map((base) => [base.id, base.name])));
         setError("");
       }
       if (!silent) setLoading(false);
@@ -157,7 +162,7 @@ export function RecentReturns({ organization }: { organization: ReturnTermOrgani
                 <div className="recent-delivery-icon recent-return-icon"><UserRound size={17} aria-hidden="true" /></div>
                 <div className="recent-delivery-main">
                   <strong>{item.employee?.full_name || "Funcionário não informado"}</strong>
-                  <small>{item.employee?.registration ? `Matrícula ${item.employee.registration} · ` : ""}{date(item.returned_at)} · {reasons[item.reason] || item.reason}</small>
+                  <small>{item.employee?.registration ? `Matrícula ${item.employee.registration} · ` : ""}{date(item.returned_at)} · {reasons[item.reason] || item.reason} · {baseNames[item.base_id] || "Base não identificada"}</small>
                   <div className="recent-delivery-materials" aria-label="Materiais devolvidos">{item.return_items.map((returnItem, index) => { const variant = returnItem.delivery_item?.variant; return <span key={`${item.id}-${index}`}>{returnItem.quantity}x {returnItem.material?.name || "Material"}{variant ? ` · ${variant.size || variant.name}` : ""}{returnItem.incident_type !== "normal" ? ` · ${returnItem.incident_type}` : ""}</span>; })}</div>
                   <span className={`delivery-term-status ${item.term_signed_at ? "complete" : "pending"}`}>{item.term_signed_at ? <><Check size={12} aria-hidden="true" /> {item.term_signature_method === "physical_upload" ? "Assinado fisicamente" : "Assinado digitalmente"}</> : "Termo pendente de assinatura"}</span>
                   {hasMissingItem && !item.term_signed_at && <small className="return-line-legal-note">Baixa do material extraviado/furtado aguardando assinatura do termo.</small>}

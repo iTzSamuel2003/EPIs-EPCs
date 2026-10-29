@@ -32,6 +32,7 @@ type Employee = {
 
 type Delivery = {
   id: string;
+  base_id: string;
   delivered_at: string;
   reason: string;
   notes: string | null;
@@ -121,6 +122,7 @@ function buildPrintSnapshot(delivery: Delivery, organization: Organization | nul
 
 export function RecentDeliveries({ onPrintTerm }: { onPrintTerm: (snapshot: DeliveryTermSnapshot) => Promise<void> }) {
   const [deliveries, setDeliveries] = useState<Delivery[]>([]);
+  const [baseNames, setBaseNames] = useState<Record<string, string>>({});
   const [organization, setOrganization] = useState<Organization | null>(null);
   const [responsibleName, setResponsibleName] = useState("");
   const [preparingId, setPreparingId] = useState("");
@@ -146,15 +148,17 @@ export function RecentDeliveries({ onPrintTerm }: { onPrintTerm: (snapshot: Deli
         const { data: auth, error: authError } = await supabase.auth.getUser();
         if (authError || !auth.user) throw authError ?? new Error("Sua sessão expirou. Entre novamente.");
 
-        const [{ data, error: loadError }, { data: profile, error: profileError }] = await Promise.all([
-          supabase.from("deliveries").select("id,delivered_at,reason,notes,term_file_path,term_uploaded_at,term_signature_method,term_signed_at,employee:employees(full_name,registration,department,job_title,function_name,admission_date,termination_date,status),delivery_items(quantity,test_performed_at,test_expires_at,expected_replacement_at,material:materials(name,unit,internal_code),variant:material_variants(name,size),lot:material_lots(ca_number,ca_expires_at,test_number,test_report_number,test_performed_at,test_expires_at),material_units(unit_identifier,valid_until,test_performed_at,test_number,test_report_number,ca_number,ca_expires_at))").order("delivered_at", { ascending: false }).order("created_at", { ascending: false }).limit(10),
+        const [{ data, error: loadError }, { data: profile, error: profileError }, { data: bases, error: basesError }] = await Promise.all([
+          supabase.from("deliveries").select("id,base_id,delivered_at,reason,notes,term_file_path,term_uploaded_at,term_signature_method,term_signed_at,employee:employees(full_name,registration,department,job_title,function_name,admission_date,termination_date,status),delivery_items(quantity,test_performed_at,test_expires_at,expected_replacement_at,material:materials(name,unit,internal_code),variant:material_variants(name,size),lot:material_lots(ca_number,ca_expires_at,test_number,test_report_number,test_performed_at,test_expires_at),material_units(unit_identifier,valid_until,test_performed_at,test_number,test_report_number,ca_number,ca_expires_at))").order("delivered_at", { ascending: false }).order("created_at", { ascending: false }).limit(10),
           supabase.from("profiles").select("organization_id,full_name").eq("id", auth.user.id).maybeSingle(),
+          supabase.from("organization_bases").select("id,name"),
         ]);
 
         if (!active || requestId !== requestRef.current) return;
-        if (loadError || profileError) throw loadError ?? profileError;
+        if (loadError || profileError || basesError) throw loadError ?? profileError ?? basesError;
 
         setDeliveries((data ?? []) as unknown as Delivery[]);
+        setBaseNames(Object.fromEntries((bases ?? []).map((base) => [base.id, base.name])));
         setResponsibleName(profile?.full_name ?? "");
 
         if (profile?.organization_id) {
@@ -224,7 +228,7 @@ export function RecentDeliveries({ onPrintTerm }: { onPrintTerm: (snapshot: Deli
                 <div className="recent-delivery-icon"><UserRound size={17} aria-hidden="true" /></div>
                 <div className="recent-delivery-main">
                   <strong>{employeeName}</strong>
-                  <small>{delivery.employee?.registration ? `Matrícula ${delivery.employee.registration} · ` : ""}{date(delivery.delivered_at)} · {reasons[delivery.reason] || delivery.reason}</small>
+                  <small>{delivery.employee?.registration ? `Matrícula ${delivery.employee.registration} · ` : ""}{date(delivery.delivered_at)} · {reasons[delivery.reason] || delivery.reason} · {baseNames[delivery.base_id] || "Base não identificada"}</small>
                   <div className="recent-delivery-materials" aria-label="Materiais entregues">
                     {delivery.delivery_items.map((item, index) => (
                       <span key={`${delivery.id}-${index}`}>

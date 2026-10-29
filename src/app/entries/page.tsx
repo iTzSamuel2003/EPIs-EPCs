@@ -11,6 +11,8 @@ import {
 import Link from "next/link";
 import { RecentStockEntries } from "@/components/recent-stock-entries";
 import { FeedbackMessage } from "@/components/feedback-message";
+import { BaseSelect } from "@/components/base-select";
+import { useBaseContext } from "@/lib/use-base-context";
 import { createClient } from "@/lib/supabase/client";
 import { friendlyError } from "@/lib/ui-feedback";
 import { getContractAnnexNumbers, type ContractAnnexAssociation } from "@/lib/contract-annex";
@@ -135,6 +137,7 @@ function certificateSituation(certificate: CaCertificate) {
 }
 
 export default function EntriesPage() {
+  const { accessibleBases, selectedBaseId, chooseBase, loading: basesLoading } = useBaseContext();
   const [materials, setMaterials] = useState<MaterialOption[]>([]);
   const [variants, setVariants] = useState<MaterialVariant[]>([]);
   const [items, setItems] = useState<EntryItem[]>([newItem()]);
@@ -388,6 +391,10 @@ export default function EntriesPage() {
     setError("");
     setSuccess("");
     setCanRetryMaterials(false);
+    if (!selectedBaseId) {
+      setError("Selecione uma base operacional antes de registrar a entrada.");
+      return;
+    }
     if (!isValidDateValue(entryDate)) {
       setError("Informe uma data de entrada válida.");
       return;
@@ -599,7 +606,7 @@ export default function EntriesPage() {
           setError("Não foi possível identificar a organização do usuário.");
           return;
         }
-        uploadedPath = `${profile.organization_id}/${crypto.randomUUID()}-${invoiceFile.name.replace(/[^a-zA-Z0-9._-]/g, "_")}`;
+        uploadedPath = `${profile.organization_id}/${selectedBaseId}/${crypto.randomUUID()}-${invoiceFile.name.replace(/[^a-zA-Z0-9._-]/g, "_")}`;
         const { error: uploadError } = await supabase.storage
           .from("invoice-attachments")
           .upload(uploadedPath, invoiceFile, {
@@ -625,8 +632,9 @@ export default function EntriesPage() {
         }
       }
       const { error: entryError } = await supabase.rpc(
-        "register_stock_entry_batch",
+        "register_stock_entry_batch_at_base",
         {
+          p_base_id: selectedBaseId,
           p_invoice_number: invoiceNumber || null,
           p_entry_date: entryDate || null,
           p_items: entryItems,
@@ -722,6 +730,7 @@ export default function EntriesPage() {
           aria-busy={loading || saving}
         >
           <div className="form-grid two">
+            <BaseSelect bases={accessibleBases} value={selectedBaseId} onChange={chooseBase} />
             <label>
               Número da nota fiscal (opcional)
               <input
@@ -1184,7 +1193,7 @@ export default function EntriesPage() {
             </button>
             <button
               className="primary-button"
-              disabled={saving || loading || !materials.length}
+              disabled={saving || loading || basesLoading || !selectedBaseId || !materials.length}
             >
               {saving ? "Registrando..." : "Registrar entrada"}
               <Plus size={16} />
