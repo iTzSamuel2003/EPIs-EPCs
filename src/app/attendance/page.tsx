@@ -1,7 +1,8 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { CalendarDays, Check, Clock3, LoaderCircle, Plus, Save, Search, ShieldCheck, UserRound, X } from "lucide-react";
+import { CalendarDays, Check, Clock3, LoaderCircle, Plus, Save, ShieldCheck, UserRound, X } from "lucide-react";
+import { EmployeeAutocomplete } from "@/components/employee-autocomplete";
 import { createClient } from "@/lib/supabase/client";
 
 type Employee = {
@@ -144,7 +145,6 @@ export default function AttendancePage() {
   const [organizationId, setOrganizationId] = useState("");
   const [selectedEmployeeId, setSelectedEmployeeId] = useState("");
   const [scopeName, setScopeName] = useState("Geral");
-  const [employeeSearch, setEmployeeSearch] = useState("");
   const [periodStart, setPeriodStart] = useState("");
   const [periodEnd, setPeriodEnd] = useState("");
   const [occurrences, setOccurrences] = useState<OccurrenceDraft[]>([]);
@@ -169,12 +169,6 @@ export default function AttendancePage() {
   const selectedRule = selectedEmployee ? findFunctionRule(rules, selectedFunctionName, scopeName) : null;
   const scopeOptions = useMemo(() => ["Geral", ...Array.from(new Map(rules.filter((rule) => ruleKey(rule.scope_name) !== "geral").map((rule) => [ruleKey(rule.scope_name), rule.scope_name])).values()).sort((a, b) => a.localeCompare(b, "pt-BR"))], [rules]);
   const validPeriod = Boolean(periodStart && periodEnd && periodEnd >= periodStart && daysInPeriod(periodStart, periodEnd) <= 31);
-  const filteredEmployees = useMemo(() => {
-    const query = employeeSearch.toLocaleLowerCase("pt-BR").trim();
-    if (!query) return employees;
-    return employees.filter((employee) => `${employee.full_name} ${employee.registration ?? ""}`.toLocaleLowerCase("pt-BR").includes(query));
-  }, [employeeSearch, employees]);
-
   const metrics = useMemo(() => {
     const count = (type: OccurrenceType) => occurrences.filter((item) => item.occurrence_type === type).length;
     const days = (type: OccurrenceType) => occurrences.filter((item) => item.occurrence_type === type).reduce((total, item) => total + Number(item.days_count || 0), 0);
@@ -528,14 +522,13 @@ export default function AttendancePage() {
       <section className="panel attendance-employee-picker">
         <div className="attendance-section-heading"><div><h2>Colaborador</h2><p>Selecione a pessoa para consultar os dados e registrar o período.</p></div></div>
         <div className="attendance-picker-fields">
-          <label><span>Buscar por nome ou matrícula</span><div className="attendance-search"><Search size={16} aria-hidden="true" /><input value={employeeSearch} onChange={(event) => setEmployeeSearch(event.target.value)} placeholder="Digite o nome ou a matrícula" /></div></label>
-          <label><span>Funcionário</span><select value={selectedEmployeeId} onChange={(event) => {
-            const employee = employees.find((item) => item.id === event.target.value);
-            setSelectedEmployeeId(event.target.value);
+          <EmployeeAutocomplete label="Funcionário" employees={employees} value={selectedEmployeeId} placeholder="Digite o nome ou a matrícula" onChange={(employeeId) => {
+            const employee = employees.find((item) => item.id === employeeId);
+            setSelectedEmployeeId(employeeId);
             setScopeName(employee ? suggestedScopeForEmployee(employee, scopeOptions) : "Geral");
             setSavedRecord(false);
             setSavedSnapshot(null);
-          }}><option value="">Selecione um colaborador</option>{filteredEmployees.map((employee) => <option key={employee.id} value={employee.id}>{employee.full_name}{employee.registration ? ` · ${employee.registration}` : ""}</option>)}</select></label>
+          }} />
         </div>
         {selectedEmployee && <div className="attendance-employee-card">
           <div className="attendance-avatar">{selectedEmployee.full_name.split(/\s+/).slice(0, 2).map((part) => part[0]).join("").toLocaleUpperCase("pt-BR")}</div>

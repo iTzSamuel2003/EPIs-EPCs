@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState, type FormEvent } from "react";
 import { CalendarDays, ChevronLeft, ChevronRight, Clock3, Download, History, LoaderCircle, Paperclip, Plus, RotateCcw, ShieldCheck, UserRound, X } from "lucide-react";
+import { EmployeeAutocomplete } from "@/components/employee-autocomplete";
 import { FeedbackMessage } from "@/components/feedback-message";
 import { createClient } from "@/lib/supabase/client";
 
@@ -95,6 +96,7 @@ export default function EmployeeHistoryPage() {
   const [events, setEvents] = useState<HistoryEvent[]>([]);
   const [totalCount, setTotalCount] = useState(0);
   const [employeeId, setEmployeeId] = useState("");
+  const [employeePickerResetKey, setEmployeePickerResetKey] = useState(0);
   const [sourceFilter, setSourceFilter] = useState("all");
   const [typeFilter, setTypeFilter] = useState("all");
   const [dateFrom, setDateFrom] = useState("");
@@ -186,6 +188,7 @@ export default function EmployeeHistoryPage() {
 
   function resetFilters() {
     setEmployeeId("");
+    setEmployeePickerResetKey((current) => current + 1);
     setSourceFilter("all");
     setTypeFilter("all");
     setDateFrom("");
@@ -323,7 +326,7 @@ export default function EmployeeHistoryPage() {
     <section className="panel employee-history-filters" aria-label="Filtros do histórico">
       <div className="employee-history-filter-heading"><div><h2>Filtrar histórico</h2><p>Escolha uma pessoa, tipo de registro ou intervalo de datas.</p></div><button className="text-action" type="button" onClick={resetFilters}>Limpar filtros</button></div>
       <div className="employee-history-filter-grid">
-        <label className="employee-history-filter-employee"><span>Colaborador</span><select value={employeeId} onChange={(event) => { setEmployeeId(event.target.value); setPage(0); }}><option value="">Todos os colaboradores</option>{employees.map((employee) => <option key={employee.id} value={employee.id}>{employee.full_name}{employee.registration ? ` · ${employee.registration}` : ""}</option>)}</select></label>
+        <EmployeeAutocomplete className="employee-history-filter-employee" label="Colaborador" employees={employees} value={employeeId} emptyLabel="Todos os colaboradores" placeholder="Digite o nome ou a matrícula" resetKey={employeePickerResetKey} onChange={(id) => { setEmployeeId(id); setPage(0); }} />
         <label><span>Origem</span><select value={sourceFilter} onChange={(event) => { setSourceFilter(event.target.value); setPage(0); }}><option value="all">Todas</option><option value="attendance">Assiduidade automática</option><option value="hr">Registro complementar de RH</option></select></label>
         <label><span>Tipo</span><select value={typeFilter} onChange={(event) => { setTypeFilter(event.target.value); setPage(0); }}><option value="all">Todos os tipos</option>{Object.entries(ATTENDANCE_LABELS).map(([value, label]) => <option key={value} value={value}>{label}</option>)}{EVENT_TYPES.map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select></label>
         <label><span>De</span><input type="date" value={dateFrom} onChange={(event) => { setDateFrom(event.target.value); setPage(0); }} /></label>
@@ -362,7 +365,7 @@ export default function EmployeeHistoryPage() {
       <section className="employee-history-modal" role="dialog" aria-modal="true" aria-labelledby="employee-history-form-title" onKeyDown={(event) => { if (event.key === "Escape" && !saving) setFormOpen(false); }}>
         <div className="employee-history-modal-heading"><div><span className="eyebrow">REGISTRO COMPLEMENTAR</span><h2 id="employee-history-form-title">Novo registro de RH</h2><p>Inclua fatos que não foram registrados na tela de Assiduidade.</p></div><button className="icon-button" type="button" onClick={() => setFormOpen(false)} disabled={saving} aria-label="Fechar formulário"><X size={19} /></button></div>
         <form onSubmit={(event) => void createRecord(event)}>
-          <label><span>Colaborador</span><select required value={formEmployeeId} onChange={(event) => setFormEmployeeId(event.target.value)}><option value="">Selecione um colaborador</option>{employees.map((employee) => <option key={employee.id} value={employee.id}>{employee.full_name}{employee.registration ? ` · ${employee.registration}` : ""}</option>)}</select></label>
+          <EmployeeAutocomplete label="Colaborador" employees={employees} value={formEmployeeId} onChange={setFormEmployeeId} placeholder="Digite o nome ou a matrícula" required />
           <div className="employee-history-form-grid"><label><span>Tipo de registro</span><select value={formType} onChange={(event) => setFormType(event.target.value as (typeof EVENT_TYPES)[number][0])}>{EVENT_TYPES.map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select></label><label><span>Data inicial</span><input type="date" required value={formDate} onChange={(event) => setFormDate(event.target.value)} /></label><label><span>Data final (se aplicável)</span><input type="date" min={formDate} value={formEndDate} onChange={(event) => setFormEndDate(event.target.value)} /></label></div>
           <label><span>Título</span><input required minLength={2} maxLength={160} value={formTitle} onChange={(event) => setFormTitle(event.target.value)} placeholder="Ex.: Suspensão disciplinar — 1 dia" /></label>
           <label><span>Descrição / observações</span><textarea maxLength={4000} rows={4} value={formDetails} onChange={(event) => setFormDetails(event.target.value)} placeholder="Registre o contexto e informações relevantes, sem incluir dados desnecessários." /></label>

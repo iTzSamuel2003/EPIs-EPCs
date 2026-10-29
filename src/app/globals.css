@@ -5525,3 +5525,20 @@ html,body{max-width:100%;overflow-x:hidden}
 @media(max-width:1050px){.asos-metrics{grid-template-columns:repeat(2,minmax(0,1fr))}.asos-guidance{grid-template-columns:38px minmax(0,1fr)}.asos-guidance>span{grid-column:2;max-width:none}}
 @media(max-width:760px){.asos-header{align-items:stretch;flex-direction:column}.asos-header .primary-button{width:100%;justify-content:center}.asos-filters{grid-template-columns:1fr}.asos-list-panel{padding:15px 12px}.asos-list-heading{align-items:flex-start}.asos-history-item{grid-template-columns:1fr;gap:8px}.asos-history-date small{padding-left:0}.asos-modal-backdrop{align-items:end;padding:0}.asos-modal{width:100%;max-height:94vh;border-radius:16px 16px 0 0;padding:19px 15px}.asos-form-grid{grid-template-columns:1fr 1fr}.asos-history-footer{align-items:flex-start;flex-direction:column}.asos-history-footer>div{gap:10px}.asos-modal-actions{flex-direction:column-reverse}.asos-modal-actions button{width:100%}}
 @media(max-width:520px){.asos-page{gap:13px}.asos-guidance{grid-template-columns:34px minmax(0,1fr);gap:9px;padding:13px}.asos-guidance-icon{width:34px;height:34px}.asos-guidance>span{font-size:8px}.asos-metrics{gap:8px}.asos-metrics article{padding:11px 12px}.asos-metrics small{font-size:8px}.asos-metrics strong{font-size:19px}.asos-list-heading{flex-direction:column}.asos-list-heading .text-action{align-self:flex-end}.asos-form-grid{grid-template-columns:1fr}.asos-history-title{flex-direction:column}.asos-history-facts{display:grid;grid-template-columns:1fr}.asos-modal-heading h2{font-size:16px}}
+.employee-autocomplete{position:relative;display:grid;gap:7px;min-width:0}
+.employee-autocomplete>label{display:grid;gap:7px;min-width:0;color:#596780;font-size:11px;font-weight:600}
+.employee-autocomplete>label>span{color:#697791}
+.employee-autocomplete-control{position:relative;display:flex;align-items:center;gap:8px;min-width:0;min-height:42px;border:1px solid #dfe4ed;border-radius:8px;background:#fff;padding:0 10px;color:#9da6b8}
+.employee-autocomplete-control:focus-within{border-color:#8d7be1;box-shadow:0 0 0 3px #7762d615}
+.employee-autocomplete-control>svg{flex:0 0 auto}
+.employee-autocomplete-control input,.employee-history-modal .employee-autocomplete-control input{flex:1;width:100%;min-width:0;min-height:40px;border:0!important;border-radius:0;background:transparent;padding:8px 0!important;color:#263654;box-shadow:none!important;font:500 12px 'DM Sans',sans-serif;outline:0}
+.employee-autocomplete-control input:focus{border:0!important;box-shadow:none!important}
+.employee-autocomplete-control input::placeholder{color:#a0a9b8;opacity:1}
+.employee-autocomplete-clear{display:grid;flex:0 0 26px;width:26px;height:26px;place-items:center;border-radius:6px;background:#f4f2fc;color:#7561ce}
+.employee-autocomplete-clear:hover{background:#ebe7fb}
+.employee-autocomplete .employee-suggestions{top:calc(100% + 5px)}
+.employee-autocomplete .employee-suggestions button[aria-selected="true"],.employee-autocomplete .employee-suggestions button:hover{background:#f2f0fc}
+.employee-autocomplete .employee-suggestions button:focus-visible{outline:2px solid #7762d6;outline-offset:-2px}
+.employee-autocomplete .employee-suggestions>span{color:#8994a9;font-size:11px}
+.employee-history-modal form>.employee-autocomplete{display:grid;gap:7px}
+.attendance-picker-fields{grid-template-columns:minmax(0,1fr)}
