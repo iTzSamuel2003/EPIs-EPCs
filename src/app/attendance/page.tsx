@@ -136,6 +136,9 @@ function parseInputMoney(value: string) {
 function ruleKey(value: string) {
   return value.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLocaleLowerCase("pt-BR").replace(/[^a-z0-9]+/g, " ").trim().replace(/\s+/g, " ");
 }
+function isElectricalOperationsSupervisor(value: string) {
+  return /^supervisor(?: de)? op(?:eracoes)? eletric/.test(ruleKey(value));
+}
 function generalAttendanceFunctionName(value: string) {
   const key = ruleKey(value);
   if (/^eletricista (?:(?:de )?linha morta|lm)(?: |$)/.test(key)) return "ELETRICISTA LINHA MORTA";
@@ -144,7 +147,7 @@ function generalAttendanceFunctionName(value: string) {
   if (/^encarregado (?:linha morta|lm)(?: |$)/.test(key)) return "ENCARREGADO LINHA MORTA";
   if (/^encarregado (?:linha viva|lv)(?: |$)/.test(key)) return "ENCARREGADO LINHA VIVA";
   if (key.startsWith("encarregado de poda")) return "ENCARREGADO DE PODA";
-  if (key.startsWith("lider de op eletric")) return "LÍDER DE OPERAÇÕES ELÉTRICAS";
+  if (isElectricalOperationsSupervisor(key) || key.startsWith("lider de op eletric")) return "SUPERVISOR DE OPERAÇÕES ELÉTRICAS";
   return null;
 }
 function buildFunctionRuleViews(rules: FunctionRule[]): FunctionRuleView[] {
@@ -181,6 +184,7 @@ function functionMatchRank(ruleName: string, employeeFunction: string) {
   const rule = ruleKey(ruleName);
   const employee = ruleKey(employeeFunction);
   if (rule === employee) return 0;
+  if (isElectricalOperationsSupervisor(rule) && isElectricalOperationsSupervisor(employee)) return 1;
   if (rule === "eletricista" && employee.startsWith("eletricista ") && !employee.startsWith("eletricista podador")) return 1;
   if (rule === "eletricista podador" && employee.startsWith("eletricista podador")) return 1;
   if (rule === "ajudante" && employee.startsWith("ajudante")) return 1;
@@ -245,7 +249,7 @@ function isAttendanceTargetFunction(functionName: string) {
   const key = ruleKey(functionName);
   return /^eletricista(?: |$)/.test(key) ||
     /^encarregad[oa](?:$| (?:lm|lv|linha morta|linha viva|de poda|i{1,3}|iv|v|vi)(?: |$))/.test(key) ||
-    key.startsWith("lider de op eletric");
+    isElectricalOperationsSupervisor(key);
 }
 function attendanceRuleGroup(employee: Employee) {
   const role = ruleKey(employeeFunction(employee));
