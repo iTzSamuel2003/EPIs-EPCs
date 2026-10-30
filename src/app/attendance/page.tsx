@@ -62,6 +62,20 @@ type PeriodSummaryOccurrence = {
   missing_time_record: boolean;
   convocation_notice_hours: number | null;
 };
+type PeriodSummaryRow = {
+  id: string;
+  employee_id: string;
+  employee: Employee;
+  function_name_snapshot: string;
+  scope_name_snapshot: string;
+  receives_attendance_snapshot: boolean;
+  fullAmount: number | null;
+  reductionAmount: number;
+  estimatedAmount: number | null;
+  reductionCriteria: string;
+  registered: boolean;
+  scopeAmbiguous: boolean;
+};
 
 const occurrenceOptions: Array<[OccurrenceType, string]> = [
   ["late", "Atraso na jornada"],
@@ -224,6 +238,56 @@ function officialReductionPercentages(occurrences: OccurrenceDraft[], collective
   const safety = collective.safety_status === "does_not_meet" ? 100 : 0;
   return { individual, collective: Math.min(100, quality + service + safety) };
 }
+function isAttendanceTargetFunction(functionName: string) {
+  const key = ruleKey(functionName);
+  return /^eletricista(?: |$)/.test(key) ||
+    /^encarregad[oa](?:$| (?:lm|lv|linha morta|linha viva|de poda|i{1,3}|iv|v|vi)(?: |$))/.test(key) ||
+    key.startsWith("lider de op eletric");
+}
+function attendanceRuleGroup(employee: Employee) {
+  const role = ruleKey(employeeFunction(employee));
+  const department = ruleKey(employee.department ?? "");
+  if (department.includes("poda") || role.includes("podador") || role.includes("de poda")) return "poda";
+  if (department.includes("construcao") || /(?:^| )(?:lm|lv|linha morta|linha viva)(?: |$)/.test(role)) return "cm";
+  return null;
+}
+function resolveAttendanceRule(employee: Employee, rules: FunctionRule[], scopes: string[], scopeOverride?: string | null) {
+  if (!isAttendanceTargetFunction(employeeFunction(employee))) return { rule: null, ambiguous: false };
+  const functionName = employeeFunction(employee);
+  const matchingRules = rules.filter((rule) => functionMatchRank(rule.function_name, functionName) !== null);
+  const group = attendanceRuleGroup(employee);
+  const groupMatches = group === "poda"
+    ? matchingRules.filter((rule) => ruleKey(rule.scope_name).startsWith("poda "))
+    : group === "cm"
+      ? matchingRules.filter((rule) => ruleKey(rule.scope_name).startsWith("c m "))
+      : matchingRules;
+  const preferredScope = scopeOverride || suggestedScopeForEmployee(employee, scopes);
+  const preferredMatches = preferredScope && ruleKey(preferredScope) !== "geral"
+    ? groupMatches.filter((rule) => ruleKey(rule.scope_name) === ruleKey(preferredScope))
+    : [];
+  if (preferredMatches.length) {
+    const best = [...preferredMatches].sort((a, b) => functionMatchRank(a.function_name, functionName)! - functionMatchRank(b.function_name, functionName)! || ruleKey(b.function_name).length - ruleKey(a.function_name).length)[0];
+    return { rule: best.active && best.receives_attendance ? best : null, ambiguous: false };
+  }
+
+  const sourceMatches = groupMatches.length
+    ? groupMatches
+    : matchingRules.filter((rule) => ruleKey(rule.scope_name) === "geral");
+  const bestPerScope = new Map<string, FunctionRule>();
+  for (const rule of sourceMatches) {
+    const scopeKey = ruleKey(rule.scope_name);
+    const current = bestPerScope.get(scopeKey);
+    if (!current || functionMatchRank(rule.function_name, functionName)! < functionMatchRank(current.function_name, functionName)! || (functionMatchRank(rule.function_name, functionName) === functionMatchRank(current.function_name, functionName) && ruleKey(rule.function_name).length > ruleKey(current.function_name).length)) {
+      bestPerScope.set(scopeKey, rule);
+    }
+  }
+  const eligibleRules = Array.from(bestPerScope.values()).filter((rule) => rule.active && rule.receives_attendance);
+  if (!eligibleRules.length) return { rule: null, ambiguous: false };
+  const amounts = new Set(eligibleRules.map((rule) => Number(rule.monthly_amount)));
+  if (amounts.size > 1) return { rule: null, ambiguous: true };
+  const selected = [...eligibleRules].sort((a, b) => ruleKey(a.scope_name).localeCompare(ruleKey(b.scope_name), "pt-BR"))[0];
+  return { rule: selected, ambiguous: false };
+}
 
 export default function AttendancePage() {
   const [employees, setEmployees] = useState<Employee[]>([]);
@@ -261,30 +325,75 @@ export default function AttendancePage() {
   const functionRuleViews = useMemo(() => buildFunctionRuleViews(rules), [rules]);
   const validPeriod = Boolean(periodStart && periodEnd && periodEnd >= periodStart && daysInPeriod(periodStart, periodEnd) <= 31);
   const periodSummary = useMemo(() => {
-    const employeeById = new Map(employees.map((employee) => [employee.id, employee]));
-    const rows = periodSummaryRecords.map((record) => ({
-      ...record,
-      employee: employeeById.get(record.employee_id) ?? null,
-      fullAmount: record.receives_attendance_snapshot ? Number(record.monthly_amount_snapshot) : 0,
-      reductionAmount: Number(record.reduction_amount_snapshot),
-      estimatedAmount: Number(record.estimated_amount_snapshot),
-      reductionCriteria: describeReductionCriteria(record),
-    })).sort((a, b) => (a.employee?.full_name ?? "").localeCompare(b.employee?.full_name ?? "", "pt-BR"));
-    const registeredEmployeeIds = new Set(periodSummaryRecords.map((record) => record.employee_id));
-    const notEmployedYet = (employee: Employee) => Boolean(employee.admission_date && employee.admission_date > periodEnd);
-    const alreadyLeft = (employee: Employee) => Boolean(employee.termination_date && employee.termination_date < periodStart);
-    const pendingEmployees = employees.filter((employee) => !registeredEmployeeIds.has(employee.id) && !notEmployedYet(employee) && !alreadyLeft(employee));
+    const savedByEmployee = new Map(periodSummaryRecords.map((record) => [record.employee_id, record]));
+    const rows = employees.filter((employee) => employee.status === "active" && isAttendanceTargetFunction(employeeFunction(employee))).map((employee): PeriodSummaryRow | null => {
+      const saved = savedByEmployee.get(employee.id) ?? null;
+      const resolution = resolveAttendanceRule(employee, rules, scopeOptions, saved?.scope_name_snapshot);
+      const hasSavedEligibility = Boolean(saved?.receives_attendance_snapshot);
+      if (!hasSavedEligibility && !resolution.rule && !resolution.ambiguous) return null;
+      const fullAmount = hasSavedEligibility
+        ? Number(saved?.monthly_amount_snapshot ?? 0)
+        : resolution.rule ? Number(resolution.rule.monthly_amount) : null;
+      const calculatedReduction = saved && fullAmount !== null && !hasSavedEligibility
+        ? (() => {
+          const percentages = officialReductionPercentages(saved.occurrences.map((item) => ({
+            id: `${saved.id}-${item.attendance_record_id}-${item.occurrence_type}-${item.days_count}`,
+            occurrence_type: item.occurrence_type,
+            occurred_on: "",
+            occurred_at: "",
+            days_count: String(item.days_count),
+            is_unjustified: item.is_unjustified,
+            missing_time_record: item.missing_time_record,
+            convocation_notice_hours: item.convocation_notice_hours == null ? "" : String(item.convocation_notice_hours),
+          })), {
+            quality_occurrence_count: String(saved.quality_occurrence_count),
+            service_cancellation_occurrence_count: String(saved.service_cancellation_occurrence_count),
+            safety_status: saved.safety_status,
+          });
+          const individual = Math.round(fullAmount * percentages.individual) / 100;
+          const collectiveAmount = Math.round(fullAmount * percentages.collective) / 100;
+          return Math.min(fullAmount, Math.round((individual + collectiveAmount) * 100) / 100);
+        })()
+        : 0;
+      const reductionAmount = fullAmount === null ? 0 : Math.min(fullAmount, hasSavedEligibility ? Number(saved?.reduction_amount_snapshot ?? 0) : calculatedReduction);
+      const estimatedAmount = fullAmount === null
+        ? null
+        : hasSavedEligibility ? Number(saved?.estimated_amount_snapshot ?? 0) : Math.max(0, Math.round((fullAmount - reductionAmount) * 100) / 100);
+      return {
+        id: saved?.id ?? employee.id,
+        employee_id: employee.id,
+        employee,
+        function_name_snapshot: saved?.function_name_snapshot || employeeFunction(employee),
+        scope_name_snapshot: hasSavedEligibility ? saved?.scope_name_snapshot ?? "Regra salva" : resolution.rule?.scope_name ?? "Centro pendente",
+        receives_attendance_snapshot: true,
+        fullAmount,
+        reductionAmount,
+        estimatedAmount,
+        reductionCriteria: saved ? describeReductionCriteria(saved) : resolution.ambiguous ? "Valor depende da definição do centro (EMS/ESS)." : "Aguardando lançamento; considerado sem redução.",
+        registered: Boolean(saved),
+        scopeAmbiguous: !hasSavedEligibility && resolution.ambiguous,
+      };
+    }).filter((row): row is PeriodSummaryRow => row !== null).sort((a, b) => a.employee.full_name.localeCompare(b.employee.full_name, "pt-BR"));
+    const pendingEmployees = rows.filter((row) => !row.registered).map((row) => row.employee);
+    const includedEmployeeIds = new Set(rows.map((row) => row.employee_id));
+    const withoutEnabledRule = employees.filter((employee) => employee.status === "active" && isAttendanceTargetFunction(employeeFunction(employee)) && !includedEmployeeIds.has(employee.id));
+    const sumAmount = (amount: (row: PeriodSummaryRow) => number | null) => rows.reduce((total, row) => {
+      const value = amount(row);
+      return total + (value === null ? 0 : Math.round(value * 100));
+    }, 0) / 100;
+    const unresolvedScopes = rows.filter((row) => row.scopeAmbiguous);
     return {
       rows,
       pendingEmployees,
-      fullAmount: rows.reduce((total, row) => total + Math.round(row.fullAmount * 100), 0) / 100,
-      reductionAmount: rows.reduce((total, row) => total + Math.round(row.reductionAmount * 100), 0) / 100,
-      estimatedAmount: rows.reduce((total, row) => total + Math.round(row.estimatedAmount * 100), 0) / 100,
-      beneficiaries: rows.filter((row) => row.receives_attendance_snapshot).length,
+      unresolvedScopes,
+      withoutEnabledRule,
+      fullAmount: sumAmount((row) => row.fullAmount),
+      reductionAmount: sumAmount((row) => row.fullAmount === null ? null : row.reductionAmount),
+      estimatedAmount: sumAmount((row) => row.estimatedAmount),
+      beneficiaries: rows.length,
       recordsWithReduction: rows.filter((row) => row.reductionAmount > 0).length,
-      notEligible: rows.filter((row) => !row.receives_attendance_snapshot).length,
     };
-  }, [employees, periodSummaryRecords, periodStart, periodEnd]);
+  }, [employees, periodSummaryRecords, rules, scopeOptions]);
   const filteredPeriodSummaryRows = useMemo(() => {
     const query = ruleKey(periodSummarySearch);
     if (!query) return periodSummary.rows;
@@ -768,30 +877,31 @@ export default function AttendancePage() {
         <p className="attendance-official-rules-note">Advertência não consta como fator de redução no trecho do documento oficial recebido. A prévia é informativa para conferência do RH, limitada ao valor mensal da parcela; não calcula a folha nem autoriza desconto automático.</p>
       </section>
     </section> : <section className="attendance-summary-panel" role="tabpanel" aria-label="Prévia de valores da assiduidade">
-      <div className="attendance-section-heading"><div><h2>Prévia de valores do período</h2><p>Apuração de {displayDate(periodStart)} a {displayDate(periodEnd)} com base nos registros individuais já salvos.</p></div><button type="button" className="secondary-button" onClick={() => setPeriodSummaryRefresh((current) => current + 1)} disabled={periodSummaryLoading || !validPeriod}><Clock3 size={15} /> Atualizar</button></div>
+      <div className="attendance-section-heading"><div><h2>Prévia de valores do período</h2><p>Projeção de {displayDate(periodStart)} a {displayDate(periodEnd)} para colaboradores ativos com função elegível.</p></div><button type="button" className="secondary-button" onClick={() => setPeriodSummaryRefresh((current) => current + 1)} disabled={periodSummaryLoading || !validPeriod}><Clock3 size={15} /> Atualizar</button></div>
       <div className="attendance-summary-cards" aria-label="Totais estimados">
-        <article><small>Valor cheio registrado</small><strong>{displayMoney(periodSummary.fullAmount)}</strong><span>Base somada dos registros salvos</span></article>
+        <article><small>Valor cheio sem descontos</small><strong>{displayMoney(periodSummary.fullAmount)}</strong><span>Parcela dos ativos com valor definido</span></article>
         <article><small>Reduções aplicadas</small><strong>{displayMoney(periodSummary.reductionAmount)}</strong><span>{periodSummary.recordsWithReduction} colaborador(es) com redução</span></article>
-        <article className="is-payable"><small>Estimativa após reduções</small><strong>{displayMoney(periodSummary.estimatedAmount)}</strong><span>Valor estimado dos registros salvos</span></article>
-        <article><small>Colaboradores sem registro</small><strong>{periodSummary.pendingEmployees.length}</strong><span>Com vínculo no período selecionado</span></article>
+        <article className="is-payable"><small>Estimativa após reduções</small><strong>{displayMoney(periodSummary.estimatedAmount)}</strong><span>Pendentes considerados sem redução registrada</span></article>
+        <article><small>Ativos elegíveis</small><strong>{periodSummary.beneficiaries}</strong><span>Funções autorizadas para assiduidade</span></article>
       </div>
       <div className="attendance-summary-highlights">
-        <span><strong>{periodSummary.beneficiaries}</strong> elegível(is) à parcela</span>
+        <span><strong>{periodSummary.pendingEmployees.length}</strong> sem lançamento no período</span>
         <span><strong>{periodSummary.recordsWithReduction}</strong> com redução registrada</span>
-        <span><strong>{periodSummary.notEligible}</strong> sem direito à parcela pela regra salva</span>
+        <span><strong>{periodSummary.unresolvedScopes.length}</strong> com centro/valor a confirmar</span>
       </div>
-      <div className="attendance-summary-note" role="note"><ShieldCheck size={17} /><span>Esta é uma prévia para conferência do RH, não um cálculo oficial de folha. O total considera somente colaboradores com registro salvo; os sem registro ainda não estão incluídos. Os valores refletem a regra e os critérios gravados em cada registro.</span></div>
+      <div className="attendance-summary-note" role="note"><ShieldCheck size={17} /><span>Prévia para conferência do RH, não cálculo oficial de folha. O valor cheio soma todos os ativos com função habilitada, mesmo sem lançamento de ocorrência. Reduções são consideradas apenas quando registradas; quem está sem lançamento entra sem redução. Colaboradores sem valor inequívoco por centro/unidade ficam fora dos totais até a regra ser definida.</span></div>
       {periodSummaryError ? <div className="attendance-summary-error" role="alert"><span>{periodSummaryError}</span><button type="button" className="secondary-button" onClick={() => setPeriodSummaryRefresh((current) => current + 1)}>Tentar novamente</button></div> : <>
-        {periodSummary.pendingEmployees.length > 0 && <details className="attendance-pending-employees"><summary>{periodSummary.pendingEmployees.length} colaborador(es) ainda sem registro salvo</summary><p>{periodSummary.pendingEmployees.map((employee) => `${employee.registration ? `${employee.registration} · ` : ""}${employee.full_name}`).join("; ")}</p></details>}
-        <div className="attendance-summary-table-heading"><div><h3>Detalhamento por colaborador</h3><p>{periodSummary.rows.length} registro(s) salvo(s) neste período</p></div><label className="attendance-summary-search"><Search size={16} aria-hidden="true" /><input value={periodSummarySearch} onChange={(event) => setPeriodSummarySearch(event.target.value)} placeholder="Buscar nome, matrícula ou função" aria-label="Buscar nos registros do período" /></label></div>
-        {periodSummaryLoading ? <div className="attendance-inline-loading"><LoaderCircle className="spin" size={18} /> Atualizando valores do período...</div> : filteredPeriodSummaryRows.length === 0 ? <div className="attendance-summary-empty">{periodSummary.rows.length === 0 ? "Ainda não há registros salvos para este período." : "Nenhum registro corresponde à busca."}</div> : <div className="attendance-summary-table-wrap"><table className="attendance-summary-table"><thead><tr><th>Colaborador</th><th>Função / unidade</th><th>Valor cheio</th><th>Redução</th><th>Estimativa após redução</th><th>Situação</th></tr></thead><tbody>
+        {periodSummary.pendingEmployees.length > 0 && <details className="attendance-pending-employees"><summary>{periodSummary.pendingEmployees.length} ativo(s) elegível(is) sem lançamento — incluídos sem redução</summary><p>{periodSummary.pendingEmployees.map((employee) => `${employee.registration ? `${employee.registration} · ` : ""}${employee.full_name}`).join("; ")}</p></details>}
+        {periodSummary.withoutEnabledRule.length > 0 && <details className="attendance-pending-employees attendance-unconfigured-employees"><summary>{periodSummary.withoutEnabledRule.length} ativo(s) nas funções selecionadas sem regra habilitada — fora dos totais</summary><p>{periodSummary.withoutEnabledRule.map((employee) => `${employee.registration ? `${employee.registration} · ` : ""}${employee.full_name} (${employeeFunction(employee)})`).join("; ")}</p></details>}
+        <div className="attendance-summary-table-heading"><div><h3>Colaboradores ativos elegíveis</h3><p>{periodSummary.rows.length} funcionário(s) com regra de assiduidade habilitada</p></div><label className="attendance-summary-search"><Search size={16} aria-hidden="true" /><input value={periodSummarySearch} onChange={(event) => setPeriodSummarySearch(event.target.value)} placeholder="Buscar nome, matrícula ou função" aria-label="Buscar colaboradores elegíveis" /></label></div>
+        {periodSummaryLoading ? <div className="attendance-inline-loading"><LoaderCircle className="spin" size={18} /> Atualizando valores do período...</div> : filteredPeriodSummaryRows.length === 0 ? <div className="attendance-summary-empty">{periodSummary.rows.length === 0 ? "Não há funcionários ativos com função e regra de assiduidade habilitadas." : "Nenhum colaborador corresponde à busca."}</div> : <div className="attendance-summary-table-wrap"><table className="attendance-summary-table"><thead><tr><th>Colaborador</th><th>Função / centro</th><th>Valor cheio</th><th>Redução</th><th>Estimativa após redução</th><th>Situação</th></tr></thead><tbody>
           {filteredPeriodSummaryRows.map((row) => <tr key={row.id}>
             <td><strong>{row.employee?.full_name ?? "Colaborador não disponível"}</strong><small>{row.employee?.registration ? `Matrícula ${row.employee.registration}` : "Matrícula não informada"}</small></td>
             <td><strong>{row.function_name_snapshot}</strong><small>{row.scope_name_snapshot}</small><small>{row.reductionCriteria}</small></td>
-            <td>{displayMoney(row.fullAmount)}</td>
-            <td>{displayMoney(row.reductionAmount)}</td>
-            <td className="attendance-summary-net">{displayMoney(row.estimatedAmount)}</td>
-            <td><span className={`attendance-summary-status ${!row.receives_attendance_snapshot ? "is-ineligible" : row.reductionAmount > 0 ? "has-reduction" : "is-clear"}`}>{!row.receives_attendance_snapshot ? "Não elegível" : row.reductionAmount > 0 ? "Com redução" : "Sem redução"}</span></td>
+            <td>{row.fullAmount === null ? "A definir" : displayMoney(row.fullAmount)}</td>
+            <td>{row.fullAmount === null ? "—" : displayMoney(row.reductionAmount)}</td>
+            <td className="attendance-summary-net">{row.estimatedAmount === null ? "A definir" : displayMoney(row.estimatedAmount)}</td>
+            <td><span className={`attendance-summary-status ${row.scopeAmbiguous ? "is-unresolved" : !row.registered ? "is-pending" : row.reductionAmount > 0 ? "has-reduction" : "is-clear"}`}>{row.scopeAmbiguous ? "Centro pendente" : !row.registered ? "Sem lançamento" : row.reductionAmount > 0 ? "Com redução" : "Sem redução"}</span></td>
           </tr>)}
         </tbody></table></div>}
       </>}

@@ -5228,6 +5228,8 @@ html,body{max-width:100%;overflow-x:hidden}
 .attendance-pending-employees{margin:0 0 18px;padding:11px 13px;border:1px solid #f1e2bc;border-radius:9px;background:#fffaf0;color:#8f6c28;font-size:10px}
 .attendance-pending-employees summary{cursor:pointer;font-weight:700}
 .attendance-pending-employees p{margin:9px 0 0;color:#7b6a49;line-height:1.6;overflow-wrap:anywhere}
+.attendance-unconfigured-employees{border-color:#e6e8ef;background:#f8f9fc;color:#6f7b90}
+.attendance-unconfigured-employees p{color:#69758a}
 .attendance-summary-table-heading{display:flex;align-items:flex-end;justify-content:space-between;gap:14px;margin:0 0 11px}
 .attendance-summary-table-heading h3{margin:0 0 4px;color:#293750;font-family:'Plus Jakarta Sans';font-size:13px}
 .attendance-summary-table-heading p{margin:0;color:#929db0;font-size:10px}
@@ -5245,6 +5247,8 @@ html,body{max-width:100%;overflow-x:hidden}
 .attendance-summary-status{display:inline-block;padding:5px 8px;border-radius:20px;background:#e9f8ef;color:#3f986f;font-size:9px;font-weight:700;white-space:nowrap}
 .attendance-summary-status.has-reduction{background:#fff5de;color:#ad7927}
 .attendance-summary-status.is-ineligible{background:#f0f2f6;color:#7d8798}
+.attendance-summary-status.is-pending{background:#f1efff;color:#6c5ac0}
+.attendance-summary-status.is-unresolved{background:#fff0ee;color:#b6463c}
 .attendance-summary-empty,.attendance-summary-error{display:flex;align-items:center;justify-content:center;gap:12px;min-height:76px;padding:14px;border:1px dashed #e2e6ee;border-radius:9px;color:#929db0;font-size:11px;text-align:center}
 .attendance-summary-error{justify-content:space-between;border-style:solid;border-color:#ffc8c1;background:#fff3f1;color:#b6463c}
 .attendance-page>.feedback{margin-bottom:14px}
