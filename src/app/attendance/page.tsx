@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { CalendarDays, Check, Clock3, LoaderCircle, Plus, Save, ShieldCheck, UserRound, X } from "lucide-react";
+import { Banknote, CalendarDays, Check, Clock3, LoaderCircle, Plus, Save, Search, ShieldCheck, UserRound, X } from "lucide-react";
 import { EmployeeAutocomplete } from "@/components/employee-autocomplete";
 import { createClient } from "@/lib/supabase/client";
 
@@ -39,6 +39,29 @@ type Occurrence = { id: string; occurrence_type: OccurrenceType; occurred_on: st
 type OccurrenceDraft = { id: string; occurrence_type: OccurrenceType; occurred_on: string; occurred_at: string; days_count: string; is_unjustified: boolean; missing_time_record: boolean; convocation_notice_hours: string };
 type Collective = { quality_occurrence_count: string; service_cancellation_occurrence_count: string; safety_status: "not_evaluated" | "meets" | "does_not_meet" };
 type SavedSnapshot = { scope_name_snapshot: string; receives_attendance_snapshot: boolean; monthly_amount_snapshot: number | string; reduction_amount_snapshot: number | string; estimated_amount_snapshot: number | string; quality_occurrence_count: number | string; service_cancellation_occurrence_count: number | string; safety_status: Collective["safety_status"] };
+type PeriodSummaryRecord = {
+  id: string;
+  employee_id: string;
+  function_name_snapshot: string;
+  scope_name_snapshot: string;
+  receives_attendance_snapshot: boolean;
+  monthly_amount_snapshot: number | string;
+  reduction_amount_snapshot: number | string;
+  estimated_amount_snapshot: number | string;
+  quality_occurrence_count: number;
+  service_cancellation_occurrence_count: number;
+  safety_status: Collective["safety_status"];
+  updated_at: string;
+  occurrences: PeriodSummaryOccurrence[];
+};
+type PeriodSummaryOccurrence = {
+  attendance_record_id: string;
+  occurrence_type: OccurrenceType;
+  days_count: number;
+  is_unjustified: boolean;
+  missing_time_record: boolean;
+  convocation_notice_hours: number | null;
+};
 
 const occurrenceOptions: Array<[OccurrenceType, string]> = [
   ["late", "Atraso na jornada"],
@@ -75,6 +98,19 @@ function displayDate(value: string | null) {
 }
 function displayMoney(value: number | string | null | undefined) {
   return `R$ ${Number(value || 0).toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+}
+function describeReductionCriteria(record: PeriodSummaryRecord) {
+  const criteria: string[] = [];
+  const occurrences = record.occurrences ?? [];
+  if (occurrences.some((item) => item.occurrence_type === "absence_unjustified")) criteria.push("falta injustificada");
+  if (occurrences.some((item) => item.occurrence_type === "late" && (item.is_unjustified || item.missing_time_record))) criteria.push("jornada/ponto");
+  if (occurrences.some((item) => item.occurrence_type === "convocation_absence" && item.is_unjustified && Number(item.convocation_notice_hours ?? 0) >= 24)) criteria.push("falta à convocação");
+  const justifiedDays = occurrences.filter((item) => item.occurrence_type === "absence_justified" || item.occurrence_type === "medical_certificate").reduce((total, item) => total + Number(item.days_count || 0), 0);
+  if (justifiedDays > 1) criteria.push(`${justifiedDays} dias de ausência justificada/atestado`);
+  if (record.quality_occurrence_count > 0) criteria.push(`qualidade: ${record.quality_occurrence_count}`);
+  if (record.service_cancellation_occurrence_count > 0) criteria.push(`cancelamento/atraso: ${record.service_cancellation_occurrence_count}`);
+  if (record.safety_status === "does_not_meet") criteria.push("segurança apurada");
+  return criteria.length ? criteria.join(" · ") : record.reduction_amount_snapshot && Number(record.reduction_amount_snapshot) > 0 ? "Confira os critérios no registro individual" : "Nenhum critério de redução";
 }
 function toInputMoney(value: number | string) {
   return Number(value || 0).toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
@@ -202,7 +238,12 @@ export default function AttendancePage() {
   const [collective, setCollective] = useState<Collective>(emptyCollective);
   const [savedSnapshot, setSavedSnapshot] = useState<SavedSnapshot | null>(null);
   const [savedRecord, setSavedRecord] = useState(false);
-  const [tab, setTab] = useState<"records" | "functions">("records");
+  const [periodSummaryRecords, setPeriodSummaryRecords] = useState<PeriodSummaryRecord[]>([]);
+  const [periodSummaryLoading, setPeriodSummaryLoading] = useState(false);
+  const [periodSummaryError, setPeriodSummaryError] = useState("");
+  const [periodSummaryRefresh, setPeriodSummaryRefresh] = useState(0);
+  const [periodSummarySearch, setPeriodSummarySearch] = useState("");
+  const [tab, setTab] = useState<"records" | "summary" | "functions">("records");
   const [newFunctionName, setNewFunctionName] = useState("");
   const [newScopeName, setNewScopeName] = useState("Geral");
   const [loading, setLoading] = useState(true);
@@ -219,6 +260,41 @@ export default function AttendancePage() {
   const scopeOptions = useMemo(() => ["Geral", ...Array.from(new Map(rules.filter((rule) => ruleKey(rule.scope_name) !== "geral").map((rule) => [ruleKey(rule.scope_name), rule.scope_name])).values()).sort((a, b) => a.localeCompare(b, "pt-BR"))], [rules]);
   const functionRuleViews = useMemo(() => buildFunctionRuleViews(rules), [rules]);
   const validPeriod = Boolean(periodStart && periodEnd && periodEnd >= periodStart && daysInPeriod(periodStart, periodEnd) <= 31);
+  const periodSummary = useMemo(() => {
+    const employeeById = new Map(employees.map((employee) => [employee.id, employee]));
+    const rows = periodSummaryRecords.map((record) => ({
+      ...record,
+      employee: employeeById.get(record.employee_id) ?? null,
+      fullAmount: record.receives_attendance_snapshot ? Number(record.monthly_amount_snapshot) : 0,
+      reductionAmount: Number(record.reduction_amount_snapshot),
+      estimatedAmount: Number(record.estimated_amount_snapshot),
+      reductionCriteria: describeReductionCriteria(record),
+    })).sort((a, b) => (a.employee?.full_name ?? "").localeCompare(b.employee?.full_name ?? "", "pt-BR"));
+    const registeredEmployeeIds = new Set(periodSummaryRecords.map((record) => record.employee_id));
+    const notEmployedYet = (employee: Employee) => Boolean(employee.admission_date && employee.admission_date > periodEnd);
+    const alreadyLeft = (employee: Employee) => Boolean(employee.termination_date && employee.termination_date < periodStart);
+    const pendingEmployees = employees.filter((employee) => !registeredEmployeeIds.has(employee.id) && !notEmployedYet(employee) && !alreadyLeft(employee));
+    return {
+      rows,
+      pendingEmployees,
+      fullAmount: rows.reduce((total, row) => total + Math.round(row.fullAmount * 100), 0) / 100,
+      reductionAmount: rows.reduce((total, row) => total + Math.round(row.reductionAmount * 100), 0) / 100,
+      estimatedAmount: rows.reduce((total, row) => total + Math.round(row.estimatedAmount * 100), 0) / 100,
+      beneficiaries: rows.filter((row) => row.receives_attendance_snapshot).length,
+      recordsWithReduction: rows.filter((row) => row.reductionAmount > 0).length,
+      notEligible: rows.filter((row) => !row.receives_attendance_snapshot).length,
+    };
+  }, [employees, periodSummaryRecords, periodStart, periodEnd]);
+  const filteredPeriodSummaryRows = useMemo(() => {
+    const query = ruleKey(periodSummarySearch);
+    if (!query) return periodSummary.rows;
+    return periodSummary.rows.filter((row) => ruleKey([
+      row.employee?.full_name ?? "",
+      row.employee?.registration ?? "",
+      row.function_name_snapshot,
+      row.scope_name_snapshot,
+    ].join(" ")).includes(query));
+  }, [periodSummary.rows, periodSummarySearch]);
   const metrics = useMemo(() => {
     const count = (type: OccurrenceType) => occurrences.filter((item) => item.occurrence_type === type).length;
     const days = (type: OccurrenceType) => occurrences.filter((item) => item.occurrence_type === type).reduce((total, item) => total + Number(item.days_count || 0), 0);
@@ -359,6 +435,59 @@ export default function AttendancePage() {
     return () => { active = false; };
   }, [organizationId, periodStart, periodEnd, selectedEmployeeId, validPeriod]);
 
+  useEffect(() => {
+    let active = true;
+    async function loadPeriodSummary() {
+      if (tab !== "summary" || !organizationId) return;
+      if (!validPeriod) {
+        setPeriodSummaryRecords([]);
+        setPeriodSummaryError("Informe datas válidas para um período de 1 a 31 dias.");
+        setPeriodSummaryLoading(false);
+        return;
+      }
+      setPeriodSummaryLoading(true);
+      setPeriodSummaryError("");
+      const supabase = createClient();
+      const { data, error: queryError } = await supabase
+        .from("attendance_period_records")
+        .select("id,employee_id,function_name_snapshot,scope_name_snapshot,receives_attendance_snapshot,monthly_amount_snapshot,reduction_amount_snapshot,estimated_amount_snapshot,quality_occurrence_count,service_cancellation_occurrence_count,safety_status,updated_at")
+        .eq("organization_id", organizationId)
+        .eq("period_start", periodStart)
+        .eq("period_end", periodEnd)
+        .order("updated_at", { ascending: false });
+      if (!active) return;
+      if (queryError) {
+        setPeriodSummaryError("Não foi possível carregar o resumo deste período.");
+        setPeriodSummaryRecords([]);
+      } else {
+        const records = (data ?? []) as Omit<PeriodSummaryRecord, "occurrences">[];
+        const recordIds = records.map((record) => record.id);
+        const { data: occurrenceData, error: occurrenceError } = recordIds.length
+          ? await supabase.from("attendance_occurrences")
+            .select("attendance_record_id,occurrence_type,days_count,is_unjustified,missing_time_record,convocation_notice_hours")
+            .eq("organization_id", organizationId)
+            .in("attendance_record_id", recordIds)
+          : { data: [], error: null };
+        if (!active) return;
+        if (occurrenceError) {
+          setPeriodSummaryError("Não foi possível carregar os critérios registrados neste período.");
+          setPeriodSummaryRecords([]);
+        } else {
+          const occurrencesByRecord = new Map<string, PeriodSummaryOccurrence[]>();
+          for (const occurrence of (occurrenceData ?? []) as PeriodSummaryOccurrence[]) {
+            const events = occurrencesByRecord.get(occurrence.attendance_record_id) ?? [];
+            events.push(occurrence);
+            occurrencesByRecord.set(occurrence.attendance_record_id, events);
+          }
+          setPeriodSummaryRecords(records.map((record) => ({ ...record, occurrences: occurrencesByRecord.get(record.id) ?? [] })));
+        }
+      }
+      setPeriodSummaryLoading(false);
+    }
+    void loadPeriodSummary();
+    return () => { active = false; };
+  }, [organizationId, periodStart, periodEnd, validPeriod, tab, periodSummaryRefresh]);
+
   function updateOccurrence(id: string, field: keyof Omit<OccurrenceDraft, "id">, value: string | boolean) {
     setSavedRecord(false);
     setOccurrences((current) => current.map((item) => {
@@ -422,6 +551,7 @@ export default function AttendancePage() {
     } else {
       setSavedRecord(true);
       setSavedSnapshot({ scope_name_snapshot: scopeName, receives_attendance_snapshot: Boolean(selectedRule?.active && selectedRule.receives_attendance), monthly_amount_snapshot: selectedRule?.active && selectedRule.receives_attendance ? selectedRule.monthly_amount : 0, reduction_amount_snapshot: reductionAmount, estimated_amount_snapshot: estimatedAttendanceAmount, quality_occurrence_count: countValue(collective.quality_occurrence_count), service_cancellation_occurrence_count: countValue(collective.service_cancellation_occurrence_count), safety_status: collective.safety_status });
+      setPeriodSummaryRefresh((current) => current + 1);
       setSuccess("Registro individual salvo para este período.");
     }
     setSavingRecord(false);
@@ -506,6 +636,7 @@ export default function AttendancePage() {
 
     <div className="attendance-tabs" role="tablist" aria-label="Seções de assiduidade">
       <button type="button" role="tab" aria-selected={tab === "records"} className={tab === "records" ? "active" : ""} onClick={() => setTab("records")}><UserRound size={16} /> Registros individuais</button>
+      <button type="button" role="tab" aria-selected={tab === "summary"} className={tab === "summary" ? "active" : ""} onClick={() => setTab("summary")}><Banknote size={16} /> Prévia de valores</button>
       <button type="button" role="tab" aria-selected={tab === "functions"} className={tab === "functions" ? "active" : ""} onClick={() => setTab("functions")}><ShieldCheck size={16} /> Funções e valores</button>
     </div>
 
@@ -592,7 +723,7 @@ export default function AttendancePage() {
           <div className="attendance-form-actions"><span>Qualidade: 10% por ocorrência até 3; acima de 3, zera. Cancelamento/atraso sem aviso: 20% até 2; acima de 2, zera. Segurança apurada: zera. Salve junto ao registro individual.</span></div>
         </section>
       </>}
-    </> : <section className="panel attendance-function-panel">
+    </> : tab === "functions" ? <section className="panel attendance-function-panel">
       <div className="attendance-section-heading"><div><h2>Elegibilidade e valor por função</h2><p>As funções são sugeridas pelos cadastros de funcionários. Valores são apenas referências configuradas, sem lançamento automático em folha.</p></div></div>
       <form className="attendance-add-function" onSubmit={(event) => { event.preventDefault(); void addFunctionRule(); }}>
         <label><span>Centro / unidade</span><input value={newScopeName} onChange={(event) => setNewScopeName(event.target.value)} maxLength={150} placeholder="Ex.: C&M - Dourados" /></label>
@@ -636,6 +767,34 @@ export default function AttendancePage() {
         </div>
         <p className="attendance-official-rules-note">Advertência não consta como fator de redução no trecho do documento oficial recebido. A prévia é informativa para conferência do RH, limitada ao valor mensal da parcela; não calcula a folha nem autoriza desconto automático.</p>
       </section>
+    </section> : <section className="attendance-summary-panel" role="tabpanel" aria-label="Prévia de valores da assiduidade">
+      <div className="attendance-section-heading"><div><h2>Prévia de valores do período</h2><p>Apuração de {displayDate(periodStart)} a {displayDate(periodEnd)} com base nos registros individuais já salvos.</p></div><button type="button" className="secondary-button" onClick={() => setPeriodSummaryRefresh((current) => current + 1)} disabled={periodSummaryLoading || !validPeriod}><Clock3 size={15} /> Atualizar</button></div>
+      <div className="attendance-summary-cards" aria-label="Totais estimados">
+        <article><small>Valor cheio registrado</small><strong>{displayMoney(periodSummary.fullAmount)}</strong><span>Base somada dos registros salvos</span></article>
+        <article><small>Reduções aplicadas</small><strong>{displayMoney(periodSummary.reductionAmount)}</strong><span>{periodSummary.recordsWithReduction} colaborador(es) com redução</span></article>
+        <article className="is-payable"><small>Estimativa após reduções</small><strong>{displayMoney(periodSummary.estimatedAmount)}</strong><span>Valor estimado dos registros salvos</span></article>
+        <article><small>Colaboradores sem registro</small><strong>{periodSummary.pendingEmployees.length}</strong><span>Com vínculo no período selecionado</span></article>
+      </div>
+      <div className="attendance-summary-highlights">
+        <span><strong>{periodSummary.beneficiaries}</strong> elegível(is) à parcela</span>
+        <span><strong>{periodSummary.recordsWithReduction}</strong> com redução registrada</span>
+        <span><strong>{periodSummary.notEligible}</strong> sem direito à parcela pela regra salva</span>
+      </div>
+      <div className="attendance-summary-note" role="note"><ShieldCheck size={17} /><span>Esta é uma prévia para conferência do RH, não um cálculo oficial de folha. O total considera somente colaboradores com registro salvo; os sem registro ainda não estão incluídos. Os valores refletem a regra e os critérios gravados em cada registro.</span></div>
+      {periodSummaryError ? <div className="attendance-summary-error" role="alert"><span>{periodSummaryError}</span><button type="button" className="secondary-button" onClick={() => setPeriodSummaryRefresh((current) => current + 1)}>Tentar novamente</button></div> : <>
+        {periodSummary.pendingEmployees.length > 0 && <details className="attendance-pending-employees"><summary>{periodSummary.pendingEmployees.length} colaborador(es) ainda sem registro salvo</summary><p>{periodSummary.pendingEmployees.map((employee) => `${employee.registration ? `${employee.registration} · ` : ""}${employee.full_name}`).join("; ")}</p></details>}
+        <div className="attendance-summary-table-heading"><div><h3>Detalhamento por colaborador</h3><p>{periodSummary.rows.length} registro(s) salvo(s) neste período</p></div><label className="attendance-summary-search"><Search size={16} aria-hidden="true" /><input value={periodSummarySearch} onChange={(event) => setPeriodSummarySearch(event.target.value)} placeholder="Buscar nome, matrícula ou função" aria-label="Buscar nos registros do período" /></label></div>
+        {periodSummaryLoading ? <div className="attendance-inline-loading"><LoaderCircle className="spin" size={18} /> Atualizando valores do período...</div> : filteredPeriodSummaryRows.length === 0 ? <div className="attendance-summary-empty">{periodSummary.rows.length === 0 ? "Ainda não há registros salvos para este período." : "Nenhum registro corresponde à busca."}</div> : <div className="attendance-summary-table-wrap"><table className="attendance-summary-table"><thead><tr><th>Colaborador</th><th>Função / unidade</th><th>Valor cheio</th><th>Redução</th><th>Estimativa após redução</th><th>Situação</th></tr></thead><tbody>
+          {filteredPeriodSummaryRows.map((row) => <tr key={row.id}>
+            <td><strong>{row.employee?.full_name ?? "Colaborador não disponível"}</strong><small>{row.employee?.registration ? `Matrícula ${row.employee.registration}` : "Matrícula não informada"}</small></td>
+            <td><strong>{row.function_name_snapshot}</strong><small>{row.scope_name_snapshot}</small><small>{row.reductionCriteria}</small></td>
+            <td>{displayMoney(row.fullAmount)}</td>
+            <td>{displayMoney(row.reductionAmount)}</td>
+            <td className="attendance-summary-net">{displayMoney(row.estimatedAmount)}</td>
+            <td><span className={`attendance-summary-status ${!row.receives_attendance_snapshot ? "is-ineligible" : row.reductionAmount > 0 ? "has-reduction" : "is-clear"}`}>{!row.receives_attendance_snapshot ? "Não elegível" : row.reductionAmount > 0 ? "Com redução" : "Sem redução"}</span></td>
+          </tr>)}
+        </tbody></table></div>}
+      </>}
     </section>}
   </main>;
 }
