@@ -195,6 +195,9 @@ function findFunctionRule(rules: FunctionRule[], functionName: string, scopeName
     .sort((a, b) => a.scope - b.scope || a.match! - b.match! || ruleKey(b.rule.function_name).length - ruleKey(a.rule.function_name).length || ruleKey(a.rule.function_name).localeCompare(ruleKey(b.rule.function_name)))[0]?.rule ?? null;
 }
 function suggestedScopeForEmployee(employee: Employee, scopes: string[]) {
+  const departmentKey = ruleKey(employee.department ?? "");
+  const exactDepartmentScope = scopes.find((scope) => ruleKey(scope) === departmentKey);
+  if (exactDepartmentScope) return exactDepartmentScope;
   const unitKey = ruleKey(employee.unit ?? "");
   if (!unitKey) return "Geral";
   const unitTokens = unitKey.split(" ");
