@@ -28,6 +28,11 @@ type FunctionRule = {
   monthly_amount: number | string;
   active: boolean;
 };
+type FunctionRuleView = FunctionRule & {
+  memberIds: string[];
+  displayName: string;
+  hasConfigurationConflict: boolean;
+};
 
 type OccurrenceType = "late" | "absence_justified" | "absence_unjustified" | "convocation_absence" | "medical_certificate" | "warning";
 type Occurrence = { id: string; occurrence_type: OccurrenceType; occurred_on: string; occurred_at: string | null; days_count: number };
@@ -93,6 +98,47 @@ function parseInputMoney(value: string) {
 }
 function ruleKey(value: string) {
   return value.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLocaleLowerCase("pt-BR").replace(/[^a-z0-9]+/g, " ").trim().replace(/\s+/g, " ");
+}
+function generalAttendanceFunctionName(value: string) {
+  const key = ruleKey(value);
+  if (/^eletricista (?:(?:de )?linha morta|lm)(?: |$)/.test(key)) return "ELETRICISTA LINHA MORTA";
+  if (/^eletricista (?:(?:de )?linha viva|lv)(?: |$)/.test(key)) return "ELETRICISTA LINHA VIVA";
+  if (key.startsWith("eletricista podador")) return "ELETRICISTA PODADOR";
+  if (/^encarregado (?:linha morta|lm)(?: |$)/.test(key)) return "ENCARREGADO LINHA MORTA";
+  if (/^encarregado (?:linha viva|lv)(?: |$)/.test(key)) return "ENCARREGADO LINHA VIVA";
+  if (key.startsWith("encarregado de poda")) return "ENCARREGADO DE PODA";
+  if (key.startsWith("lider de op eletric")) return "LÍDER DE OPERAÇÕES ELÉTRICAS";
+  return null;
+}
+function buildFunctionRuleViews(rules: FunctionRule[]): FunctionRuleView[] {
+  const visible: FunctionRuleView[] = [];
+  const generalGroups = new Map<string, FunctionRule[]>();
+  for (const rule of rules) {
+    if (ruleKey(rule.scope_name) !== "geral") {
+      visible.push({ ...rule, memberIds: [rule.id], displayName: rule.function_name, hasConfigurationConflict: false });
+      continue;
+    }
+    const displayName = generalAttendanceFunctionName(rule.function_name);
+    if (!displayName) continue;
+    const group = generalGroups.get(displayName) ?? [];
+    group.push(rule);
+    generalGroups.set(displayName, group);
+  }
+  for (const [displayName, members] of generalGroups) {
+    const sortedMembers = [...members].sort((a, b) => Number(ruleKey(a.function_name) !== ruleKey(displayName)) - Number(ruleKey(b.function_name) !== ruleKey(displayName)) || a.function_name.localeCompare(b.function_name, "pt-BR"));
+    const representative = sortedMembers[0];
+    const configurationKeys = new Set(members.map((rule) => `${rule.active}|${rule.receives_attendance}|${Number(rule.monthly_amount)}`));
+    visible.push({
+      ...representative,
+      function_name: displayName,
+      displayName,
+      memberIds: members.map((rule) => rule.id),
+      active: members.some((rule) => rule.active),
+      receives_attendance: members.some((rule) => rule.receives_attendance),
+      hasConfigurationConflict: configurationKeys.size > 1,
+    });
+  }
+  return visible.sort((a, b) => a.scope_name.localeCompare(b.scope_name, "pt-BR") || a.displayName.localeCompare(b.displayName, "pt-BR"));
 }
 function functionMatchRank(ruleName: string, employeeFunction: string) {
   const rule = ruleKey(ruleName);
@@ -168,6 +214,7 @@ export default function AttendancePage() {
   const selectedFunctionName = selectedEmployee ? employeeFunction(selectedEmployee) : "";
   const selectedRule = selectedEmployee ? findFunctionRule(rules, selectedFunctionName, scopeName) : null;
   const scopeOptions = useMemo(() => ["Geral", ...Array.from(new Map(rules.filter((rule) => ruleKey(rule.scope_name) !== "geral").map((rule) => [ruleKey(rule.scope_name), rule.scope_name])).values()).sort((a, b) => a.localeCompare(b, "pt-BR"))], [rules]);
+  const functionRuleViews = useMemo(() => buildFunctionRuleViews(rules), [rules]);
   const validPeriod = Boolean(periodStart && periodEnd && periodEnd >= periodStart && daysInPeriod(periodStart, periodEnd) <= 31);
   const metrics = useMemo(() => {
     const count = (type: OccurrenceType) => occurrences.filter((item) => item.occurrence_type === type).length;
@@ -377,10 +424,16 @@ export default function AttendancePage() {
   }
 
   async function addFunctionRule() {
-    const name = newFunctionName.trim().replace(/\s+/g, " ");
     const scope = newScopeName.trim().replace(/\s+/g, " ");
+    const requestedName = newFunctionName.trim().replace(/\s+/g, " ");
+    const generalName = ruleKey(scope) === "geral" ? generalAttendanceFunctionName(requestedName) : null;
+    if (ruleKey(scope) === "geral" && !generalName) {
+      setError("Em Geral, use uma das funções operacionais padronizadas. Para outras funções, selecione o centro/unidade correspondente.");
+      return;
+    }
+    const name = generalName ?? requestedName;
     if (!name || !scope || addingFunction) return;
-    if (rules.some((rule) => ruleKey(rule.function_name) === ruleKey(name) && ruleKey(rule.scope_name) === ruleKey(scope))) {
+    if (rules.some((rule) => ruleKey(rule.scope_name) === ruleKey(scope) && (ruleKey(rule.function_name) === ruleKey(name) || (generalName && generalAttendanceFunctionName(rule.function_name) === generalName)))) {
       setError("Essa função já está cadastrada para esse centro/unidade.");
       return;
     }
@@ -407,13 +460,13 @@ export default function AttendancePage() {
     setAddingFunction(false);
   }
 
-  async function saveFunctionRule(rule: FunctionRule) {
+  async function saveFunctionRule(rule: FunctionRuleView) {
     if (savingRuleId) return;
     const amount = parseInputMoney(amountDrafts[rule.id] ?? toInputMoney(rule.monthly_amount));
     if (!Number.isFinite(amount) || amount < 0) { setError("Informe um valor mensal válido para a função."); return; }
     const scope = rule.scope_name.trim().replace(/\s+/g, " ");
     if (!scope || scope.length > 150) { setError("Informe um centro/unidade com até 150 caracteres."); return; }
-    if (rules.some((item) => item.id !== rule.id && ruleKey(item.scope_name) === ruleKey(scope) && ruleKey(item.function_name) === ruleKey(rule.function_name))) {
+    if (rules.some((item) => !rule.memberIds.includes(item.id) && ruleKey(item.scope_name) === ruleKey(scope) && ruleKey(item.function_name) === ruleKey(rule.function_name))) {
       setError("Já existe essa função configurada para o centro/unidade informado.");
       return;
     }
@@ -425,12 +478,13 @@ export default function AttendancePage() {
       monthly_amount: amount,
       active: rule.active,
       updated_at: new Date().toISOString(),
-    }).eq("id", rule.id).select("id").maybeSingle();
-    if (updateError || !data) setError("Não foi possível salvar a regra da função.");
+    }).in("id", rule.memberIds).select("id");
+    if (updateError || !data || data.length !== rule.memberIds.length) setError("Não foi possível salvar a regra consolidada da função.");
     else {
-      setRules((current) => current.map((item) => item.id === rule.id ? { ...item, scope_name: scope, monthly_amount: amount } : item).sort((a, b) => a.scope_name.localeCompare(b.scope_name, "pt-BR") || a.function_name.localeCompare(b.function_name, "pt-BR")));
-      setAmountDrafts((current) => ({ ...current, [rule.id]: toInputMoney(amount) }));
-      setSuccess(`Regra de ${rule.function_name} salva.`);
+      const memberIds = new Set(rule.memberIds);
+      setRules((current) => current.map((item) => memberIds.has(item.id) ? { ...item, scope_name: scope, receives_attendance: rule.receives_attendance, monthly_amount: amount, active: rule.active } : item).sort((a, b) => a.scope_name.localeCompare(b.scope_name, "pt-BR") || a.function_name.localeCompare(b.function_name, "pt-BR")));
+      setAmountDrafts((current) => ({ ...current, ...Object.fromEntries(rule.memberIds.map((id) => [id, toInputMoney(amount)])) }));
+      setSuccess(`Regra consolidada de ${rule.displayName} salva para todas as classificações.`);
     }
     setSavingRuleId("");
   }
@@ -485,16 +539,18 @@ export default function AttendancePage() {
     setSavingReductions(false);
   }
 
-  function updateRule(id: string, field: "receives_attendance" | "active", value: boolean) {
-    setRules((current) => current.map((rule) => rule.id === id ? { ...rule, [field]: value } : rule));
+  function updateRule(ids: string[], field: "receives_attendance" | "active", value: boolean) {
+    const memberIds = new Set(ids);
+    setRules((current) => current.map((rule) => memberIds.has(rule.id) ? { ...rule, [field]: value } : rule));
   }
-  function updateReductionRule(id: string, field: "active", value: boolean) {
-    setReductionRules((current) => current.map((rule) => rule.id === id ? { ...rule, [field]: value } : rule));
-    setReductionDirtyIds((current) => current.includes(id) ? current : [...current, id]);
+  function updateReductionRule(ids: string[], field: "active", value: boolean) {
+    const memberIds = new Set(ids);
+    setReductionRules((current) => current.map((rule) => memberIds.has(rule.id) ? { ...rule, [field]: value } : rule));
+    setReductionDirtyIds((current) => Array.from(new Set([...current, ...ids])));
   }
-  function updateReductionDraft(id: string, value: string) {
-    setReductionDrafts((current) => ({ ...current, [id]: value }));
-    setReductionDirtyIds((current) => current.includes(id) ? current : [...current, id]);
+  function updateReductionDraft(ids: string[], value: string) {
+    setReductionDrafts((current) => ({ ...current, ...Object.fromEntries(ids.map((id) => [id, value])) }));
+    setReductionDirtyIds((current) => Array.from(new Set([...current, ...ids])));
   }
 
   return <main className="page-content attendance-page">
@@ -591,18 +647,19 @@ export default function AttendancePage() {
         <button type="submit" className="primary-button" disabled={addingFunction || !newFunctionName.trim() || !newScopeName.trim()}><Plus size={15} />{addingFunction ? "Adicionando..." : "Adicionar regra"}</button>
       </form>
       <div className="attendance-proposal-warning" role="note"><strong>Valores importados como propostas — ainda não aprovados pelo RH</strong><span>Os valores da planilha de setembro/2026 começam inativos e não entram na estimativa até a regra ser ativada e “Recebe assiduidade” ser confirmado. Em Dourados, há um valor divergente para ELETRICISTA (23 registros indicam R$ 210,00 e 1 indica R$ 472,50).</span></div>
-      {rules.length === 0 ? <div className="attendance-empty"><strong>Nenhuma regra configurada</strong><span>Adicione uma combinação de centro/unidade e função ou confirme se a migração do banco já foi aplicada.</span></div> : <div className="attendance-scope-groups">
-        {Array.from(new Set(rules.map((rule) => rule.scope_name))).sort((a, b) => a.localeCompare(b, "pt-BR")).map((scope, index) => {
-          const scopedRules = rules.filter((rule) => rule.scope_name === scope);
+      <p className="attendance-reduction-note">Em “Geral”, os níveis e classificações da mesma função ficam consolidados em uma única regra. As configurações por centro/unidade continuam separadas, e o cargo oficial cadastrado para cada colaborador não é alterado.</p>
+      {functionRuleViews.length === 0 ? <div className="attendance-empty"><strong>Nenhuma regra configurada</strong><span>Adicione uma combinação de centro/unidade e função ou confirme se a migração do banco já foi aplicada.</span></div> : <div className="attendance-scope-groups">
+        {Array.from(new Set(functionRuleViews.map((rule) => rule.scope_name))).sort((a, b) => a.localeCompare(b, "pt-BR")).map((scope, index) => {
+          const scopedRules = functionRuleViews.filter((rule) => rule.scope_name === scope);
           const pending = scopedRules.filter((rule) => !rule.active || !rule.receives_attendance).length;
           return <details className="attendance-scope-group" key={scope} open={index === 0 || ruleKey(scope) !== "geral"}>
-            <summary><strong>{scope}</strong><span>{scopedRules.length} funções · {pending} aguardando confirmação</span></summary>
+            <summary><strong>{scope}</strong><span>{scopedRules.length} funções padronizadas · {pending} aguardando confirmação</span></summary>
             <div className="attendance-rules-list">
               {scopedRules.map((rule) => <article className="attendance-rule-row" key={rule.id}>
-                <div className="attendance-rule-name"><strong>{rule.function_name}</strong><small className="attendance-rule-scope">{rule.source_note || (!rule.active || !rule.receives_attendance ? "Aguardando confirmação do RH" : "Regra configurada")}</small></div>
-                <label className="attendance-toggle"><input type="checkbox" checked={rule.active} onChange={(event) => updateRule(rule.id, "active", event.target.checked)} /><span>Regra ativa</span></label>
-                <label className="attendance-toggle"><input type="checkbox" checked={rule.receives_attendance} onChange={(event) => updateRule(rule.id, "receives_attendance", event.target.checked)} /><span>Recebe assiduidade</span></label>
-                <label className="attendance-amount"><span>Valor mensal proposto</span><div><span>R$</span><input inputMode="decimal" aria-label={`Valor mensal para ${scope} · ${rule.function_name}`} value={amountDrafts[rule.id] ?? toInputMoney(rule.monthly_amount)} onChange={(event) => setAmountDrafts((current) => ({ ...current, [rule.id]: event.target.value }))} /></div></label>
+                <div className="attendance-rule-name"><strong>{rule.displayName}</strong><small className="attendance-rule-scope">{rule.hasConfigurationConflict ? "Classificações com valores diferentes; ao salvar, todos os níveis serão padronizados." : rule.source_note || (!rule.active || !rule.receives_attendance ? "Aguardando confirmação do RH" : "Regra configurada")}</small>{rule.memberIds.length > 1 && <small className="attendance-rule-scope">{rule.memberIds.length} cargos/níveis agrupados</small>}</div>
+                <label className="attendance-toggle"><input type="checkbox" checked={rule.active} onChange={(event) => updateRule(rule.memberIds, "active", event.target.checked)} /><span>Regra ativa</span></label>
+                <label className="attendance-toggle"><input type="checkbox" checked={rule.receives_attendance} onChange={(event) => updateRule(rule.memberIds, "receives_attendance", event.target.checked)} /><span>Recebe assiduidade</span></label>
+                <label className="attendance-amount"><span>Valor mensal proposto</span><div><span>R$</span><input inputMode="decimal" aria-label={`Valor mensal para ${scope} · ${rule.displayName}`} value={amountDrafts[rule.id] ?? toInputMoney(rule.monthly_amount)} onChange={(event) => setAmountDrafts((current) => ({ ...current, [rule.id]: event.target.value }))} /></div></label>
                 <button type="button" className="secondary-button" onClick={() => void saveFunctionRule(rule)} disabled={savingRuleId === rule.id}><Save size={14} />{savingRuleId === rule.id ? "Salvando..." : "Salvar"}</button>
               </article>)}
             </div>
@@ -613,15 +670,31 @@ export default function AttendancePage() {
         <div className="attendance-section-heading"><div><h2>Redução por ocorrência e critério coletivo</h2><p>Configure quanto cada evento reduz do valor fixo da função.</p></div></div>
         <p className="attendance-reduction-note">Configure um valor fixo em reais por ocorrência; faltas e atestados são calculados por dia, e cada critério coletivo “Não atende” conta uma vez. Cada regra começa zerada e desativada; somente regras marcadas “Aplicar na estimativa” entram no cálculo. A planilha não define regras consistentes de desconto e contém 10 linhas em que o desconto supera a assiduidade prevista, por isso nenhum desconto foi inferido. A estimativa não autoriza desconto automático em folha.</p>
         <div className="attendance-reduction-functions">
-          {rules.map((functionRule, index) => {
-            const functionReductions = reductionRules.filter((rule) => rule.function_rule_id === functionRule.id);
+          {functionRuleViews.map((functionRule, index) => {
+            const groupedReductions = new Map<string, ReductionRule[]>();
+            for (const reduction of reductionRules) {
+              if (!functionRule.memberIds.includes(reduction.function_rule_id)) continue;
+              const group = groupedReductions.get(reduction.criterion_key) ?? [];
+              group.push(reduction);
+              groupedReductions.set(reduction.criterion_key, group);
+            }
+            const functionReductions = Array.from(groupedReductions, ([criterionKey, members]) => {
+              const representative = members.find((rule) => rule.function_rule_id === functionRule.id) ?? members[0];
+              return {
+                ...representative,
+                criterion_key: criterionKey,
+                memberIds: members.map((rule) => rule.id),
+                active: members.some((rule) => rule.active),
+                hasConflict: new Set(members.map((rule) => `${rule.active}|${Number(rule.reduction_amount)}`)).size > 1,
+              };
+            }).sort((a, b) => a.criterion_key.localeCompare(b.criterion_key, "pt-BR"));
             return <details className="attendance-reduction-function" key={functionRule.id} open={index === 0}>
-              <summary><strong>{functionRule.scope_name} · {functionRule.function_name}</strong><span>{functionReductions.filter((rule) => rule.active).length}/{functionReductions.length} critérios ativos</span></summary>
+              <summary><strong>{functionRule.scope_name} · {functionRule.displayName}</strong><span>{functionReductions.filter((rule) => rule.active).length}/{functionReductions.length} critérios ativos</span></summary>
               <div className="attendance-reduction-list">
-                {functionReductions.map((rule) => <label className="attendance-reduction-row" key={rule.id}>
+                {functionReductions.map((rule) => <label className="attendance-reduction-row" key={rule.criterion_key}>
                   <strong>{reductionLabels[rule.criterion_key] ?? rule.criterion_key}</strong>
-                  <span className="attendance-reduction-input"><span>R$</span><input type="number" min="0" max="9999999999.99" step="0.01" inputMode="decimal" aria-label={`Valor fixo por evento para ${functionRule.function_name}: ${reductionLabels[rule.criterion_key] ?? rule.criterion_key}`} value={reductionDrafts[rule.id] ?? String(rule.reduction_amount)} onChange={(event) => updateReductionDraft(rule.id, event.target.value)} /></span>
-                  <span className="attendance-reduction-activation"><input type="checkbox" checked={rule.active} onChange={(event) => updateReductionRule(rule.id, "active", event.target.checked)} /><span>Aplicar na estimativa (após confirmação do RH)</span></span>
+                  <span className="attendance-reduction-input"><span>R$</span><input type="number" min="0" max="9999999999.99" step="0.01" inputMode="decimal" aria-label={`Valor fixo por evento para ${functionRule.displayName}: ${reductionLabels[rule.criterion_key] ?? rule.criterion_key}`} value={reductionDrafts[rule.id] ?? String(rule.reduction_amount)} onChange={(event) => updateReductionDraft(rule.memberIds, event.target.value)} /></span>
+                  <span className="attendance-reduction-activation"><input type="checkbox" checked={rule.active} onChange={(event) => updateReductionRule(rule.memberIds, "active", event.target.checked)} /><span>Aplicar na estimativa (após confirmação do RH){rule.hasConflict ? " · classificações divergentes serão padronizadas ao salvar" : ""}</span></span>
                 </label>)}
                 {functionReductions.length === 0 && <p className="attendance-reduction-empty">Regras ainda não carregadas. Atualize a página para tentar novamente.</p>}
               </div>
