@@ -35,12 +35,10 @@ type FunctionRuleView = FunctionRule & {
 };
 
 type OccurrenceType = "late" | "absence_justified" | "absence_unjustified" | "convocation_absence" | "medical_certificate" | "warning";
-type Occurrence = { id: string; occurrence_type: OccurrenceType; occurred_on: string; occurred_at: string | null; days_count: number };
-type OccurrenceDraft = { id: string; occurrence_type: OccurrenceType; occurred_on: string; occurred_at: string; days_count: string };
-type ReductionRule = { id: string; function_rule_id: string; criterion_key: string; reduction_amount: number | string; active: boolean };
-type CollectiveField = "quality_status" | "service_cancellation_status" | "safety_status";
-type Collective = Record<CollectiveField, "not_evaluated" | "meets" | "does_not_meet">;
-type SavedSnapshot = { scope_name_snapshot: string; receives_attendance_snapshot: boolean; monthly_amount_snapshot: number | string; reduction_amount_snapshot: number | string; estimated_amount_snapshot: number | string };
+type Occurrence = { id: string; occurrence_type: OccurrenceType; occurred_on: string; occurred_at: string | null; days_count: number; is_unjustified: boolean; missing_time_record: boolean; convocation_notice_hours: number | null };
+type OccurrenceDraft = { id: string; occurrence_type: OccurrenceType; occurred_on: string; occurred_at: string; days_count: string; is_unjustified: boolean; missing_time_record: boolean; convocation_notice_hours: string };
+type Collective = { quality_occurrence_count: string; service_cancellation_occurrence_count: string; safety_status: "not_evaluated" | "meets" | "does_not_meet" };
+type SavedSnapshot = { scope_name_snapshot: string; receives_attendance_snapshot: boolean; monthly_amount_snapshot: number | string; reduction_amount_snapshot: number | string; estimated_amount_snapshot: number | string; quality_occurrence_count: number | string; service_cancellation_occurrence_count: number | string; safety_status: Collective["safety_status"] };
 
 const occurrenceOptions: Array<[OccurrenceType, string]> = [
   ["late", "Atraso na jornada"],
@@ -52,19 +50,8 @@ const occurrenceOptions: Array<[OccurrenceType, string]> = [
 ];
 const eventLabels = Object.fromEntries(occurrenceOptions) as Record<OccurrenceType, string>;
 const statusLabels = { active: "Ativo", away: "Afastado", terminated: "Desligado" } as const;
-const emptyCollective: Collective = { quality_status: "not_evaluated", service_cancellation_status: "not_evaluated", safety_status: "not_evaluated" };
+const emptyCollective: Collective = { quality_occurrence_count: "0", service_cancellation_occurrence_count: "0", safety_status: "not_evaluated" };
 const collectiveOptions = [["not_evaluated", "Não avaliado"], ["meets", "Atende"], ["does_not_meet", "Não atende"]] as const;
-const reductionLabels: Record<string, string> = {
-  late: "Atraso de jornada",
-  absence_justified: "Falta justificada (por dia)",
-  absence_unjustified: "Falta injustificada (por dia)",
-  convocation_absence: "Falta de convocação (por dia)",
-  medical_certificate: "Atestado médico (por dia)",
-  warning: "Advertência (por registro)",
-  quality: "Qualidade — não atende",
-  service_cancellation: "Cancelamento de serviço — não atende",
-  safety: "Segurança — não atende",
-};
 
 function isoDate(year: number, monthIndex: number, day: number) {
   const date = new Date(year, monthIndex, day);
@@ -175,19 +162,37 @@ function employeeFunction(employee: Employee) {
   return `${name} ${classification}`;
 }
 function newOccurrence(periodStart: string): OccurrenceDraft {
-  return { id: crypto.randomUUID(), occurrence_type: "late", occurred_on: periodStart, occurred_at: "", days_count: "1" };
+  return { id: crypto.randomUUID(), occurrence_type: "late", occurred_on: periodStart, occurred_at: "", days_count: "1", is_unjustified: false, missing_time_record: false, convocation_notice_hours: "" };
 }
 function isMultiDay(type: OccurrenceType) {
   return ["absence_justified", "absence_unjustified", "convocation_absence", "medical_certificate"].includes(type);
+}
+function countValue(value: string) {
+  const parsed = Number(value || "0");
+  return Number.isInteger(parsed) && parsed > 0 ? parsed : 0;
+}
+function officialReductionPercentages(occurrences: OccurrenceDraft[], collective: Collective) {
+  const fullIndividualReduction = occurrences.some((item) =>
+    item.occurrence_type === "absence_unjustified" ||
+    (item.occurrence_type === "late" && (item.missing_time_record || item.is_unjustified)) ||
+    (item.occurrence_type === "convocation_absence" && item.is_unjustified && countValue(item.convocation_notice_hours) >= 24)
+  );
+  const justifiedAbsenceDays = occurrences
+    .filter((item) => item.occurrence_type === "absence_justified" || item.occurrence_type === "medical_certificate")
+    .reduce((total, item) => total + countValue(item.days_count), 0);
+  const individual = fullIndividualReduction ? 100 : justifiedAbsenceDays > 1 ? 50 : 0;
+  const qualityCount = countValue(collective.quality_occurrence_count);
+  const serviceCount = countValue(collective.service_cancellation_occurrence_count);
+  const quality = qualityCount > 3 ? 100 : qualityCount * 10;
+  const service = serviceCount > 2 ? 100 : serviceCount * 20;
+  const safety = collective.safety_status === "does_not_meet" ? 100 : 0;
+  return { individual, collective: Math.min(100, quality + service + safety) };
 }
 
 export default function AttendancePage() {
   const [employees, setEmployees] = useState<Employee[]>([]);
   const [rules, setRules] = useState<FunctionRule[]>([]);
-  const [reductionRules, setReductionRules] = useState<ReductionRule[]>([]);
   const [amountDrafts, setAmountDrafts] = useState<Record<string, string>>({});
-  const [reductionDrafts, setReductionDrafts] = useState<Record<string, string>>({});
-  const [reductionDirtyIds, setReductionDirtyIds] = useState<string[]>([]);
   const [organizationId, setOrganizationId] = useState("");
   const [selectedEmployeeId, setSelectedEmployeeId] = useState("");
   const [scopeName, setScopeName] = useState("Geral");
@@ -203,8 +208,6 @@ export default function AttendancePage() {
   const [loading, setLoading] = useState(true);
   const [periodLoading, setPeriodLoading] = useState(false);
   const [savingRecord, setSavingRecord] = useState(false);
-  const [savingCollective, setSavingCollective] = useState(false);
-  const [savingReductions, setSavingReductions] = useState(false);
   const [savingRuleId, setSavingRuleId] = useState("");
   const [addingFunction, setAddingFunction] = useState(false);
   const [error, setError] = useState("");
@@ -222,7 +225,9 @@ export default function AttendancePage() {
     return {
       late: count("late"),
       justified: count("absence_justified"),
+      justifiedDays: days("absence_justified"),
       unjustified: count("absence_unjustified"),
+      unjustifiedDays: days("absence_unjustified"),
       callout: count("convocation_absence"),
       certificates: count("medical_certificate"),
       certificateDays: days("medical_certificate"),
@@ -236,24 +241,16 @@ export default function AttendancePage() {
   const attendanceBaseAmount = attendanceEligible
     ? savedRecord && savedSnapshot ? Number(savedSnapshot.monthly_amount_snapshot) : Number(selectedRule?.monthly_amount ?? 0)
     : 0;
-  const amountFor = (criterion: string) => selectedRule?.active && selectedRule.receives_attendance
-    ? Number(reductionRules.find((rule) => rule.function_rule_id === selectedRule.id && rule.criterion_key === criterion && rule.active)?.reduction_amount ?? 0)
-    : 0;
-  const individualReduction = occurrences.reduce((total, item) => {
-    const units = isMultiDay(item.occurrence_type) ? Number(item.days_count || 0) : 1;
-    return total + amountFor(item.occurrence_type) * units;
-  }, 0);
-  const collectiveKeys: Array<[CollectiveField, string]> = [["quality_status", "quality"], ["service_cancellation_status", "service_cancellation"], ["safety_status", "safety"]];
-  const collectiveReduction = collectiveKeys.reduce((total, [field, criterion]) => total + (collective[field] === "does_not_meet" ? amountFor(criterion) : 0), 0);
+  const reductionPercentages = officialReductionPercentages(occurrences, collective);
+  const individualReduction = Math.round(attendanceBaseAmount * reductionPercentages.individual) / 100;
+  const collectiveReduction = Math.round(attendanceBaseAmount * reductionPercentages.collective) / 100;
   const reductionBreakdown = {
-    individual: Math.round(individualReduction * 100) / 100,
-    collective: Math.round(collectiveReduction * 100) / 100,
+    individual: individualReduction,
+    collective: collectiveReduction,
     total: Math.min(attendanceBaseAmount, Math.round((individualReduction + collectiveReduction) * 100) / 100),
   };
-  const reductionAmount = savedRecord && savedSnapshot ? Number(savedSnapshot.reduction_amount_snapshot) : reductionBreakdown.total;
-  const estimatedAttendanceAmount = savedRecord && savedSnapshot
-    ? Number(savedSnapshot.estimated_amount_snapshot)
-    : Math.max(0, Math.round((attendanceBaseAmount - reductionAmount) * 100) / 100);
+  const reductionAmount = reductionBreakdown.total;
+  const estimatedAttendanceAmount = Math.max(0, Math.round((attendanceBaseAmount - reductionAmount) * 100) / 100);
 
   useEffect(() => {
     const initial = defaultAttendancePeriod();
@@ -277,13 +274,12 @@ export default function AttendancePage() {
         if (active) { setError("Não foi possível identificar a organização do usuário."); setLoading(false); }
         return;
       }
-      const [employeeResult, ruleResult, reductionResult] = await Promise.all([
+      const [employeeResult, ruleResult] = await Promise.all([
         supabase.from("employees").select("id,registration,full_name,job_title,function_name,function_classification,department,unit,admission_date,termination_date,status").order("full_name"),
         supabase.from("attendance_function_rules").select("id,scope_name,function_name,source_note,receives_attendance,monthly_amount,active").order("scope_name").order("function_name"),
-        supabase.from("attendance_reduction_rules").select("id,function_rule_id,criterion_key,reduction_amount,active").order("criterion_key"),
       ]);
       if (!active) return;
-      if (employeeResult.error || ruleResult.error || reductionResult.error) {
+      if (employeeResult.error || ruleResult.error) {
         setError("Não foi possível carregar funcionários e regras. Confirme se a atualização do banco foi aplicada e se seu perfil tem acesso ao RH.");
       } else {
         setOrganizationId(profile.organization_id);
@@ -291,10 +287,6 @@ export default function AttendancePage() {
         const loadedRules = (ruleResult.data ?? []) as FunctionRule[];
         setRules(loadedRules);
         setAmountDrafts(Object.fromEntries(loadedRules.map((rule) => [rule.id, toInputMoney(rule.monthly_amount)])));
-        const loadedReductions = (reductionResult.data ?? []) as ReductionRule[];
-        setReductionRules(loadedReductions);
-        setReductionDrafts(Object.fromEntries(loadedReductions.map((rule) => [rule.id, String(rule.reduction_amount)])));
-        setReductionDirtyIds([]);
       }
       setLoading(false);
     }
@@ -319,23 +311,23 @@ export default function AttendancePage() {
       setError("");
       setSuccess("");
       setOccurrences([]);
+      setCollective(emptyCollective);
       setSavedSnapshot(null);
       setSavedRecord(false);
       const supabase = createClient();
       const recordPromise = selectedEmployeeId
-        ? supabase.from("attendance_period_records").select("id,scope_name_snapshot,receives_attendance_snapshot,monthly_amount_snapshot,reduction_amount_snapshot,estimated_amount_snapshot").eq("employee_id", selectedEmployeeId).eq("period_start", periodStart).eq("period_end", periodEnd).maybeSingle()
+        ? supabase.from("attendance_period_records").select("id,scope_name_snapshot,receives_attendance_snapshot,monthly_amount_snapshot,reduction_amount_snapshot,estimated_amount_snapshot,quality_occurrence_count,service_cancellation_occurrence_count,safety_status").eq("employee_id", selectedEmployeeId).eq("period_start", periodStart).eq("period_end", periodEnd).maybeSingle()
         : Promise.resolve({ data: null, error: null });
-      const collectivePromise = supabase.from("attendance_collective_assessments").select("quality_status,service_cancellation_status,safety_status").eq("period_start", periodStart).eq("period_end", periodEnd).maybeSingle();
-      const [recordResult, collectiveResult] = await Promise.all([recordPromise, collectivePromise]);
+      const recordResult = await recordPromise;
       if (!active) return;
-      if (recordResult.error || collectiveResult.error) {
+      if (recordResult.error) {
         setError("Não foi possível carregar os registros deste período.");
         setPeriodLoading(false);
         return;
       }
       const saved = recordResult.data as SavedSnapshot & { id: string } | null;
       if (saved && selectedEmployeeId) {
-        const { data, error: eventError } = await supabase.from("attendance_occurrences").select("id,occurrence_type,occurred_on,occurred_at,days_count").eq("attendance_record_id", saved.id).order("occurred_on").order("created_at");
+        const { data, error: eventError } = await supabase.from("attendance_occurrences").select("id,occurrence_type,occurred_on,occurred_at,days_count,is_unjustified,missing_time_record,convocation_notice_hours").eq("attendance_record_id", saved.id).order("occurred_on").order("created_at");
         if (!active) return;
         if (eventError) {
           setError("Não foi possível carregar as ocorrências deste colaborador.");
@@ -348,26 +340,42 @@ export default function AttendancePage() {
           occurred_on: item.occurred_on,
           occurred_at: item.occurred_at?.slice(0, 5) ?? "",
           days_count: String(item.days_count),
+          is_unjustified: Boolean(item.is_unjustified),
+          missing_time_record: Boolean(item.missing_time_record),
+          convocation_notice_hours: item.convocation_notice_hours == null ? "" : String(item.convocation_notice_hours),
         })));
         setSavedSnapshot(saved);
         setSavedRecord(true);
         setScopeName(saved.scope_name_snapshot || "Geral");
+        setCollective({
+          quality_occurrence_count: String(saved.quality_occurrence_count ?? 0),
+          service_cancellation_occurrence_count: String(saved.service_cancellation_occurrence_count ?? 0),
+          safety_status: saved.safety_status ?? "not_evaluated",
+        });
       }
-      setCollective(collectiveResult.data ? collectiveResult.data as Collective : emptyCollective);
       setPeriodLoading(false);
     }
     void loadPeriod();
     return () => { active = false; };
   }, [organizationId, periodStart, periodEnd, selectedEmployeeId, validPeriod]);
 
-  function updateOccurrence(id: string, field: keyof Omit<OccurrenceDraft, "id">, value: string) {
+  function updateOccurrence(id: string, field: keyof Omit<OccurrenceDraft, "id">, value: string | boolean) {
     setSavedRecord(false);
     setOccurrences((current) => current.map((item) => {
       if (item.id !== id) return item;
       if (field === "occurrence_type") {
         const nextType = value as OccurrenceType;
-        return { ...item, occurrence_type: nextType, occurred_at: nextType === "late" ? item.occurred_at : "", days_count: isMultiDay(nextType) ? (isMultiDay(item.occurrence_type) ? item.days_count : "1") : "1" };
+        return {
+          ...item,
+          occurrence_type: nextType,
+          occurred_at: nextType === "late" ? item.occurred_at : "",
+          days_count: isMultiDay(nextType) ? (isMultiDay(item.occurrence_type) ? item.days_count : "1") : "1",
+          is_unjustified: nextType === "late" || nextType === "convocation_absence" ? item.is_unjustified : false,
+          missing_time_record: nextType === "late" ? item.missing_time_record : false,
+          convocation_notice_hours: nextType === "convocation_absence" ? item.convocation_notice_hours : "",
+        };
       }
+      if (field === "missing_time_record" && value) return { ...item, missing_time_record: true, occurred_at: "" };
       return { ...item, [field]: value };
     }));
   }
@@ -378,10 +386,13 @@ export default function AttendancePage() {
     setSuccess("");
     const invalid = occurrences.some((item) =>
       !item.occurred_on || item.occurred_on < periodStart || item.occurred_on > periodEnd ||
-      (item.occurrence_type === "late" && !item.occurred_at) ||
+      (item.occurrence_type === "late" && ((item.missing_time_record && Boolean(item.occurred_at)) || (!item.missing_time_record && !item.occurred_at))) ||
+      (item.occurrence_type === "convocation_absence" && item.convocation_notice_hours !== "" && (!Number.isInteger(Number(item.convocation_notice_hours)) || Number(item.convocation_notice_hours) < 0 || Number(item.convocation_notice_hours) > 720)) ||
       (isMultiDay(item.occurrence_type) && (!Number.isInteger(Number(item.days_count)) || Number(item.days_count) < 1 || Number(item.days_count) > 31))
     );
-    if (invalid) { setError("Confira as datas, horários dos atrasos e quantidades de dias das ocorrências."); return; }
+    const invalidCollectiveCount = [collective.quality_occurrence_count, collective.service_cancellation_occurrence_count]
+      .some((value) => value !== "" && (!Number.isInteger(Number(value)) || Number(value) < 0 || Number(value) > 100000));
+    if (invalid || invalidCollectiveCount) { setError("Confira datas, horários, quantidades de dias e critérios coletivos deste registro."); return; }
     setSavingRecord(true);
     const supabase = createClient();
     const { data, error: saveError } = await supabase.rpc("save_attendance_period_record_scoped", {
@@ -389,38 +400,31 @@ export default function AttendancePage() {
       p_period_start: periodStart,
       p_period_end: periodEnd,
       p_scope_name: scopeName,
-      p_events: occurrences.map((item) => ({
-        type: item.occurrence_type,
-        date: item.occurred_on,
-        time: item.occurrence_type === "late" ? item.occurred_at : null,
-        days: isMultiDay(item.occurrence_type) ? Number(item.days_count) : 1,
-      })),
+      p_events: {
+        events: occurrences.map((item) => ({
+          type: item.occurrence_type,
+          date: item.occurred_on,
+          time: item.occurrence_type === "late" ? item.occurred_at : null,
+          days: isMultiDay(item.occurrence_type) ? Number(item.days_count) : 1,
+          unjustified: (item.occurrence_type === "late" || item.occurrence_type === "convocation_absence") && item.is_unjustified,
+          missing_time_record: item.occurrence_type === "late" && item.missing_time_record,
+          notice_hours: item.occurrence_type === "convocation_absence" && item.convocation_notice_hours !== "" ? Number(item.convocation_notice_hours) : null,
+        })),
+        collective: {
+          quality_occurrence_count: countValue(collective.quality_occurrence_count),
+          service_cancellation_occurrence_count: countValue(collective.service_cancellation_occurrence_count),
+          safety_status: collective.safety_status,
+        },
+      },
     });
     if (saveError || !data) {
       setError(saveError?.message?.includes("RH") ? "Seu perfil não tem acesso para registrar assiduidade." : "Não foi possível salvar o registro. Confira o período e as ocorrências.");
     } else {
       setSavedRecord(true);
-      setSavedSnapshot({ scope_name_snapshot: scopeName, receives_attendance_snapshot: Boolean(selectedRule?.active && selectedRule.receives_attendance), monthly_amount_snapshot: selectedRule?.active && selectedRule.receives_attendance ? selectedRule.monthly_amount : 0, reduction_amount_snapshot: reductionAmount, estimated_amount_snapshot: estimatedAttendanceAmount });
+      setSavedSnapshot({ scope_name_snapshot: scopeName, receives_attendance_snapshot: Boolean(selectedRule?.active && selectedRule.receives_attendance), monthly_amount_snapshot: selectedRule?.active && selectedRule.receives_attendance ? selectedRule.monthly_amount : 0, reduction_amount_snapshot: reductionAmount, estimated_amount_snapshot: estimatedAttendanceAmount, quality_occurrence_count: countValue(collective.quality_occurrence_count), service_cancellation_occurrence_count: countValue(collective.service_cancellation_occurrence_count), safety_status: collective.safety_status });
       setSuccess("Registro individual salvo para este período.");
     }
     setSavingRecord(false);
-  }
-
-  async function saveCollective() {
-    if (!organizationId || savingCollective || !validPeriod) return;
-    setSavingCollective(true);
-    setError("");
-    setSuccess("");
-    const { data, error: saveError } = await createClient().from("attendance_collective_assessments").upsert({
-      organization_id: organizationId,
-      period_start: periodStart,
-      period_end: periodEnd,
-      ...collective,
-      updated_at: new Date().toISOString(),
-    }, { onConflict: "organization_id,period_start,period_end" }).select("id").maybeSingle();
-    if (saveError || !data) setError("Não foi possível salvar os requisitos coletivos deste período.");
-    else setSuccess("Requisitos coletivos salvos para a organização neste período.");
-    setSavingCollective(false);
   }
 
   async function addFunctionRule() {
@@ -444,18 +448,11 @@ export default function AttendancePage() {
     if (insertError || !data) setError("Não foi possível adicionar a regra. Confira se a combinação de centro/unidade e função já existe.");
     else {
       const added = data as FunctionRule;
-      const { data: seededRules, error: seededRulesError } = await supabase.from("attendance_reduction_rules").select("id,function_rule_id,criterion_key,reduction_amount,active").eq("function_rule_id", added.id);
       setRules((current) => [...current, added].sort((a, b) => a.scope_name.localeCompare(b.scope_name, "pt-BR") || a.function_name.localeCompare(b.function_name, "pt-BR")));
       setAmountDrafts((current) => ({ ...current, [added.id]: toInputMoney(added.monthly_amount) }));
-      if (seededRulesError) setError("Função adicionada, mas não foi possível carregar suas regras zeradas. Atualize a página para conferir.");
-      else {
-        const addedRules = (seededRules ?? []) as ReductionRule[];
-        setReductionRules((current) => [...current, ...addedRules]);
-        setReductionDrafts((current) => ({ ...current, ...Object.fromEntries(addedRules.map((rule) => [rule.id, String(rule.reduction_amount)])) }));
-      }
       setNewFunctionName("");
       setNewScopeName("Geral");
-      if (!seededRulesError) setSuccess("Regra adicionada inativa, sem assiduidade habilitada e com todas as reduções zeradas e desativadas.");
+      setSuccess("Regra adicionada inativa e sem assiduidade habilitada. Confirme a elegibilidade e o valor com o RH.");
     }
     setAddingFunction(false);
   }
@@ -489,68 +486,9 @@ export default function AttendancePage() {
     setSavingRuleId("");
   }
 
-  async function saveReductionRules() {
-    if (!organizationId || savingReductions || reductionRules.length === 0) return;
-    const values = reductionRules.map((rule) => {
-      const parsed = parseInputMoney(reductionDrafts[rule.id] ?? String(rule.reduction_amount));
-      return { ...rule, parsed };
-    });
-    if (values.some((rule) => !Number.isFinite(rule.parsed) || rule.parsed < 0 || rule.parsed > 9_999_999_999.99)) {
-      setError("Informe valores válidos em reais, a partir de R$ 0,00.");
-      return;
-    }
-    const dirtyIds = new Set(reductionDirtyIds);
-    const changedValues = values.filter((rule) => dirtyIds.has(rule.id));
-    if (changedValues.length === 0) {
-      setSuccess("Não há alterações de redução para salvar.");
-      return;
-    }
-    setSavingReductions(true);
-    setError("");
-    const payload = changedValues.map((rule) => ({
-      organization_id: organizationId,
-      function_rule_id: rule.function_rule_id,
-      criterion_key: rule.criterion_key,
-      reduction_amount: rule.parsed,
-      active: rule.active,
-      updated_at: new Date().toISOString(),
-    }));
-    const supabase = createClient();
-    const { data, error: saveError } = await supabase.from("attendance_reduction_rules").upsert(payload, { onConflict: "organization_id,function_rule_id,criterion_key" }).select("id,function_rule_id,criterion_key,reduction_amount,active");
-    if (saveError || !data || data.length !== payload.length) setError("Não foi possível salvar as regras de redução.");
-    else {
-      const saved = data as ReductionRule[];
-      const savedById = new Map(saved.map((rule) => [rule.id, rule]));
-      setReductionRules((current) => current.map((rule) => savedById.get(rule.id) ?? rule));
-      setReductionDrafts((current) => ({ ...current, ...Object.fromEntries(saved.map((rule) => [rule.id, String(rule.reduction_amount)])) }));
-      setReductionDirtyIds((current) => current.filter((id) => !savedById.has(id)));
-      if (selectedEmployeeId) {
-        const { data: refreshedSnapshot } = await supabase.from("attendance_period_records").select("scope_name_snapshot,receives_attendance_snapshot,monthly_amount_snapshot,reduction_amount_snapshot,estimated_amount_snapshot").eq("employee_id", selectedEmployeeId).eq("period_start", periodStart).eq("period_end", periodEnd).maybeSingle();
-        if (refreshedSnapshot) {
-          setSavedSnapshot(refreshedSnapshot as SavedSnapshot);
-          setSavedRecord(true);
-        } else {
-          setSavedSnapshot(null);
-          setSavedRecord(false);
-        }
-      }
-      setSuccess("Regras de redução salvas. O cálculo é uma estimativa para conferência do RH.");
-    }
-    setSavingReductions(false);
-  }
-
   function updateRule(ids: string[], field: "receives_attendance" | "active", value: boolean) {
     const memberIds = new Set(ids);
     setRules((current) => current.map((rule) => memberIds.has(rule.id) ? { ...rule, [field]: value } : rule));
-  }
-  function updateReductionRule(ids: string[], field: "active", value: boolean) {
-    const memberIds = new Set(ids);
-    setReductionRules((current) => current.map((rule) => memberIds.has(rule.id) ? { ...rule, [field]: value } : rule));
-    setReductionDirtyIds((current) => Array.from(new Set([...current, ...ids])));
-  }
-  function updateReductionDraft(ids: string[], value: string) {
-    setReductionDrafts((current) => ({ ...current, ...Object.fromEntries(ids.map((id) => [id, value])) }));
-    setReductionDirtyIds((current) => Array.from(new Set([...current, ...ids])));
   }
 
   return <main className="page-content attendance-page">
@@ -597,9 +535,9 @@ export default function AttendancePage() {
 
       {!selectedEmployee ? <section className="panel attendance-empty"><UserRound size={25} /><strong>Selecione um colaborador</strong><span>Os dados funcionais e os registros do período aparecerão aqui.</span></section> : <>
         <section className="attendance-metrics" aria-label="Resumo das ocorrências individuais">
-          <article><small>Atrasos na jornada</small><strong>{metrics.late ? `Sim · ${metrics.late}` : "Não"}</strong><span>Registros com data e horário</span></article>
-          <article><small>Faltas justificadas</small><strong>{metrics.justified}</strong><span>Ocorrências registradas</span></article>
-          <article><small>Faltas injustificadas</small><strong>{metrics.unjustified}</strong><span>Ocorrências registradas</span></article>
+          <article><small>Atrasos / falta de ponto</small><strong>{metrics.late ? `Sim · ${metrics.late}` : "Não"}</strong><span>Ocorrências registradas</span></article>
+          <article><small>Faltas justificadas</small><strong>{metrics.justified} · {metrics.justifiedDays} dia(s)</strong><span>Base da regra de redução de 50%</span></article>
+          <article><small>Faltas injustificadas</small><strong>{metrics.unjustified} · {metrics.unjustifiedDays} dia(s)</strong><span>Uma ocorrência elimina a parcela</span></article>
           <article><small>Falta de convocação</small><strong>{metrics.callout}</strong><span>Ocorrências registradas</span></article>
           <article><small>Atestados / dias</small><strong>{metrics.certificates} / {metrics.certificateDays}</strong><span>Quantidade e dias informados</span></article>
           <article><small>Advertências</small><strong>{metrics.warnings}</strong><span>Ocorrências registradas</span></article>
@@ -620,25 +558,40 @@ export default function AttendancePage() {
           }}><option value="no">Não</option><option value="yes">Sim</option></select></label>
           {periodLoading ? <div className="attendance-inline-loading"><LoaderCircle className="spin" size={18} /> Carregando registros...</div> : occurrences.length === 0 ? <div className="attendance-no-events">Nenhuma ocorrência individual registrada neste período.</div> : <div className="attendance-event-list">
             {occurrences.map((item) => <div className="attendance-event-row" key={item.id}>
-              <label><span>Ocorrência</span><select value={item.occurrence_type} onChange={(event) => updateOccurrence(item.id, "occurrence_type", event.target.value)}>{occurrenceOptions.map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select></label>
-              <label><span>Data</span><input type="date" min={periodStart} max={periodEnd} value={item.occurred_on} onChange={(event) => updateOccurrence(item.id, "occurred_on", event.target.value)} /></label>
-              {item.occurrence_type === "late" ? <label><span>Horário</span><input type="time" value={item.occurred_at} onChange={(event) => updateOccurrence(item.id, "occurred_at", event.target.value)} /></label> : isMultiDay(item.occurrence_type) ? <label><span>Quantidade de dias</span><input type="number" min="1" max="31" step="1" value={item.days_count} onChange={(event) => updateOccurrence(item.id, "days_count", event.target.value)} /></label> : <div className="attendance-event-kind"><Clock3 size={15} /><span>{eventLabels[item.occurrence_type]}</span></div>}
+              <div className="attendance-event-fields">
+                <label><span>Ocorrência</span><select value={item.occurrence_type} onChange={(event) => updateOccurrence(item.id, "occurrence_type", event.target.value)}>{occurrenceOptions.map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select></label>
+                <label><span>Data</span><input type="date" min={periodStart} max={periodEnd} value={item.occurred_on} onChange={(event) => updateOccurrence(item.id, "occurred_on", event.target.value)} /></label>
+                {item.occurrence_type === "late" ? <>
+                  <label><span>Horário de início</span><input type="time" value={item.occurred_at} disabled={item.missing_time_record} onChange={(event) => updateOccurrence(item.id, "occurred_at", event.target.value)} /></label>
+                  <div className="attendance-event-flags">
+                    <label className="attendance-event-flag"><input type="checkbox" checked={item.is_unjustified} onChange={(event) => updateOccurrence(item.id, "is_unjustified", event.target.checked)} /><span>Atraso injustificado</span></label>
+                    <label className="attendance-event-flag"><input type="checkbox" checked={item.missing_time_record} onChange={(event) => updateOccurrence(item.id, "missing_time_record", event.target.checked)} /><span>Sem registro de ponto</span></label>
+                  </div>
+                </> : isMultiDay(item.occurrence_type) ? <>
+                  <label><span>Quantidade de dias</span><input type="number" min="1" max="31" step="1" value={item.days_count} onChange={(event) => updateOccurrence(item.id, "days_count", event.target.value)} /></label>
+                  {item.occurrence_type === "convocation_absence" && <>
+                    <label><span>Antecedência da convocação (horas)</span><input type="number" min="0" max="720" step="1" value={item.convocation_notice_hours} onChange={(event) => updateOccurrence(item.id, "convocation_notice_hours", event.target.value)} /></label>
+                    <div className="attendance-event-flags"><label className="attendance-event-flag"><input type="checkbox" checked={item.is_unjustified} onChange={(event) => updateOccurrence(item.id, "is_unjustified", event.target.checked)} /><span>Ausência injustificada</span></label></div>
+                  </>}
+                </> : <div className="attendance-event-kind"><Clock3 size={15} /><span>{eventLabels[item.occurrence_type]}</span></div>}
+              </div>
               <button type="button" className="attendance-remove-event" aria-label={`Remover ${eventLabels[item.occurrence_type]}`} onClick={() => { setSavedRecord(false); setOccurrences((current) => current.filter((event) => event.id !== item.id)); }}><X size={17} /></button>
             </div>)}
           </div>}
-          <div className="attendance-value-summary"><ShieldCheck size={18} /><div><strong>Prévia estimada da assiduidade</strong><div className="attendance-estimate-grid"><div><small>Valor fixo da função</small><strong>{displayMoney(attendanceBaseAmount)}</strong></div><div><small>Redução estimada</small><strong>{displayMoney(reductionAmount)}</strong></div><div className="is-final"><small>Estimativa após critérios</small><strong>{displayMoney(estimatedAttendanceAmount)}</strong></div></div><small className="attendance-estimate-breakdown">{savedRecord ? `Redução registrada nesta gravação: ${displayMoney(reductionAmount)}` : `Individual: ${displayMoney(reductionBreakdown.individual)} · Coletivo: ${displayMoney(reductionBreakdown.collective)}${attendanceBaseAmount > 0 && reductionBreakdown.individual + reductionBreakdown.collective > attendanceBaseAmount ? " · limitado ao valor mensal" : ""}`}</small><span>{savedRecord ? "Exibindo os valores registrados nesta gravação. Ao alterar os dados, a prévia será recalculada com as regras atuais." : "Prévia para conferência do RH; não é cálculo de folha nem autoriza desconto automático."}</span></div></div>
+          <div className="attendance-value-summary"><ShieldCheck size={18} /><div><strong>Prévia estimada da assiduidade</strong><div className="attendance-estimate-grid"><div><small>Valor fixo da função</small><strong>{displayMoney(attendanceBaseAmount)}</strong></div><div><small>Redução estimada</small><strong>{displayMoney(reductionAmount)}</strong></div><div className="is-final"><small>Estimativa após critérios</small><strong>{displayMoney(estimatedAttendanceAmount)}</strong></div></div><small className="attendance-estimate-breakdown">Individual: {displayMoney(reductionBreakdown.individual)} · Coletivo: {displayMoney(reductionBreakdown.collective)}{attendanceBaseAmount > 0 && reductionBreakdown.individual + reductionBreakdown.collective > attendanceBaseAmount ? " · limitado ao valor mensal" : ""}</small><span>{savedRecord ? "Prévia recalculada pelas regras oficiais com os dados registrados. Salve para atualizar o valor gravado no período." : "Prévia para conferência do RH; não é cálculo de folha nem autoriza desconto automático."}</span></div></div>
           {!attendanceEligible && <div className="attendance-rule-warning">{selectedRule ? `A regra “${selectedRule.scope_name} · ${selectedRule.function_name}” está aguardando confirmação do RH ou não habilita o benefício; a base considerada é R$ 0,00.` : "Não há regra ativa para esta combinação de centro/unidade e função. Cadastre ou confirme em “Funções e valores”; a base considerada é R$ 0,00."}</div>}
           <div className="attendance-form-actions"><span>{savedRecord ? "Registro já salvo neste período; salvar novamente substitui suas ocorrências." : "O registro será salvo com a data e o horário do sistema no histórico de auditoria."}</span><button type="button" className="primary-button" onClick={() => void saveRecord()} disabled={periodLoading || savingRecord || !validPeriod}><Save size={15} />{savingRecord ? "Salvando..." : savedRecord ? "Salvar alterações" : "Salvar registro"}</button></div>
         </section>
-
+        <section className="panel attendance-collective">
+          <div className="attendance-section-heading"><div><h2>Requisitos coletivos</h2><p>Registre aqui os critérios aplicáveis individualmente a {selectedEmployee.full_name}. O lançamento fica vinculado somente a este colaborador e período.</p></div></div>
+          <div className="attendance-collective-grid">
+            <label><span>Ocorrências de qualidade</span><input type="number" min="0" max="100000" step="1" value={collective.quality_occurrence_count} onChange={(event) => { setSavedRecord(false); setCollective((current) => ({ ...current, quality_occurrence_count: event.target.value })); }} /><small>Notificações do cliente com responsabilidade apurada.</small></label>
+            <label><span>Cancelamentos / atrasos sem aviso</span><input type="number" min="0" max="100000" step="1" value={collective.service_cancellation_occurrence_count} onChange={(event) => { setSavedRecord(false); setCollective((current) => ({ ...current, service_cancellation_occurrence_count: event.target.value })); }} /><small>Serviços programados não comunicados previamente.</small></label>
+            <label><span>Segurança</span><select value={collective.safety_status} onChange={(event) => { setSavedRecord(false); setCollective((current) => ({ ...current, safety_status: event.target.value as Collective["safety_status"] })); }}>{collectiveOptions.map(([value, text]) => <option key={value} value={value}>{text}</option>)}</select><small>Marque “Não atende” somente após apuração de responsabilidade direta.</small></label>
+          </div>
+          <div className="attendance-form-actions"><span>Qualidade: 10% por ocorrência até 3; acima de 3, zera. Cancelamento/atraso sem aviso: 20% até 2; acima de 2, zera. Segurança apurada: zera. Salve junto ao registro individual.</span></div>
+        </section>
       </>}
-      <section className="panel attendance-collective">
-        <div className="attendance-section-heading"><div><h2>Requisitos coletivos</h2><p>Uma avaliação compartilhada por toda a organização neste período.</p></div></div>
-        <div className="attendance-collective-grid">
-          {([["quality_status", "Qualidade"], ["service_cancellation_status", "Cancelamento de serviço"], ["safety_status", "Segurança"]] as Array<[CollectiveField, string]>).map(([field, label]) => <label key={field}><span>{label}</span><select value={collective[field]} onChange={(event) => { setSavedRecord(false); setCollective((current) => ({ ...current, [field]: event.target.value as Collective[CollectiveField] })); }}>{collectiveOptions.map(([value, text]) => <option key={value} value={value}>{text}</option>)}</select></label>)}
-        </div>
-        <div className="attendance-form-actions"><span>Se configurada, a regra de redução coletiva será aplicada uma vez quando o critério estiver como “Não atende”.</span><button type="button" className="secondary-button" onClick={() => void saveCollective()} disabled={savingCollective || periodLoading || !validPeriod}><Save size={15} />{savingCollective ? "Salvando..." : "Salvar critérios coletivos"}</button></div>
-      </section>
     </> : <section className="panel attendance-function-panel">
       <div className="attendance-section-heading"><div><h2>Elegibilidade e valor por função</h2><p>As funções são sugeridas pelos cadastros de funcionários. Valores são apenas referências configuradas, sem lançamento automático em folha.</p></div></div>
       <form className="attendance-add-function" onSubmit={(event) => { event.preventDefault(); void addFunctionRule(); }}>
@@ -666,43 +619,23 @@ export default function AttendancePage() {
           </details>;
         })}
       </div>}
-      <div className="attendance-reduction-panel">
-        <div className="attendance-section-heading"><div><h2>Redução por ocorrência e critério coletivo</h2><p>Configure quanto cada evento reduz do valor fixo da função.</p></div></div>
-        <p className="attendance-reduction-note">Configure um valor fixo em reais por ocorrência; faltas e atestados são calculados por dia, e cada critério coletivo “Não atende” conta uma vez. Cada regra começa zerada e desativada; somente regras marcadas “Aplicar na estimativa” entram no cálculo. A planilha não define regras consistentes de desconto e contém 10 linhas em que o desconto supera a assiduidade prevista, por isso nenhum desconto foi inferido. A estimativa não autoriza desconto automático em folha.</p>
-        <div className="attendance-reduction-functions">
-          {functionRuleViews.map((functionRule, index) => {
-            const groupedReductions = new Map<string, ReductionRule[]>();
-            for (const reduction of reductionRules) {
-              if (!functionRule.memberIds.includes(reduction.function_rule_id)) continue;
-              const group = groupedReductions.get(reduction.criterion_key) ?? [];
-              group.push(reduction);
-              groupedReductions.set(reduction.criterion_key, group);
-            }
-            const functionReductions = Array.from(groupedReductions, ([criterionKey, members]) => {
-              const representative = members.find((rule) => rule.function_rule_id === functionRule.id) ?? members[0];
-              return {
-                ...representative,
-                criterion_key: criterionKey,
-                memberIds: members.map((rule) => rule.id),
-                active: members.some((rule) => rule.active),
-                hasConflict: new Set(members.map((rule) => `${rule.active}|${Number(rule.reduction_amount)}`)).size > 1,
-              };
-            }).sort((a, b) => a.criterion_key.localeCompare(b.criterion_key, "pt-BR"));
-            return <details className="attendance-reduction-function" key={functionRule.id} open={index === 0}>
-              <summary><strong>{functionRule.scope_name} · {functionRule.displayName}</strong><span>{functionReductions.filter((rule) => rule.active).length}/{functionReductions.length} critérios ativos</span></summary>
-              <div className="attendance-reduction-list">
-                {functionReductions.map((rule) => <label className="attendance-reduction-row" key={rule.criterion_key}>
-                  <strong>{reductionLabels[rule.criterion_key] ?? rule.criterion_key}</strong>
-                  <span className="attendance-reduction-input"><span>R$</span><input type="number" min="0" max="9999999999.99" step="0.01" inputMode="decimal" aria-label={`Valor fixo por evento para ${functionRule.displayName}: ${reductionLabels[rule.criterion_key] ?? rule.criterion_key}`} value={reductionDrafts[rule.id] ?? String(rule.reduction_amount)} onChange={(event) => updateReductionDraft(rule.memberIds, event.target.value)} /></span>
-                  <span className="attendance-reduction-activation"><input type="checkbox" checked={rule.active} onChange={(event) => updateReductionRule(rule.memberIds, "active", event.target.checked)} /><span>Aplicar na estimativa (após confirmação do RH){rule.hasConflict ? " · classificações divergentes serão padronizadas ao salvar" : ""}</span></span>
-                </label>)}
-                {functionReductions.length === 0 && <p className="attendance-reduction-empty">Regras ainda não carregadas. Atualize a página para tentar novamente.</p>}
-              </div>
-            </details>;
-          })}
+      <section className="attendance-official-rules" aria-labelledby="attendance-official-rules-title">
+        <div className="attendance-section-heading"><div><h2 id="attendance-official-rules-title">Regras oficiais de desconto da assiduidade</h2><p>Resumo para consulta do RH — período de apuração configurado no topo da página.</p></div><span className="attendance-rules-badge">Documento oficial</span></div>
+        <div className="attendance-official-rule-grid">
+          <article><h3>Requisitos individuais</h3><ul>
+            <li><strong>Falta injustificada:</strong> 1 ocorrência elimina 100% da parcela.</li>
+            <li><strong>Ausência justificada:</strong> até 1 dia não reduz; mais de 1 dia no período reduz 50%.</li>
+            <li><strong>Convocação:</strong> falta injustificada após convocação com pelo menos 24 horas de antecedência elimina 100%.</li>
+            <li><strong>Jornada e ponto:</strong> atraso injustificado no início da jornada ou falta de registro de ponto elimina 100%.</li>
+          </ul></article>
+          <article><h3>Requisitos coletivos</h3><ul>
+            <li><strong>Qualidade:</strong> 10% por notificação apurada, até 3 ocorrências (30%); acima de 3, elimina 100%.</li>
+            <li><strong>Cancelamento ou atraso sem aviso:</strong> 20% por ocorrência, até 2 (40%); acima de 2, elimina 100%.</li>
+            <li><strong>Segurança:</strong> responsabilidade direta apurada elimina 100% da parcela da equipe responsável. Nesta etapa, o lançamento é feito no registro individual de cada colaborador afetado.</li>
+          </ul></article>
         </div>
-        <div className="attendance-form-actions"><span>Somente regras ativas são abatidas por ocorrência/dia e o total é limitado à assiduidade mensal. Isso é apenas uma estimativa para análise do RH.</span><button type="button" className="primary-button" onClick={() => void saveReductionRules()} disabled={savingReductions || reductionRules.length === 0}><Save size={15} />{savingReductions ? "Salvando..." : "Salvar regras de redução"}</button></div>
-      </div>
+        <p className="attendance-official-rules-note">Advertência não consta como fator de redução no trecho do documento oficial recebido. A prévia é informativa para conferência do RH, limitada ao valor mensal da parcela; não calcula a folha nem autoriza desconto automático.</p>
+      </section>
     </section>}
   </main>;
 }
