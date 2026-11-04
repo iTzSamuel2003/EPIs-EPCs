@@ -37,7 +37,9 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   const [currentUserRole, setCurrentUserRole] = useState("user");
   const pathname = usePathname(); const router = useRouter(); const [mobileMenu, setMobileMenu] = useState(false); const [query, setQuery] = useState(""); const [results, setResults] = useState<SearchResult[]>([]); const [searchError, setSearchError] = useState<string | null>(null); const [sessionError, setSessionError] = useState<string | null>(null); const [selectedSearchIndex, setSelectedSearchIndex] = useState(-1); const [validityCount, setValidityCount] = useState(0); const [allowedPaths, setAllowedPaths] = useState<string[] | null>(null); const [organizationLogo, setOrganizationLogo] = useState(""); const [signingOut, setSigningOut] = useState(false); const menuToggleRef = useRef<HTMLButtonElement>(null); const closeMenuRef = useRef<HTMLButtonElement>(null); const menuWasOpen = useRef(false); const searchRequestRef = useRef(0);
   const [organizationName, setOrganizationName] = useState("");
-  const publicRoute = pathname === "/login" || pathname === "/reset-password" || pathname === "/no-access" || pathname.startsWith("/medidas/") || pathname.startsWith("/assinar/") || pathname === "/portal" || pathname.startsWith("/invite/");
+  const [organizationAccess, setOrganizationAccess] = useState<"checking" | "ready" | "missing" | "error">("checking");
+  const [organizationAccessError, setOrganizationAccessError] = useState("");
+  const publicRoute = pathname === "/login" || pathname === "/reset-password" || pathname === "/no-access" || pathname === "/organization-pending" || pathname.startsWith("/medidas/") || pathname.startsWith("/assinar/") || pathname === "/portal" || pathname.startsWith("/invite/");
   useEffect(() => {
     if (!mobileMenu) return;
     function closeOnOutsidePointer(event: PointerEvent) {
@@ -77,31 +79,53 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     if (publicRoute) return;
     let cancelled = false;
-    void createClient().auth.getUser().then(async ({ data }) => {
-      if (!data.user) return;
-      const supabase = createClient();
-      const { data: profile } = await supabase.from("profiles").select("full_name,role,organization_id").eq("id", data.user.id).maybeSingle();
-      if (!cancelled) {
-        const role = profile?.role || "user";
-        setCurrentUserName(profile?.full_name?.trim() || data.user.email?.split("@")[0] || "Usuário");
-        setCurrentUserRole(role);
-        const [{ data: override }, { data: roleAccess }] = profile?.organization_id && role !== "admin" ? await Promise.all([
-          supabase.from("profile_access_overrides").select("page_paths").eq("profile_id", data.user.id).eq("organization_id", profile.organization_id).maybeSingle(),
-          supabase.from("organization_role_access").select("page_paths").eq("organization_id", profile.organization_id).eq("role", role).maybeSingle(),
-        ]) : [{ data: null }, { data: null }];
-        const paths = role === "admin" ? rolePageDefaults.admin : override ? override.page_paths : roleAccess?.page_paths ?? rolePageDefaults[role] ?? rolePageDefaults.user;
-        setAllowedPaths(paths);
-        if (profile?.organization_id) {
-          const { data: organization } = await supabase.from("organizations").select("name,logo_url").eq("id", profile.organization_id).maybeSingle();
-          if (!cancelled) {
-            setOrganizationLogo(organization?.logo_url || "");
-            setOrganizationName(organization?.name?.trim() || "");
-          }
-        }
+    setOrganizationAccess("checking");
+    setOrganizationAccessError("");
+    setAllowedPaths(null);
+    void createClient().auth.getUser().then(async ({ data, error: authError }) => {
+      if (cancelled) return;
+      if (authError || !data.user) {
+        router.replace("/login");
+        return;
       }
+      const supabase = createClient();
+      const { data: profile, error: profileError } = await supabase.from("profiles").select("full_name,role,organization_id").eq("id", data.user.id).maybeSingle();
+      if (cancelled) return;
+      if (profileError) {
+        setOrganizationAccessError("Não foi possível verificar o vínculo desta conta. Atualize a página ou tente novamente.");
+        setOrganizationAccess("error");
+        return;
+      }
+      if (!profile?.organization_id) {
+        setCurrentUserName(profile?.full_name?.trim() || data.user.email?.split("@")[0] || "Usuário");
+        setAllowedPaths([]);
+        setOrganizationAccess("missing");
+        router.replace("/organization-pending");
+        return;
+      }
+      const role = profile.role || "user";
+      setCurrentUserName(profile.full_name?.trim() || data.user.email?.split("@")[0] || "Usuário");
+      setCurrentUserRole(role);
+      const [{ data: override }, { data: roleAccess }] = role !== "admin" ? await Promise.all([
+        supabase.from("profile_access_overrides").select("page_paths").eq("profile_id", data.user.id).eq("organization_id", profile.organization_id).maybeSingle(),
+        supabase.from("organization_role_access").select("page_paths").eq("organization_id", profile.organization_id).eq("role", role).maybeSingle(),
+      ]) : [{ data: null }, { data: null }];
+      if (cancelled) return;
+      const paths = role === "admin" ? rolePageDefaults.admin : override ? override.page_paths : roleAccess?.page_paths ?? rolePageDefaults[role] ?? rolePageDefaults.user;
+      setAllowedPaths(paths);
+      const { data: organization } = await supabase.from("organizations").select("name,logo_url").eq("id", profile.organization_id).maybeSingle();
+      if (!cancelled) {
+        setOrganizationLogo(organization?.logo_url || "");
+        setOrganizationName(organization?.name?.trim() || "");
+        setOrganizationAccess("ready");
+      }
+    }).catch(() => {
+      if (cancelled) return;
+      setOrganizationAccessError("Não foi possível carregar os dados de acesso. Atualize a página para tentar novamente.");
+      setOrganizationAccess("error");
     });
     return () => { cancelled = true; };
-  }, [publicRoute]);
+  }, [publicRoute, router]);
   useEffect(() => {
     let frame: number | undefined;
     if (mobileMenu) {
@@ -229,6 +253,10 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   function closeSearch() { setQuery(""); setResults([]); setSelectedSearchIndex(-1); } function handleSearchKeyDown(event: React.KeyboardEvent<HTMLInputElement>) { if (event.key === "Escape") { closeSearch(); return; } if (!results.length) return; if (event.key === "ArrowDown") { event.preventDefault(); setSelectedSearchIndex((current) => (current + 1) % results.length); } else if (event.key === "ArrowUp") { event.preventDefault(); setSelectedSearchIndex((current) => (current - 1 + results.length) % results.length); } else if (event.key === "Enter" && selectedSearchIndex >= 0) { event.preventDefault(); router.push(results[selectedSearchIndex].href); closeSearch(); } }
   const userInitials = getInitials(currentUserName);
   const userRoleLabel = roleLabels[currentUserRole] ?? "Usuário";
+
+  if (organizationAccess !== "ready") {
+    return <main className="login-shell"><section className="login-card" aria-live="polite"><p className="eyebrow">ACESSO À ORGANIZAÇÃO</p><h1>{organizationAccess === "error" ? "Não foi possível validar seu acesso" : "Preparando seu acesso"}</h1><p className="login-subtitle">{organizationAccessError || "Estamos verificando o vínculo da sua conta com uma organização."}</p>{organizationAccess === "error" && <button className="primary-button login-button" type="button" onClick={() => window.location.reload()}>Tentar novamente</button>}</section></main>;
+  }
 
   return (
     <CurrentUserContext.Provider value={{ name: currentUserName, role: currentUserRole }}>

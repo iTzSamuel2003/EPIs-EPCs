@@ -23,7 +23,8 @@ export async function updateSession(request: NextRequest) {
   });
   const { data: { user } } = await supabase.auth.getUser();
   const pathname = request.nextUrl.pathname;
-  const isPublicPath = pathname === "/login" || pathname === "/reset-password" || pathname.startsWith("/medidas/") || pathname === "/portal";
+  const isPublicPath = pathname === "/login" || pathname === "/reset-password" || pathname.startsWith("/medidas/") || pathname === "/portal" || pathname.startsWith("/invite/");
+  if (pathname.startsWith("/invite/")) response.headers.set("Cache-Control", "private, no-store");
   if (!user && !isPublicPath) {
     const loginUrl = request.nextUrl.clone();
     loginUrl.pathname = "/login";
