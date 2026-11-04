@@ -29,6 +29,7 @@ function functionKey(value: string) { return normalize(value).replace(/\s+(vi|v|
 const reasons = [["admission", "Admissão"], ["periodic_change", "Troca periódica"], ["damaged", "Equipamento danificado"], ["lost", "Equipamento perdido"], ["role_change", "Alteração de função"], ["replacement", "Substituição"], ["other", "Outro"]];
 
 export default function DeliveriesPage() {
+  const [recordInEmployeeHistory, setRecordInEmployeeHistory] = useState(false);
   const [variants, setVariants] = useState<MaterialVariant[]>([]); const [testLots, setTestLots] = useState<TestLot[]>([]); const [caCertificates, setCaCertificates] = useState<Record<string, CaCertificate>>({});
   const [employees, setEmployees] = useState<Employee[]>([]); const [materials, setMaterials] = useState<Material[]>([]); const [templates, setTemplates] = useState<FunctionTemplate[]>([]); const [employeeId, setEmployeeId] = useState(""); const [employeeFunction, setEmployeeFunction] = useState(""); const [employeeQuery, setEmployeeQuery] = useState(""); const [employeeSuggestionsOpen, setEmployeeSuggestionsOpen] = useState(false); const [materialSuggestionsOpen, setMaterialSuggestionsOpen] = useState<number | null>(null); const [reason, setReason] = useState("admission"); const [deliveredAt, setDeliveredAt] = useState(localDateValue()); const [notes, setNotes] = useState(""); const [items, setItems] = useState<DeliveryItem[]>([newDeliveryItem()]); const [photoFiles, setPhotoFiles] = useState<File[]>([]); const [loading, setLoading] = useState(true); const [variantsLoading, setVariantsLoading] = useState(true); const [saving, setSaving] = useState(false); const [error, setError] = useState(""); const [success, setSuccess] = useState(""); const [canRetryLoad, setCanRetryLoad] = useState(true);
   const loadOptionsRequestRef = useRef(0);
@@ -349,6 +350,15 @@ export default function DeliveriesPage() {
         return;
       }
       const pendingKey = String(pendingId);
+      if (recordInEmployeeHistory) {
+        const { error: historyFlagError } = await supabase.rpc("enable_pending_delivery_history_entry", { p_pending_delivery_id: pendingKey });
+        if (historyFlagError) {
+          const { error: cancelError } = await supabase.rpc("cancel_pending_delivery", { p_pending_delivery_id: pendingKey });
+          setError(`${friendlyError(historyFlagError, "Não foi possível registrar a ocorrência no histórico.")}${cancelError ? " A ficha ficou pendente e precisa ser cancelada manualmente." : " A ficha foi cancelada e nenhum material foi baixado."}`);
+          if (cancelError) void refreshPendingDeliveries();
+          return;
+        }
+      }
       if (photoFiles.length) pendingPhotosRef.current.set(pendingKey, photoFiles);
       const link = await generatePendingLink(pendingKey);
       setSuccess(link ? "Recibo gerado. Imprima-o ou envie o link; o colaborador deve assinar no ato do recebimento. O estoque será atualizado após a confirmação." : "Recibo preparado e salvo como pendente. Gere o link na lista abaixo; nenhum material foi baixado do estoque.");
@@ -358,6 +368,8 @@ export default function DeliveriesPage() {
       setItems([newDeliveryItem()]);
       setNotes("");
       setPhotoFiles([]);
+      setReason("admission");
+      setRecordInEmployeeHistory(false);
       void refreshPendingDeliveries();
     } catch (unexpectedError) {
       setError(friendlyError(unexpectedError, "Não foi possível preparar a ficha para assinatura."));
@@ -390,8 +402,9 @@ export default function DeliveriesPage() {
         <div className="form-grid three">
           <label className="employee-picker">Funcionário<div className="employee-picker-control"><input value={employeeQuery} onChange={(event) => { setEmployeeQuery(event.target.value); setEmployeeId(""); setEmployeeFunction(""); setEmployeeSuggestionsOpen(true); }} onFocus={() => { if (!employeeId) setEmployeeSuggestionsOpen(true); }} placeholder="Digite nome, matrícula ou setor" required disabled={loading} autoComplete="off" />{employeeSuggestionsOpen && employeeQuery && <div className="employee-suggestions">{filteredEmployees.map((employee) => <button type="button" key={employee.id} onMouseDown={() => selectEmployee(employee)}><strong>{employee.full_name}</strong><small>{employee.registration}{employee.department ? ` · ${employee.department}` : ""}{employee.unit ? ` · ${employee.unit}` : " · Sem base atribuída"}</small></button>)}{!filteredEmployees.length && <span>Nenhum funcionário encontrado.</span>}</div>}</div>{employeeId && <><small className="employee-function-info">Matrícula: {selectedEmployee?.registration || "Não informada"}</small><small className="employee-function-info">Função: {employeeFunction || "Não informada"}</small><small className="employee-function-info">Base: {selectedEmployee?.unit || "Sem base atribuída"}</small></>}</label>
           <label>Data da entrega<input type="date" value={deliveredAt} onChange={(event) => updateDeliveryDate(event.target.value)} required /></label>
-          <label>Motivo<select value={reason} onChange={(event) => setReason(event.target.value)}>{reasons.map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select></label>
+          <label>Motivo<select value={reason} onChange={(event) => { const nextReason = event.target.value; setReason(nextReason); setRecordInEmployeeHistory(["damaged", "lost"].includes(nextReason)); }}>{reasons.map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select></label>
         </div>
+        <label className="delivery-history-toggle"><input type="checkbox" checked={recordInEmployeeHistory} onChange={(event) => setRecordInEmployeeHistory(event.target.checked)} /><span><strong>Registrar ocorrência no histórico do colaborador</strong><small>Motivos de material danificado ou perdido já vêm marcados como negativos. Você pode alterar esta opção; o registro só aparece após a assinatura.</small></span></label>
         <div className="delivery-items-header"><div><h3>Equipamentos entregues</h3><p>O sistema aplica FEFO e seleciona somente lotes com documentação válida.</p></div>{selectedTemplate && <button type="button" className="template-load-button" onClick={loadFunctionMaterials}>Carregar materiais da função</button>}<button type="button" className="secondary-button" onClick={() => setItems((current) => [...current, newDeliveryItem()])}><Plus size={15} /> Adicionar item</button></div>
         <div className="delivery-items">{items.map((item, index) => {
           const selectedMaterial = materials.find((material) => material.id === item.material_id);

@@ -1,7 +1,7 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState, type FormEvent } from "react";
-import { CalendarDays, ChevronLeft, ChevronRight, Clock3, Download, History, LoaderCircle, Paperclip, Plus, RotateCcw, ShieldCheck, UserRound, X } from "lucide-react";
+import { useCallback, useEffect, useMemo, useRef, useState, type FormEvent } from "react";
+import { ChevronLeft, ChevronRight, Clock3, Download, History, LoaderCircle, Paperclip, Plus, RotateCcw, ShieldCheck, UserRound, X } from "lucide-react";
 import { EmployeeAutocomplete } from "@/components/employee-autocomplete";
 import { FeedbackMessage } from "@/components/feedback-message";
 import { createClient } from "@/lib/supabase/client";
@@ -22,6 +22,17 @@ const ATTENDANCE_LABELS: Record<string, string> = {
   medical_certificate: "Atestado médico",
   warning: "Advertência",
 };
+const DELIVERY_LABELS: Record<string, string> = {
+  admission: "Admissão",
+  periodic_change: "Troca periódica",
+  damaged: "Equipamento danificado",
+  lost: "Equipamento perdido",
+  role_change: "Alteração de função",
+  replacement: "Substituição",
+  other: "Outro motivo",
+};
+const NEGATIVE_ATTENDANCE_TYPES = new Set(["late", "absence_unjustified", "convocation_absence", "warning"]);
+type EventTone = "positive" | "neutral" | "negative";
 
 type Employee = {
   id: string;
@@ -37,7 +48,7 @@ type HistoryEvent = {
   employee_name: string;
   registration: string | null;
   function_name: string | null;
-  source: "attendance" | "hr";
+  source: "attendance" | "hr" | "delivery";
   event_type: string;
   occurred_on: string;
   end_date: string | null;
@@ -78,9 +89,18 @@ function documentExtension(file: File) {
 }
 
 function eventTypeLabel(event: HistoryEvent) {
+  if (event.source === "delivery") return DELIVERY_LABELS[event.event_type] ?? "Entrega de materiais";
   return event.source === "attendance"
     ? ATTENDANCE_LABELS[event.event_type] ?? "Ocorrência de assiduidade"
     : EVENT_TYPES.find(([value]) => value === event.event_type)?.[1] ?? "Registro de RH";
+}
+
+function eventTone(event: HistoryEvent): EventTone {
+  if (event.source === "delivery") return ["damaged", "lost"].includes(event.event_type) ? "negative" : "neutral";
+  if (event.source === "attendance") return NEGATIVE_ATTENDANCE_TYPES.has(event.event_type) ? "negative" : "neutral";
+  if (event.event_type === "recognition") return "positive";
+  if (event.event_type === "suspension") return "negative";
+  return "neutral";
 }
 
 function employeeFunction(employee: Employee) {
@@ -125,6 +145,15 @@ export default function EmployeeHistoryPage() {
 
   const pageCount = Math.max(1, Math.ceil(totalCount / PAGE_SIZE));
   const selectedEmployee = employees.find((employee) => employee.id === employeeId) ?? null;
+  const groupedEvents = useMemo(() => {
+    const groups: Array<{ date: string; items: HistoryEvent[] }> = [];
+    for (const event of events) {
+      const currentGroup = groups[groups.length - 1];
+      if (currentGroup?.date === event.occurred_on) currentGroup.items.push(event);
+      else groups.push({ date: event.occurred_on, items: [event] });
+    }
+    return groups;
+  }, [events]);
 
   useEffect(() => {
     let active = true;
@@ -168,7 +197,10 @@ export default function EmployeeHistoryPage() {
       .range(page * PAGE_SIZE, (page + 1) * PAGE_SIZE - 1);
     if (employeeId) request = request.eq("employee_id", employeeId);
     if (sourceFilter !== "all") request = request.eq("source", sourceFilter);
-    if (typeFilter !== "all") request = request.eq("event_type", typeFilter);
+    if (typeFilter !== "all") {
+      const [source, eventType] = typeFilter.split(":");
+      request = request.eq("source", source).eq("event_type", eventType);
+    }
     if (dateFrom) request = request.gte("occurred_on", dateFrom);
     if (dateTo) request = request.lte("occurred_on", dateTo);
     const { data, error: queryError, count } = await request;
@@ -316,7 +348,7 @@ export default function EmployeeHistoryPage() {
 
     <section className="panel employee-history-intro">
       <div className="employee-history-intro-icon"><History size={21} /></div>
-      <div><strong>Assiduidade integrada automaticamente</strong><p>Atrasos, faltas, atestados, faltas de convocação e advertências salvos em “Assiduidade” aparecem aqui sem recadastro. Use “Novo registro de RH” para suspensões, afastamentos formais, elogios e outras ocorrências complementares.</p></div>
+      <div><strong>Histórico integrado automaticamente</strong><p>Assiduidade, registros complementares de RH e entregas marcadas aparecem aqui em ordem de data. Entregas só entram após a confirmação da assinatura.</p></div>
       <span className="employee-history-count"><strong>{totalCount}</strong><small>registro(s) encontrado(s)</small></span>
     </section>
 
@@ -327,8 +359,8 @@ export default function EmployeeHistoryPage() {
       <div className="employee-history-filter-heading"><div><h2>Filtrar histórico</h2><p>Escolha uma pessoa, tipo de registro ou intervalo de datas.</p></div><button className="text-action" type="button" onClick={resetFilters}>Limpar filtros</button></div>
       <div className="employee-history-filter-grid">
         <EmployeeAutocomplete className="employee-history-filter-employee" label="Colaborador" employees={employees} value={employeeId} emptyLabel="Todos os colaboradores" placeholder="Digite o nome ou a matrícula" resetKey={employeePickerResetKey} onChange={(id) => { setEmployeeId(id); setPage(0); }} />
-        <label><span>Origem</span><select value={sourceFilter} onChange={(event) => { setSourceFilter(event.target.value); setPage(0); }}><option value="all">Todas</option><option value="attendance">Assiduidade automática</option><option value="hr">Registro complementar de RH</option></select></label>
-        <label><span>Tipo</span><select value={typeFilter} onChange={(event) => { setTypeFilter(event.target.value); setPage(0); }}><option value="all">Todos os tipos</option>{Object.entries(ATTENDANCE_LABELS).map(([value, label]) => <option key={value} value={value}>{label}</option>)}{EVENT_TYPES.map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select></label>
+        <label><span>Origem</span><select value={sourceFilter} onChange={(event) => { setSourceFilter(event.target.value); setPage(0); }}><option value="all">Todas</option><option value="attendance">Assiduidade automática</option><option value="hr">Registro complementar de RH</option><option value="delivery">Entregas de materiais</option></select></label>
+        <label><span>Tipo</span><select value={typeFilter} onChange={(event) => { setTypeFilter(event.target.value); setPage(0); }}><option value="all">Todos os tipos</option>{Object.entries(ATTENDANCE_LABELS).map(([value, label]) => <option key={`attendance-${value}`} value={`attendance:${value}`}>{label}</option>)}{Object.entries(DELIVERY_LABELS).map(([value, label]) => <option key={`delivery-${value}`} value={`delivery:${value}`}>{label}</option>)}{EVENT_TYPES.map(([value, label]) => <option key={`hr-${value}`} value={`hr:${value}`}>{label}</option>)}</select></label>
         <label><span>De</span><input type="date" value={dateFrom} onChange={(event) => { setDateFrom(event.target.value); setPage(0); }} /></label>
         <label><span>Até</span><input type="date" value={dateTo} onChange={(event) => { setDateTo(event.target.value); setPage(0); }} /></label>
       </div>
@@ -338,26 +370,26 @@ export default function EmployeeHistoryPage() {
     <section className="panel employee-history-results" aria-labelledby="employee-history-results-heading">
       <div className="employee-history-results-heading"><div><h2 id="employee-history-results-heading">Linha do tempo</h2><p>Os registros são ordenados pela data da ocorrência; o horário abaixo indica quando o sistema recebeu o lançamento.</p></div><div className="employee-history-results-actions"><span className="employee-history-total">{totalCount} resultado(s)</span><button className="text-action" type="button" onClick={() => setRefreshKey((current) => current + 1)} disabled={loading}><RotateCcw size={14} /> Atualizar</button></div></div>
       {loading ? <div className="employee-history-state"><LoaderCircle size={21} className="spin" /> Carregando histórico...</div>
-        : events.length === 0 ? <div className="employee-history-empty"><History size={25} /><strong>Nenhum registro encontrado</strong><span>Quando uma ocorrência for salva em Assiduidade ou um registro de RH for incluído, ela aparecerá aqui.</span></div>
-          : <div className="employee-history-list">{events.map((item) => <article className={`employee-history-event ${item.voided_at ? "is-voided" : ""}`} key={`${item.source}-${item.event_id}`}>
-            <div className="employee-history-event-date"><CalendarDays size={16} /><strong>{formatDate(item.occurred_on)}</strong>{item.end_date && <small>até {formatDate(item.end_date)}</small>}</div>
+        : events.length === 0 ? <div className="employee-history-empty"><History size={25} /><strong>Nenhum registro encontrado</strong><span>Assiduidade, RH e entregas marcadas aparecem aqui depois de registrados e, no caso das entregas, após a assinatura.</span></div>
+          : <div className="employee-history-days">{groupedEvents.map((group) => <section className="employee-history-day" key={group.date}><div className="employee-history-day-heading"><span>{formatDate(group.date)}</span></div><div className="employee-history-list">{group.items.map((item) => <article className={`employee-history-event tone-${eventTone(item)} ${item.voided_at ? "is-voided" : ""}`} key={`${item.source}-${item.event_id}`}>
             <div className="employee-history-event-main">
-              <div className="employee-history-event-heading"><div><h3>{item.title}</h3><p>{item.employee_name}{item.registration ? ` · Matrícula ${item.registration}` : ""}{item.function_name ? ` · ${item.function_name}` : ""}</p></div><span className={`employee-history-source source-${item.source}`}>{item.source === "attendance" ? "Assiduidade" : "RH"}</span></div>
+              <div className="employee-history-event-heading"><div><h3>{item.title}</h3><p>{item.employee_name}{item.registration ? ` · Matrícula ${item.registration}` : ""}{item.function_name ? ` · ${item.function_name}` : ""}</p></div><span className={`employee-history-source source-${item.source}`}>{item.source === "attendance" ? "Assiduidade" : item.source === "delivery" ? "Entrega" : "RH"}</span></div>
               <div className="employee-history-event-meta">
                 <span>{eventTypeLabel(item)}</span>
                 {item.occurred_at && <span><Clock3 size={13} /> {item.occurred_at.slice(0, 5)}</span>}
+                {item.end_date && <span>Até {formatDate(item.end_date)}</span>}
                 {item.source === "attendance" && item.days_count > 1 && <span>{item.days_count} dias</span>}
                 {item.period_start && item.period_end && <span>Período {formatDate(item.period_start)}–{formatDate(item.period_end)}</span>}
               </div>
               {item.details && <p className="employee-history-event-details">{item.details}</p>}
               {item.voided_at && <div className="employee-history-void-note"><strong>Cancelado{item.voided_by_name ? ` por ${item.voided_by_name}` : ""} · {formatDateTime(item.voided_at)}</strong><span>{item.void_reason}</span></div>}
-              <div className="employee-history-event-footer"><span>{item.created_by_name ? `Lançado por ${item.created_by_name}` : "Responsável não identificado em registros antigos"} · {formatDateTime(item.created_at)}</span><div>
+              <div className="employee-history-event-footer"><span>{item.created_by_name ? `Lançado por ${item.created_by_name}` : item.source === "delivery" ? "Entrega confirmada" : "Responsável não identificado em registros antigos"} · {formatDateTime(item.created_at)}</span><div>
                 {item.document_path && <button className="text-action" type="button" onClick={() => void openDocument(item)} disabled={openingDocumentId !== ""}><Download size={14} /> {openingDocumentId === item.event_id ? "Abrindo..." : "Ver comprovante"}</button>}
                 {item.source === "hr" && !item.document_path && !item.voided_at && <button className="text-action" type="button" onClick={() => { setUploadTarget(item); attachmentInputRef.current?.click(); }} disabled={uploadingDocumentId !== ""}>{uploadingDocumentId === item.event_id ? "Enviando..." : <><Paperclip size={14} /> Anexar comprovante</>}</button>}
                 {item.source === "hr" && !item.voided_at && <button className="employee-history-cancel-button" type="button" onClick={() => { setVoidTarget(item); setVoidReason(""); }}><X size={14} /> Cancelar registro</button>}
               </div></div>
             </div>
-          </article>)}</div>}
+          </article>)}</div></section>)}</div>}
       {!loading && totalCount > PAGE_SIZE && <div className="employee-history-pagination"><span>Página {page + 1} de {pageCount}</span><div><button className="secondary-button" type="button" onClick={() => setPage((current) => Math.max(0, current - 1))} disabled={page === 0}><ChevronLeft size={16} /> Anterior</button><button className="secondary-button" type="button" onClick={() => setPage((current) => Math.min(pageCount - 1, current + 1))} disabled={page + 1 >= pageCount}>Próxima <ChevronRight size={16} /></button></div></div>}
     </section>
 
