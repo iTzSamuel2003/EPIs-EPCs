@@ -17,12 +17,13 @@ const menuSections: readonly MenuSection[] = [
   { label: "Conformidade", items: [["Consulta CA", ClipboardCheck, "/ca"], ["Requisitos contratuais", ClipboardCheck, "/contract-requirements"], ["Ensaios", ClipboardCheck, "/tests"], ["Treinamentos", ClipboardCheck, "/training-compliance"], ["Conformidade", ClipboardCheck, "/compliance"]] },
   { label: "Gestão e análises", items: [["Custos", Wallet, "/costs"], ["Relatórios", ClipboardList, "/reports"], ["Movimentações", SlidersHorizontal, "/movements"], ["Auditoria", ClipboardList, "/audit"]] },
 ] as const;
-const menu = menuSections.flatMap((section) => section.items);
+const allMenuSections: readonly MenuSection[] = [...menuSections, { label: "Plataforma", items: [["Organizações", Building2, "/settings/organizations"]] }];
+const menu = allMenuSections.flatMap((section) => section.items);
 type SearchResult = { id: string; label: string; detail: string | null; href: string; kind: "Material" | "Funcionário" };
-type CurrentUser = { name: string; role: string };
+type CurrentUser = { name: string; role: string; isPlatformAdmin: boolean; platformOnly: boolean };
 
-const CurrentUserContext = createContext<CurrentUser>({ name: "Usuário", role: "user" });
-const roleLabels: Record<string, string> = { admin: "Administrador", rh: "RH", tst: "TST", user: "Usuário" };
+const CurrentUserContext = createContext<CurrentUser>({ name: "Usuário", role: "user", isPlatformAdmin: false, platformOnly: false });
+const roleLabels: Record<string, string> = { admin: "Administrador", rh: "RH", tst: "TST", user: "Usuário", platform_admin: "Administrador da plataforma" };
 
 export function useCurrentUser() {
   return useContext(CurrentUserContext);
@@ -37,7 +38,10 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   const [currentUserRole, setCurrentUserRole] = useState("user");
   const pathname = usePathname(); const router = useRouter(); const [mobileMenu, setMobileMenu] = useState(false); const [query, setQuery] = useState(""); const [results, setResults] = useState<SearchResult[]>([]); const [searchError, setSearchError] = useState<string | null>(null); const [sessionError, setSessionError] = useState<string | null>(null); const [selectedSearchIndex, setSelectedSearchIndex] = useState(-1); const [validityCount, setValidityCount] = useState(0); const [allowedPaths, setAllowedPaths] = useState<string[] | null>(null); const [organizationLogo, setOrganizationLogo] = useState(""); const [signingOut, setSigningOut] = useState(false); const menuToggleRef = useRef<HTMLButtonElement>(null); const closeMenuRef = useRef<HTMLButtonElement>(null); const menuWasOpen = useRef(false); const searchRequestRef = useRef(0);
   const [organizationName, setOrganizationName] = useState("");
-  const [organizationAccess, setOrganizationAccess] = useState<"checking" | "ready" | "missing" | "error">("checking");
+  const [organizationAccess, setOrganizationAccess] = useState<"checking" | "ready" | "missing" | "blocked" | "error">("checking");
+  const [blockedLifecycleStatus, setBlockedLifecycleStatus] = useState<string | null>(null);
+  const [isPlatformAdmin, setIsPlatformAdmin] = useState(false);
+  const [platformOnly, setPlatformOnly] = useState(false);
   const [organizationAccessError, setOrganizationAccessError] = useState("");
   const publicRoute = pathname === "/login" || pathname === "/reset-password" || pathname === "/no-access" || pathname === "/organization-pending" || pathname.startsWith("/medidas/") || pathname.startsWith("/assinar/") || pathname === "/portal" || pathname.startsWith("/invite/");
   useEffect(() => {
@@ -63,11 +67,11 @@ export function AppShell({ children }: { children: React.ReactNode }) {
     setMobileMenu(false);
   }, [pathname]);
   useEffect(() => {
-    if (publicRoute || !allowedPaths || pathname === "/login") return;
+    if (publicRoute || !allowedPaths || pathname === "/login" || organizationAccess === "blocked") return;
     const protectedPath = pathname === "/portal-qr" ? "/settings" : pathname;
     const permitted = allowedPaths.some((path) => protectedPath === path || (path !== "/" && protectedPath.startsWith(`${path}/`)));
     if (!permitted) router.replace(allowedPaths[0] ?? "/no-access");
-  }, [allowedPaths, pathname, publicRoute, router]);
+  }, [allowedPaths, organizationAccess, pathname, publicRoute, router]);
   useEffect(() => {
     if (publicRoute) return;
     const supabase = createClient();
@@ -81,6 +85,11 @@ export function AppShell({ children }: { children: React.ReactNode }) {
     let cancelled = false;
     setOrganizationAccess("checking");
     setOrganizationAccessError("");
+    setBlockedLifecycleStatus(null);
+    setOrganizationLogo("");
+    setOrganizationName("");
+    setIsPlatformAdmin(false);
+    setPlatformOnly(false);
     setAllowedPaths(null);
     void createClient().auth.getUser().then(async ({ data, error: authError }) => {
       if (cancelled) return;
@@ -89,6 +98,14 @@ export function AppShell({ children }: { children: React.ReactNode }) {
         return;
       }
       const supabase = createClient();
+      const { data: platformAdmin, error: platformAdminError } = await supabase.rpc("current_user_is_platform_admin");
+      if (cancelled) return;
+      if (platformAdminError) {
+        setOrganizationAccessError("Não foi possível verificar as permissões da conta. Atualize a página ou tente novamente.");
+        setOrganizationAccess("error");
+        return;
+      }
+      setIsPlatformAdmin(platformAdmin === true);
       const { data: profile, error: profileError } = await supabase.from("profiles").select("full_name,role,organization_id").eq("id", data.user.id).maybeSingle();
       if (cancelled) return;
       if (profileError) {
@@ -98,9 +115,41 @@ export function AppShell({ children }: { children: React.ReactNode }) {
       }
       if (!profile?.organization_id) {
         setCurrentUserName(profile?.full_name?.trim() || data.user.email?.split("@")[0] || "Usuário");
+        if (platformAdmin === true) {
+          setCurrentUserRole("platform_admin");
+          setPlatformOnly(true);
+          setOrganizationName("Administração da plataforma");
+          setAllowedPaths(["/settings/organizations"]);
+          setOrganizationAccess("ready");
+        } else {
+          setAllowedPaths([]);
+          setOrganizationAccess("missing");
+          router.replace("/organization-pending");
+        }
+        return;
+      }
+      const { data: lifecycleRows, error: lifecycleError } = await supabase.rpc("get_my_organization_lifecycle_status");
+      if (cancelled) return;
+      const lifecycle = Array.isArray(lifecycleRows) ? lifecycleRows[0] : null;
+      if (lifecycleError || !lifecycle?.lifecycle_status) {
+        setOrganizationAccessError("Não foi possível verificar se a organização está liberada para acesso. Tente novamente.");
+        setOrganizationAccess("error");
+        return;
+      }
+      setOrganizationName(lifecycle.organization_name?.trim() || "Organização");
+      if (lifecycle.lifecycle_status !== "active") {
+        if (platformAdmin === true) {
+          setCurrentUserName(profile.full_name?.trim() || data.user.email?.split("@")[0] || "Usuário");
+          setCurrentUserRole("platform_admin");
+          setPlatformOnly(true);
+          setOrganizationName("Administração da plataforma");
+          setAllowedPaths(["/settings/organizations"]);
+          setOrganizationAccess("ready");
+          return;
+        }
+        setBlockedLifecycleStatus(lifecycle.lifecycle_status);
         setAllowedPaths([]);
-        setOrganizationAccess("missing");
-        router.replace("/organization-pending");
+        setOrganizationAccess("blocked");
         return;
       }
       const role = profile.role || "user";
@@ -112,7 +161,8 @@ export function AppShell({ children }: { children: React.ReactNode }) {
       ]) : [{ data: null }, { data: null }];
       if (cancelled) return;
       const paths = role === "admin" ? rolePageDefaults.admin : override ? override.page_paths : roleAccess?.page_paths ?? rolePageDefaults[role] ?? rolePageDefaults.user;
-      setAllowedPaths(paths);
+      setPlatformOnly(false);
+      setAllowedPaths(platformAdmin === true ? [...new Set([...paths, "/settings/organizations"])] : paths);
       const { data: organization } = await supabase.from("organizations").select("name,logo_url").eq("id", profile.organization_id).maybeSingle();
       if (!cancelled) {
         setOrganizationLogo(organization?.logo_url || "");
@@ -252,14 +302,23 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   function handleMenuKeyDown(event: React.KeyboardEvent<HTMLElement>) { if (event.key !== "Tab" || !mobileMenu) return; const focusable = Array.from(event.currentTarget.querySelectorAll<HTMLElement>('a[href],button:not([disabled]),input:not([disabled]),select:not([disabled]),textarea:not([disabled])')).filter((element) => element.offsetParent !== null); if (!focusable.length) return; const first = focusable[0]; const last = focusable[focusable.length - 1]; if (event.shiftKey && document.activeElement === first) { event.preventDefault(); last.focus(); } else if (!event.shiftKey && document.activeElement === last) { event.preventDefault(); first.focus(); } }
   function closeSearch() { setQuery(""); setResults([]); setSelectedSearchIndex(-1); } function handleSearchKeyDown(event: React.KeyboardEvent<HTMLInputElement>) { if (event.key === "Escape") { closeSearch(); return; } if (!results.length) return; if (event.key === "ArrowDown") { event.preventDefault(); setSelectedSearchIndex((current) => (current + 1) % results.length); } else if (event.key === "ArrowUp") { event.preventDefault(); setSelectedSearchIndex((current) => (current - 1 + results.length) % results.length); } else if (event.key === "Enter" && selectedSearchIndex >= 0) { event.preventDefault(); router.push(results[selectedSearchIndex].href); closeSearch(); } }
   const userInitials = getInitials(currentUserName);
-  const userRoleLabel = roleLabels[currentUserRole] ?? "Usuário";
+  const userRoleLabel = isPlatformAdmin ? roleLabels.platform_admin : roleLabels[currentUserRole] ?? "Usuário";
+
+  if (organizationAccess === "blocked") {
+    const isSuspended = blockedLifecycleStatus === "suspended";
+    const title = isSuspended ? "Organização suspensa" : "Organização em preparação";
+    const description = isSuspended
+      ? "O acesso aos dados e módulos está temporariamente suspenso. Entre em contato com o administrador da plataforma."
+      : "O acesso aos módulos será liberado quando o primeiro administrador aceitar o convite.";
+    return <main className="login-shell"><section className="login-card" aria-live="polite"><p className="eyebrow">ACESSO À ORGANIZAÇÃO</p><h1>{title}</h1><p className="login-subtitle">{organizationName ? `${organizationName}: ` : ""}{description}</p><button className="secondary-button login-button" type="button" onClick={() => void handleSignOut()} disabled={signingOut}>{signingOut ? "Saindo..." : "Sair da conta"}</button></section></main>;
+  }
 
   if (organizationAccess !== "ready") {
     return <main className="login-shell"><section className="login-card" aria-live="polite"><p className="eyebrow">ACESSO À ORGANIZAÇÃO</p><h1>{organizationAccess === "error" ? "Não foi possível validar seu acesso" : "Preparando seu acesso"}</h1><p className="login-subtitle">{organizationAccessError || "Estamos verificando o vínculo da sua conta com uma organização."}</p>{organizationAccess === "error" && <button className="primary-button login-button" type="button" onClick={() => window.location.reload()}>Tentar novamente</button>}</section></main>;
   }
 
   return (
-    <CurrentUserContext.Provider value={{ name: currentUserName, role: currentUserRole }}>
+    <CurrentUserContext.Provider value={{ name: currentUserName, role: currentUserRole, isPlatformAdmin, platformOnly }}>
       <div className="app-shell">
         {mobileMenu && <button type="button" className="sidebar-backdrop" onClick={() => setMobileMenu(false)} aria-label="Fechar menu" />}
         <aside id="main-navigation" className={`sidebar ${mobileMenu ? "open" : ""}`} aria-label="Navegação principal" onKeyDown={handleMenuKeyDown}>
@@ -270,7 +329,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
           </div>
           <div className="workspace-label">MENU PRINCIPAL</div>
           <div className="sidebar-sections">
-            {menuSections.map((section) => {
+            {allMenuSections.map((section) => {
               const visibleItems = section.items.filter(([, , href]) => !allowedPaths || allowedPaths.includes(href));
               return visibleItems.length ? (
                 <section className="sidebar-section" key={section.label}>

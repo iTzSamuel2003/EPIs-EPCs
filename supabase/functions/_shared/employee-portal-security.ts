@@ -97,6 +97,19 @@ export async function createEmployeePortalAdmin(
   });
 }
 
+export async function isOrganizationActive(
+  admin: ReturnType<typeof createClient>,
+  organizationId: string,
+) {
+  if (!organizationId) return false;
+  const { data, error } = await admin
+    .from("organizations")
+    .select("lifecycle_status")
+    .eq("id", organizationId)
+    .maybeSingle();
+  return !error && data?.lifecycle_status === "active";
+}
+
 export async function enforceEmployeePortalIpRateLimit(
   admin: {
     rpc: (name: string) => PromiseLike<{

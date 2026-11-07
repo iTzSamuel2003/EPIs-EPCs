@@ -223,6 +223,33 @@ Deno.serve(async (request) => {
     return response(result, 200, origin);
   }
 
+  const allowedActions = new Set(["profile", "measurements", "request"]);
+  if (typeof action !== "string" || !allowedActions.has(action)) {
+    return response({ error: "Operação não permitida" }, 400, origin);
+  }
+
+  if (action === "measurements") {
+    const fields = ["shirt_size", "pants_size", "shoe_size", "helmet_size", "glove_size", "notes"] as const;
+    if (fields.some((field) => body[field] !== null && body[field] !== undefined && typeof body[field] !== "string")) {
+      return response({ error: "Informe medidas válidas" }, 400, origin);
+    }
+    const values = fields.map((field) => typeof body[field] === "string" ? body[field] as string : "");
+    if (values.slice(0, 5).some((value) => value.length > 50) || (values[5] ?? "").length > 1000) {
+      return response({ error: "Uma das medidas excede o tamanho permitido" }, 400, origin);
+    }
+  }
+
+  if (action === "request") {
+    const requestType = typeof body.request_type === "string" ? body.request_type : "";
+    const description = typeof body.description === "string" ? body.description.trim() : "";
+    if (!new Set(["replacement", "return", "new_material", "course", "other"]).has(requestType)) {
+      return response({ error: "Tipo de solicitação inválido" }, 400, origin);
+    }
+    if (!description || description.length > 2000) {
+      return response({ error: "Informe uma descrição de até 2.000 caracteres" }, 400, origin);
+    }
+  }
+
   if (!registration || registration.length > 100 || !cpf || cpf.length > 64) {
     return response({ error: "Informe matrícula e CPF válidos" }, 400, origin);
   }
@@ -251,6 +278,18 @@ Deno.serve(async (request) => {
     return response(
       { error: "Não foi possível validar o acesso." },
       500,
+      origin,
+    );
+  }
+
+  const { data: organizationActive, error: organizationStatusError } = await admin.rpc(
+    "employee_portal_organization_is_active",
+    { p_registration: registration, p_cpf: cpf },
+  );
+  if (organizationStatusError || organizationActive !== true) {
+    return response(
+      { error: organizationStatusError ? "Serviço temporariamente indisponível. Tente novamente." : "Matrícula ou CPF não conferem" },
+      organizationStatusError ? 503 : 400,
       origin,
     );
   }

@@ -1121,6 +1121,14 @@ const secretKeys = Deno.env.get("SUPABASE_SECRET_KEYS");
 const serviceKey = (secretKeys ? JSON.parse(secretKeys).default : "") || Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") || Deno.env.get("SUPABASE_SECRET_KEY") || "";
 const admin = createClient(supabaseUrl, serviceKey, { auth: { autoRefreshToken: false, persistSession: false } });
 
+async function organizationIsActive(organizationId: string) {
+  const { data, error } = await admin.from("organizations")
+    .select("lifecycle_status")
+    .eq("id", organizationId)
+    .maybeSingle();
+  return !error && data?.lifecycle_status === "active";
+}
+
 Deno.serve(async (request) => {
   const origin = request.headers.get("origin");
   if (origin && !allowedOrigins.has(origin)) return respond({ error: "Origem não autorizada." }, 403, origin);
@@ -1147,6 +1155,7 @@ Deno.serve(async (request) => {
     .eq("token_hash", tokenHash).maybeSingle();
   if (linkError || !link) return respond({ error: "Este link é inválido, expirou ou já foi utilizado." }, 404, origin);
 
+  if (!(await organizationIsActive(String(link.organization_id)))) return respond({ error: "Esta organização está temporariamente indisponível." }, 403, origin);
   const validUntil = new Date(link.expires_at).getTime();
   if (link.used_at || link.revoked_at || !Number.isFinite(validUntil) || validUntil <= Date.now()) return respond({ error: "Este link é inválido, expirou ou já foi utilizado." }, 410, origin);
   if (link.locked_until && new Date(link.locked_until).getTime() > Date.now()) return respond({ error: "O link foi bloqueado temporariamente após tentativas inválidas. Solicite outro ao responsável." }, 423, origin);

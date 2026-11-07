@@ -3,6 +3,7 @@ import {
   createEmployeePortalAdmin,
   createEmployeePortalIpAdmin,
   enforceEmployeePortalIpRateLimit,
+  isOrganizationActive,
 } from "../_shared/employee-portal-security.ts";
 
 const allowedOrigins = new Set(["https://epis-epcs.vercel.app", "http://localhost:3000"]);
@@ -85,6 +86,14 @@ Deno.serve(async (req) => {
   if (!registration || !cpf || !name) return response({ error: "Informe matrícula, CPF e curso" }, 400, origin);
   if (name.length > 200 || provider.length > 200 || certificateNumber.length > 100) return response({ error: "Dados do curso excedem o tamanho permitido" }, 400, origin);
   if (Boolean(completedAt) !== Boolean(expiresAt)) return response({ error: "Informe as duas datas do curso" }, 400, origin);
+  if (attachment) {
+    const extension = allowedTypes.get(attachment.type) ?? "";
+    const filenameExtension = attachment.name.toLowerCase().match(/\.[a-z0-9]+$/)?.[0] ?? "";
+    const validJpegExtension = extension === ".jpg" && (filenameExtension === ".jpg" || filenameExtension === ".jpeg");
+    if (!extension || (!validJpegExtension && filenameExtension !== extension) || attachment.size > maxFileSize || !(await hasValidFileSignature(attachment, attachment.type))) {
+      return response({ error: "Anexo invalido: use PDF, JPG, JPEG, PNG ou WEBP de ate 10 MB" }, 400, origin);
+    }
+  }
   let admin: Awaited<ReturnType<typeof createEmployeePortalAdmin>>;
   try {
     admin = await createEmployeePortalAdmin(req, origin, registration, cpf, supabaseUrl, serviceKey);
@@ -98,13 +107,12 @@ Deno.serve(async (req) => {
     return response({ error: "Nao foi possivel validar o acesso." }, 500, origin);
   }
 
-  if (attachment) {
-    const extension = allowedTypes.get(attachment.type) ?? "";
-    const filenameExtension = attachment.name.toLowerCase().match(/\.[a-z0-9]+$/)?.[0] ?? "";
-    const validJpegExtension = extension === ".jpg" && (filenameExtension === ".jpg" || filenameExtension === ".jpeg");
-    if (!extension || (!validJpegExtension && filenameExtension !== extension) || attachment.size > maxFileSize || !(await hasValidFileSignature(attachment, attachment.type))) {
-      return response({ error: "Anexo invalido: use PDF, JPG, JPEG, PNG ou WEBP de ate 10 MB" }, 400, origin);
-    }
+  const { data: organizationActive, error: organizationStatusError } = await admin.rpc("employee_portal_organization_is_active", {
+    p_registration: registration,
+    p_cpf: cpf,
+  });
+  if (organizationStatusError || organizationActive !== true) {
+    return response({ error: organizationStatusError ? "Serviço temporariamente indisponível. Tente novamente." : "Matrícula ou CPF não conferem" }, organizationStatusError ? 503 : 400, origin);
   }
 
   const { data: profiles, error: profileError } = await admin.rpc("get_employee_portal_data_v3", { p_registration: registration, p_cpf: cpf });
@@ -118,6 +126,7 @@ Deno.serve(async (req) => {
   if (!requirements.some((item) => item?.course_name === name)) return response({ error: "Curso nao previsto para a funcao do colaborador" }, 400, origin);
   const { data: employee, error: employeeError } = await admin.from("employees").select("organization_id").eq("id", profile.employee_id).single();
   if (employeeError || !employee?.organization_id) return response({ error: "Nao foi possivel identificar a organizacao do colaborador" }, 500, origin);
+  if (!(await isOrganizationActive(admin, employee.organization_id))) return response({ error: "O acesso ao portal desta organização está temporariamente indisponível." }, 403, origin);
 
   let path: string | null = null;
   if (attachment) {

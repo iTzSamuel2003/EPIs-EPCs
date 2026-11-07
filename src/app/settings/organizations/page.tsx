@@ -2,23 +2,45 @@
 
 import { FormEvent, useCallback, useEffect, useState } from "react";
 import Link from "next/link";
-import { ArrowLeft, Building2, Check, ChevronDown, Copy, Link2, Plus, Users } from "lucide-react";
+import { AlertTriangle, ArrowLeft, Ban, Building2, Check, ChevronDown, Copy, Link2, Plus, RotateCw, Save, Trash2, Users, X } from "lucide-react";
 import { FeedbackMessage } from "@/components/feedback-message";
+import { useCurrentUser } from "@/components/app-shell";
 import { createClient } from "@/lib/supabase/client";
 import { PAGE_PERMISSIONS } from "@/lib/access-control";
+
+type LifecycleStatus = "draft" | "awaiting_admin" | "active" | "suspended";
+type InvitationState = "pending" | "expired" | "revoked" | "accepted" | null;
 
 type Organization = {
   id: string;
   name: string;
   cnpj: string | null;
+  logo_url: string | null;
+  address: string | null;
+  phone: string | null;
+  sesmt_manager: string | null;
+  validity_alert_days: number;
+  replacement_alert_days: number;
+  default_minimum_stock: number;
   created_at: string;
+  lifecycle_status: LifecycleStatus;
   member_count: number;
+  first_admin_email: string | null;
+  first_admin_invitation_id: string | null;
+  first_admin_expires_at: string | null;
+  first_admin_invitation_state: InvitationState;
 };
 
-type CreatedInvitation = {
-  organization_id: string;
-  invitation_id: string;
-  expires_at: string;
+type OrganizationForm = {
+  name: string;
+  cnpj: string;
+  logo_url: string;
+  address: string;
+  phone: string;
+  sesmt_manager: string;
+  validity_alert_days: string;
+  replacement_alert_days: string;
+  default_minimum_stock: string;
 };
 
 type OrganizationMember = {
@@ -28,39 +50,105 @@ type OrganizationMember = {
   role: "admin" | "rh" | "tst" | "user";
 };
 
-const organizationRoleLabel: Record<OrganizationMember["role"], string> = {
+type ConfirmationAction = {
+  organizationId: string;
+  kind: "suspend" | "reactivate" | "delete" | "revoke";
+  invitationId?: string;
+  reason: string;
+};
+
+type CreatedInvitation = { invitation_id: string; expires_at: string };
+
+const lifecycleLabels: Record<LifecycleStatus, string> = {
+  draft: "Rascunho",
+  awaiting_admin: "Aguardando administrador",
+  active: "Ativa",
+  suspended: "Suspensa",
+};
+
+const invitationLabels: Record<Exclude<InvitationState, null>, string> = {
+  pending: "Convite pendente",
+  expired: "Convite expirado",
+  revoked: "Convite revogado",
+  accepted: "Convite aceito",
+};
+
+const roleLabels: Record<OrganizationMember["role"], string> = {
   admin: "Administrador",
   rh: "RH",
   tst: "TST",
   user: "Usuário",
 };
 
+function formFromOrganization(organization: Organization): OrganizationForm {
+  return {
+    name: organization.name ?? "",
+    cnpj: organization.cnpj ?? "",
+    logo_url: organization.logo_url ?? "",
+    address: organization.address ?? "",
+    phone: organization.phone ?? "",
+    sesmt_manager: organization.sesmt_manager ?? "",
+    validity_alert_days: String(organization.validity_alert_days ?? 30),
+    replacement_alert_days: String(organization.replacement_alert_days ?? 7),
+    default_minimum_stock: String(organization.default_minimum_stock ?? 10),
+  };
+}
+
+function confirmationTitle(kind: ConfirmationAction["kind"]) {
+  if (kind === "suspend") return "Suspender organização";
+  if (kind === "reactivate") return "Reativar organização";
+  if (kind === "delete") return "Excluir rascunho";
+  return "Revogar convite";
+}
+
+function confirmationDescription(kind: ConfirmationAction["kind"]) {
+  if (kind === "suspend") return "Os membros perderão acesso aos dados e módulos até a reativação.";
+  if (kind === "reactivate") return "A organização voltará ao estado em que estava antes da suspensão.";
+  if (kind === "delete") return "A exclusão só será permitida se não houver usuários, convites, registros ou arquivos vinculados.";
+  return "O link atual deixará de funcionar. Você poderá emitir outro convite depois.";
+}
+
 export default function OrganizationsSettingsPage() {
+  const { platformOnly } = useCurrentUser();
   const [organizations, setOrganizations] = useState<Organization[]>([]);
-  const [name, setName] = useState("");
-  const [cnpj, setCnpj] = useState("");
-  const [adminEmail, setAdminEmail] = useState("");
-  const [invitationLink, setInvitationLink] = useState("");
+  const [draftName, setDraftName] = useState("");
+  const [draftCnpj, setDraftCnpj] = useState("");
+  const [forms, setForms] = useState<Record<string, OrganizationForm>>({});
+  const [adminEmails, setAdminEmails] = useState<Record<string, string>>({});
+  const [invitationLinks, setInvitationLinks] = useState<Record<string, string>>({});
+  const [copiedOrganizationId, setCopiedOrganizationId] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
-  const [copied, setCopied] = useState(false);
+  const [busyOrganizationId, setBusyOrganizationId] = useState<string | null>(null);
   const [error, setError] = useState("");
   const [success, setSuccess] = useState("");
   const [expandedOrganizationId, setExpandedOrganizationId] = useState<string | null>(null);
   const [organizationMembers, setOrganizationMembers] = useState<Record<string, OrganizationMember[]>>({});
   const [loadingMembersByOrganization, setLoadingMembersByOrganization] = useState<Record<string, boolean>>({});
   const [memberErrorsByOrganization, setMemberErrorsByOrganization] = useState<Record<string, string>>({});
+  const [confirmation, setConfirmation] = useState<ConfirmationAction | null>(null);
 
   const loadOrganizations = useCallback(async () => {
     setLoading(true);
     setError("");
     const { data, error: loadError } = await createClient().rpc("list_platform_organizations");
     if (loadError) {
-      setError("Não foi possível carregar as organizações. Confirme se sua conta é administradora da plataforma e se a atualização do banco foi aplicada.");
+      setError("Não foi possível carregar as organizações. Confirme se sua conta é administradora da plataforma e se a migração foi aplicada.");
       setOrganizations([]);
-    } else {
-      setOrganizations((data ?? []) as Organization[]);
+      setLoading(false);
+      return;
     }
+
+    const rows = (data ?? []) as Organization[];
+    setOrganizations(rows);
+    setForms((current) => Object.fromEntries(rows.map((organization) => [
+      organization.id,
+      current[organization.id] ?? formFromOrganization(organization),
+    ])));
+    setAdminEmails((current) => Object.fromEntries(rows.map((organization) => [
+      organization.id,
+      current[organization.id] ?? organization.first_admin_email ?? "",
+    ])));
     setLoading(false);
   }, []);
 
@@ -88,64 +176,161 @@ export default function OrganizationsSettingsPage() {
   function toggleOrganization(organizationId: string) {
     const isOpening = expandedOrganizationId !== organizationId;
     setExpandedOrganizationId(isOpening ? organizationId : null);
-    if (isOpening && !(organizationId in organizationMembers)) {
-      void loadOrganizationMembers(organizationId);
-    }
+    if (isOpening) void loadOrganizationMembers(organizationId);
   }
 
-  async function createOrganization(event: FormEvent<HTMLFormElement>) {
+  async function createDraft(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     setSaving(true);
     setError("");
     setSuccess("");
-    setInvitationLink("");
     try {
-      const token = crypto.randomUUID().replaceAll("-", "") + crypto.randomUUID().replaceAll("-", "");
-      const { data, error: createError } = await createClient().rpc("create_organization_with_admin_invitation", {
-        p_name: name.trim(),
-        p_cnpj: cnpj.trim() || null,
-        p_admin_email: adminEmail.trim(),
-        p_admin_page_paths: PAGE_PERMISSIONS.map(([path]) => path),
-        p_token: token,
+      const { data: organizationId, error: createError } = await createClient().rpc("create_organization_draft", {
+        p_name: draftName.trim(),
+        p_cnpj: draftCnpj.trim() || null,
       });
-      const invitation = (data as CreatedInvitation[] | null)?.[0];
-      if (createError || !invitation) {
-        setError(createError?.message ?? "Não foi possível criar a organização e o convite.");
+      if (createError || !organizationId) {
+        setError(createError?.message ?? "Não foi possível criar o rascunho.");
         return;
       }
-      const url = new URL(`/invite/${token}`, window.location.origin).toString();
-      setInvitationLink(url);
-      setSuccess("Organização criada. Envie o convite ao administrador da empresa; o link expira em 7 dias.");
-      setName("");
-      setCnpj("");
-      setAdminEmail("");
+      setDraftName("");
+      setDraftCnpj("");
+      setSuccess("Rascunho criado. Agora você pode completar os dados e preparar o convite do administrador.");
       await loadOrganizations();
+      setExpandedOrganizationId(organizationId as string);
     } catch {
-      setError("Não foi possível concluir a criação. Verifique sua conexão e tente novamente.");
+      setError("Não foi possível criar o rascunho. Verifique a conexão e tente novamente.");
     } finally {
       setSaving(false);
     }
   }
 
-  async function copyInvitation() {
-    if (!invitationLink) return;
+  async function saveOrganization(organization: Organization) {
+    const form = forms[organization.id];
+    if (!form) return;
+    setBusyOrganizationId(organization.id);
+    setError("");
+    setSuccess("");
     try {
-      await navigator.clipboard.writeText(invitationLink);
-      setCopied(true);
-      window.setTimeout(() => setCopied(false), 2500);
+      const { error: updateError } = await createClient().rpc("update_platform_organization_draft", {
+        p_organization_id: organization.id,
+        p_name: form.name.trim(),
+        p_cnpj: form.cnpj.trim() || null,
+        p_logo_url: form.logo_url.trim() || null,
+        p_address: form.address.trim() || null,
+        p_phone: form.phone.trim() || null,
+        p_sesmt_manager: form.sesmt_manager.trim() || null,
+        p_validity_alert_days: Number(form.validity_alert_days),
+        p_replacement_alert_days: Number(form.replacement_alert_days),
+        p_default_minimum_stock: Number(form.default_minimum_stock),
+      });
+      if (updateError) {
+        setError(updateError.message || "Não foi possível salvar as configurações desta organização.");
+        return;
+      }
+      setSuccess(`Configurações de ${form.name.trim()} salvas.`);
+      await loadOrganizations();
+    } catch {
+      setError("Não foi possível salvar as configurações. Tente novamente.");
+    } finally {
+      setBusyOrganizationId(null);
+    }
+  }
+
+  async function inviteFirstAdmin(organization: Organization) {
+    const email = (adminEmails[organization.id] ?? "").trim();
+    if (!email) {
+      setError("Informe o e-mail do primeiro administrador para gerar o convite.");
+      return;
+    }
+    setBusyOrganizationId(organization.id);
+    setError("");
+    setSuccess("");
+    setInvitationLinks((current) => ({ ...current, [organization.id]: "" }));
+    try {
+      const token = crypto.randomUUID().replaceAll("-", "") + crypto.randomUUID().replaceAll("-", "");
+      const { data, error: inviteError } = await createClient().rpc("invite_first_organization_admin", {
+        p_organization_id: organization.id,
+        p_email: email,
+        p_page_paths: PAGE_PERMISSIONS.map(([path]) => path),
+        p_token: token,
+      });
+      const invitation = (data as CreatedInvitation[] | null)?.[0];
+      if (inviteError || !invitation) {
+        setError(inviteError?.message ?? "Não foi possível gerar o convite do primeiro administrador.");
+        return;
+      }
+      setInvitationLinks((current) => ({ ...current, [organization.id]: new URL(`/invite/${token}`, window.location.origin).toString() }));
+      setSuccess("Convite gerado. Copie e envie o link ao administrador; ele expira em 7 dias.");
+      await loadOrganizations();
+    } catch {
+      setError("Não foi possível gerar o convite. Tente novamente.");
+    } finally {
+      setBusyOrganizationId(null);
+    }
+  }
+
+  async function copyInvitation(organizationId: string) {
+    const link = invitationLinks[organizationId];
+    if (!link) return;
+    try {
+      await navigator.clipboard.writeText(link);
+      setCopiedOrganizationId(organizationId);
+      window.setTimeout(() => setCopiedOrganizationId((current) => current === organizationId ? null : current), 2500);
     } catch {
       setError("Não foi possível copiar automaticamente. Selecione e copie o link exibido.");
     }
+  }
+
+  async function confirmAction() {
+    if (!confirmation) return;
+    const { organizationId, kind, invitationId, reason } = confirmation;
+    const organization = organizations.find((item) => item.id === organizationId);
+    if (!organization) return;
+    setBusyOrganizationId(organizationId);
+    setError("");
+    setSuccess("");
+    try {
+      const client = createClient();
+      const { error: actionError } = kind === "suspend"
+        ? await client.rpc("set_organization_suspended", { p_organization_id: organizationId, p_reason: reason.trim() })
+        : kind === "reactivate"
+          ? await client.rpc("reactivate_organization", { p_organization_id: organizationId, p_reason: reason.trim() })
+          : kind === "delete"
+            ? await client.rpc("delete_organization_draft", { p_organization_id: organizationId, p_reason: reason.trim() })
+            : await client.rpc("revoke_first_admin_invitation", { p_organization_id: organizationId, p_invitation_id: invitationId, p_reason: reason.trim() });
+      if (actionError) {
+        setError(actionError.message || "Não foi possível concluir a ação.");
+        return;
+      }
+      setSuccess(kind === "delete" ? "Rascunho excluído." : `${confirmationTitle(kind)} concluída.`);
+      setConfirmation(null);
+      if (kind === "delete") setExpandedOrganizationId(null);
+      await loadOrganizations();
+      if (kind === "delete") setOrganizationMembers((current) => Object.fromEntries(Object.entries(current).filter(([id]) => id !== organizationId)));
+      else if (kind === "revoke") setInvitationLinks((current) => ({ ...current, [organizationId]: "" }));
+    } catch {
+      setError("Não foi possível concluir a ação. Verifique a conexão e tente novamente.");
+    } finally {
+      setBusyOrganizationId(null);
+    }
+  }
+
+  function updateForm(organizationId: string, field: keyof OrganizationForm, value: string) {
+    setForms((current) => ({
+      ...current,
+      [organizationId]: { ...current[organizationId], [field]: value },
+    }));
   }
 
   return (
     <main className="module-shell access-management-page organization-settings-page">
       <header className="module-header organization-settings-header">
         <div>
-          <Link className="employee-back-link" href="/settings"><ArrowLeft size={14} aria-hidden="true" /> Configurações</Link>
+          {!platformOnly && <Link className="employee-back-link" href="/settings"><ArrowLeft size={14} aria-hidden="true" /> Configurações</Link>}
           <p className="eyebrow">ADMINISTRAÇÃO DA PLATAFORMA</p>
           <h1>Organizações</h1>
-          <p className="module-subtitle">Cadastre empresas independentes e convide o primeiro administrador de cada uma.</p>
+          <p className="module-subtitle">Prepare os dados gerais agora e convide o administrador quando tiver o e-mail.</p>
         </div>
       </header>
 
@@ -155,59 +340,104 @@ export default function OrganizationsSettingsPage() {
       <section className="panel access-panel" aria-labelledby="create-organization-title">
         <div className="access-panel-heading">
           <div className="access-heading-icon"><Plus size={20} aria-hidden="true" /></div>
-          <div><h2 id="create-organization-title">Adicionar organização</h2><p>Os dados e usuários de cada empresa ficam isolados dos demais.</p></div>
+          <div><h2 id="create-organization-title">Criar rascunho</h2><p>Use um nome provisório; você poderá completar ou corrigir os dados depois.</p></div>
         </div>
-        <form className="material-form" onSubmit={createOrganization} aria-busy={saving}>
-          <div className="form-grid three">
-            <label>Nome da empresa<input value={name} onChange={(event) => setName(event.target.value)} autoComplete="organization" minLength={2} maxLength={150} required /></label>
-            <label>CNPJ <span className="muted">(opcional)</span><input value={cnpj} onChange={(event) => setCnpj(event.target.value)} inputMode="numeric" autoComplete="off" /></label>
-            <label>E-mail do primeiro administrador<input type="email" value={adminEmail} onChange={(event) => setAdminEmail(event.target.value)} autoComplete="email" required /></label>
-          </div>
-          <p className="access-helper">O administrador receberá acesso completo apenas à própria empresa. Ele poderá convidar RH, TST e outros usuários.</p>
-          <div className="modal-actions"><button type="submit" className="primary-button" disabled={saving} aria-busy={saving}><Plus size={16} aria-hidden="true" />{saving ? "Criando organização..." : "Criar organização e convite"}</button></div>
+        <form className="organization-draft-create" onSubmit={(event) => void createDraft(event)} aria-busy={saving}>
+          <label>Nome provisório da organização<input value={draftName} onChange={(event) => setDraftName(event.target.value)} autoComplete="organization" minLength={2} maxLength={150} placeholder="Ex.: Organização 1" required /></label>
+          <label>CNPJ <span className="muted">(opcional)</span><input value={draftCnpj} onChange={(event) => setDraftCnpj(event.target.value)} inputMode="numeric" autoComplete="off" /></label>
+          <button type="submit" className="primary-button" disabled={saving} aria-busy={saving}><Plus size={16} aria-hidden="true" />{saving ? "Criando..." : "Criar rascunho"}</button>
         </form>
-        {invitationLink && <div className="access-invite-actions" aria-label="Convite do administrador">
-          <label className="access-helper" htmlFor="organization-invitation-link">Link do convite do primeiro administrador</label>
-          <div className="invite-link-box"><input id="organization-invitation-link" value={invitationLink} readOnly onFocus={(event) => event.currentTarget.select()} /><button className="secondary-button" type="button" onClick={() => void copyInvitation()}>{copied ? <Check size={16} /> : <Copy size={16} />}{copied ? "Copiado" : "Copiar convite"}</button></div>
-        </div>}
       </section>
 
       <section className="panel access-panel" aria-labelledby="organizations-list-title">
         <div className="access-panel-heading">
           <div className="access-heading-icon"><Building2 size={20} aria-hidden="true" /></div>
-          <div><h2 id="organizations-list-title">Empresas cadastradas</h2><p>Visão administrativa; os dados operacionais permanecem separados por empresa.</p></div>
-          <span className="access-count">{organizations.length} organizações</span>
+          <div><h2 id="organizations-list-title">Organizações cadastradas</h2><p>Configure dados gerais, acompanhe o convite inicial e consulte os membros.</p></div>
+          <span className="access-count">{organizations.length} {organizations.length === 1 ? "organização" : "organizações"}</span>
         </div>
-        {loading ? <p className="access-empty" role="status">Carregando organizações...</p> : organizations.length === 0 ? <p className="access-empty">Nenhuma organização disponível.</p> : <div className="access-role-list">
+        {loading ? <p className="access-empty" role="status">Carregando organizações...</p> : organizations.length === 0 ? <p className="access-empty">Nenhuma organização cadastrada.</p> : <div className="access-role-list">
           {organizations.map((organization) => {
             const isOpen = expandedOrganizationId === organization.id;
             const membersPanelId = `organization-members-${organization.id}`;
             const members = organizationMembers[organization.id] ?? [];
+            const form = forms[organization.id] ?? formFromOrganization(organization);
+            const isEditable = organization.lifecycle_status === "draft" || organization.lifecycle_status === "awaiting_admin";
+            const isBusy = busyOrganizationId === organization.id;
+            const invitationLink = invitationLinks[organization.id];
 
             return <article className={`access-role-card organization-card ${isOpen ? "is-open" : ""}`} key={organization.id}>
               <button className="access-role-summary organization-summary" type="button" onClick={() => toggleOrganization(organization.id)} aria-expanded={isOpen} aria-controls={isOpen ? membersPanelId : undefined}>
                 <span className="access-role-icon"><Building2 size={18} aria-hidden="true" /></span>
                 <span className="access-role-copy"><strong>{organization.name}</strong><small>{organization.cnpj ? `CNPJ ${organization.cnpj}` : "CNPJ não informado"} · Criada em {new Date(organization.created_at).toLocaleDateString("pt-BR")}</small></span>
+                <span className={`organization-status organization-status-${organization.lifecycle_status}`}>{lifecycleLabels[organization.lifecycle_status]}</span>
                 <span className="access-count"><Users size={14} aria-hidden="true" /> {organization.member_count} {organization.member_count === 1 ? "usuário" : "usuários"}</span>
-                <span className="organization-expand-label">{isOpen ? "Ocultar usuários" : "Ver usuários"}<ChevronDown size={16} className="access-chevron" aria-hidden="true" /></span>
+                <span className="organization-expand-label">{isOpen ? "Ocultar detalhes" : "Configurar e ver detalhes"}<ChevronDown size={16} className="access-chevron" aria-hidden="true" /></span>
               </button>
               {isOpen && <div className="organization-members-panel" id={membersPanelId}>
-                <div className="organization-members-heading"><div><h3>Usuários desta organização</h3><p>Confira quem tem acesso e qual perfil está atribuído.</p></div><span>{organization.member_count} {organization.member_count === 1 ? "pessoa" : "pessoas"}</span></div>
-                {loadingMembersByOrganization[organization.id] ? <p className="organization-members-feedback" role="status">Carregando usuários...</p>
-                  : memberErrorsByOrganization[organization.id] ? <div className="organization-members-feedback" role="alert"><span>{memberErrorsByOrganization[organization.id]}</span><button type="button" className="secondary-button" onClick={() => void loadOrganizationMembers(organization.id)}>Tentar novamente</button></div>
-                    : members.length === 0 ? <p className="organization-members-feedback">Ainda não há usuários ativos nesta organização.</p>
-                      : <ul className="organization-members-list">{members.map((member) => <li className="organization-member-row" key={member.user_id}>
-                        <span className="access-member-avatar" aria-hidden="true">{member.full_name.trim().slice(0, 1).toLocaleUpperCase("pt-BR") || "?"}</span>
-                        <span className="organization-member-copy"><strong>{member.full_name}</strong><span>{member.email || "E-mail não informado"}</span></span>
-                        <span className={`organization-user-role role-${member.role}`}>{organizationRoleLabel[member.role]}</span>
-                      </li>)}</ul>}
+                {isEditable ? <>
+                  <section className="organization-setup-section" aria-labelledby={`organization-config-${organization.id}`}>
+                    <div className="organization-section-heading"><div><h3 id={`organization-config-${organization.id}`}>Dados e parâmetros gerais</h3><p>Os módulos operacionais detalhados poderão ser configurados em uma próxima etapa de gestão.</p></div><span>Preparação</span></div>
+                    <form className="organization-config-grid" onSubmit={(event) => { event.preventDefault(); void saveOrganization(organization); }} aria-busy={isBusy}>
+                      <label>Nome da organização<input value={form.name} onChange={(event) => updateForm(organization.id, "name", event.target.value)} minLength={2} maxLength={150} required /></label>
+                      <label>CNPJ<input value={form.cnpj} onChange={(event) => updateForm(organization.id, "cnpj", event.target.value)} inputMode="numeric" /></label>
+                      <label>Telefone<input value={form.phone} onChange={(event) => updateForm(organization.id, "phone", event.target.value)} autoComplete="tel" /></label>
+                      <label>Responsável SESMT<input value={form.sesmt_manager} onChange={(event) => updateForm(organization.id, "sesmt_manager", event.target.value)} /></label>
+                      <label className="organization-config-wide">Endereço<input value={form.address} onChange={(event) => updateForm(organization.id, "address", event.target.value)} autoComplete="street-address" /></label>
+                      <label className="organization-config-wide">URL do logo<input type="url" value={form.logo_url} onChange={(event) => updateForm(organization.id, "logo_url", event.target.value)} placeholder="https://..." /></label>
+                      <label>Alerta de validade (dias)<input type="number" min="0" max="365" step="1" value={form.validity_alert_days} onChange={(event) => updateForm(organization.id, "validity_alert_days", event.target.value)} required /></label>
+                      <label>Alerta de troca prevista (dias)<input type="number" min="0" max="365" step="1" value={form.replacement_alert_days} onChange={(event) => updateForm(organization.id, "replacement_alert_days", event.target.value)} required /></label>
+                      <label>Estoque mínimo padrão<input type="number" min="0" max="1000000" step="1" value={form.default_minimum_stock} onChange={(event) => updateForm(organization.id, "default_minimum_stock", event.target.value)} required /></label>
+                      <div className="organization-form-actions"><button className="primary-button" type="submit" disabled={isBusy} aria-busy={isBusy}><Save size={16} aria-hidden="true" />{isBusy ? "Salvando..." : "Salvar configuração"}</button></div>
+                    </form>
+                  </section>
+
+                  <section className="organization-setup-section" aria-labelledby={`organization-invite-${organization.id}`}>
+                    <div className="organization-section-heading"><div><h3 id={`organization-invite-${organization.id}`}>Convidar o primeiro administrador</h3><p>O acesso completo à organização só será ativado depois que o convite for aceito.</p></div>{organization.first_admin_invitation_state && <span className={`organization-invitation-state invitation-${organization.first_admin_invitation_state}`}>{invitationLabels[organization.first_admin_invitation_state]}</span>}</div>
+                    {organization.first_admin_email && <p className="organization-current-invite">Último e-mail informado: <strong>{organization.first_admin_email}</strong>{organization.first_admin_expires_at && organization.first_admin_invitation_state === "pending" ? ` · válido até ${new Date(organization.first_admin_expires_at).toLocaleDateString("pt-BR")}` : ""}</p>}
+                    <div className="organization-invite-form">
+                      <label htmlFor={`organization-admin-email-${organization.id}`}>E-mail do administrador<input id={`organization-admin-email-${organization.id}`} type="email" autoComplete="email" value={adminEmails[organization.id] ?? ""} onChange={(event) => setAdminEmails((current) => ({ ...current, [organization.id]: event.target.value }))} placeholder="nome@empresa.com" required /></label>
+                      <button className="secondary-button" type="button" onClick={() => void inviteFirstAdmin(organization)} disabled={isBusy} aria-busy={isBusy}><Link2 size={15} aria-hidden="true" />{organization.first_admin_invitation_state === "pending" ? "Reemitir convite" : "Gerar convite"}</button>
+                    </div>
+                    {invitationLink && <div className="invite-link-box organization-invite-link"><input aria-label="Link do convite do primeiro administrador" value={invitationLink} readOnly onFocus={(event) => event.currentTarget.select()} /><button className="secondary-button" type="button" onClick={() => void copyInvitation(organization.id)}>{copiedOrganizationId === organization.id ? <Check size={16} aria-hidden="true" /> : <Copy size={16} aria-hidden="true" />}{copiedOrganizationId === organization.id ? "Copiado" : "Copiar link"}</button></div>}
+                    {organization.first_admin_invitation_state === "pending" && organization.first_admin_invitation_id && <button className="organization-text-action organization-danger-action" type="button" onClick={() => setConfirmation({ organizationId: organization.id, kind: "revoke", invitationId: organization.first_admin_invitation_id ?? undefined, reason: "" })} disabled={isBusy}><Ban size={14} aria-hidden="true" /> Revogar convite pendente</button>}
+                  </section>
+                </> : <section className="organization-setup-section">
+                  <div className="organization-section-heading"><div><h3>Dados da organização</h3><p>Organização ativa; edição operacional pela plataforma depende do modo de gestão da próxima etapa.</p></div></div>
+                  <dl className="organization-readonly-grid"><div><dt>CNPJ</dt><dd>{organization.cnpj || "Não informado"}</dd></div><div><dt>Telefone</dt><dd>{organization.phone || "Não informado"}</dd></div><div><dt>Responsável SESMT</dt><dd>{organization.sesmt_manager || "Não informado"}</dd></div><div><dt>Endereço</dt><dd>{organization.address || "Não informado"}</dd></div></dl>
+                </section>}
+
+                <section className="organization-setup-section" aria-label="Ações da organização">
+                  <div className="organization-lifecycle-actions">
+                    {organization.lifecycle_status === "suspended"
+                      ? <button className="secondary-button" type="button" onClick={() => setConfirmation({ organizationId: organization.id, kind: "reactivate", reason: "" })}><RotateCw size={15} aria-hidden="true" /> Reativar organização</button>
+                      : <button className="organization-text-action organization-danger-action" type="button" onClick={() => setConfirmation({ organizationId: organization.id, kind: "suspend", reason: "" })}><Ban size={14} aria-hidden="true" /> Suspender organização</button>}
+                    {organization.lifecycle_status === "draft" && <button className="organization-text-action organization-danger-action" type="button" onClick={() => setConfirmation({ organizationId: organization.id, kind: "delete", reason: "" })}><Trash2 size={14} aria-hidden="true" /> Excluir rascunho vazio</button>}
+                  </div>
+                  {confirmation?.organizationId === organization.id && <div className="organization-action-confirm" role="group" aria-labelledby={`organization-action-${organization.id}`}>
+                    <div className="organization-confirm-heading"><AlertTriangle size={17} aria-hidden="true" /><div><h4 id={`organization-action-${organization.id}`}>{confirmationTitle(confirmation.kind)}</h4><p>{confirmationDescription(confirmation.kind)}</p></div><button type="button" className="close-modal" aria-label="Cancelar ação" onClick={() => setConfirmation(null)}><X size={17} aria-hidden="true" /></button></div>
+                    <label>Motivo para auditoria<textarea value={confirmation.reason} onChange={(event) => setConfirmation((current) => current ? { ...current, reason: event.target.value } : current)} minLength={3} maxLength={500} rows={2} placeholder="Descreva brevemente o motivo" required /></label>
+                    <div className="organization-confirm-actions"><button className="secondary-button" type="button" onClick={() => setConfirmation(null)}>Cancelar</button><button className="primary-button" type="button" onClick={() => void confirmAction()} disabled={isBusy || confirmation.reason.trim().length < 3} aria-busy={isBusy}>{isBusy ? "Processando..." : confirmationTitle(confirmation.kind)}</button></div>
+                  </div>}
+                </section>
+
+                <section className="organization-setup-section" aria-labelledby={`organization-members-title-${organization.id}`}>
+                  <div className="organization-section-heading"><div><h3 id={`organization-members-title-${organization.id}`}>Membros da organização</h3><p>Consulte os usuários vinculados e o perfil de cada um.</p></div><span>{organization.member_count} {organization.member_count === 1 ? "pessoa" : "pessoas"}</span></div>
+                  {loadingMembersByOrganization[organization.id] ? <p className="organization-members-feedback" role="status">Carregando usuários...</p>
+                    : memberErrorsByOrganization[organization.id] ? <div className="organization-members-feedback" role="alert"><span>{memberErrorsByOrganization[organization.id]}</span><button type="button" className="secondary-button" onClick={() => void loadOrganizationMembers(organization.id)}>Tentar novamente</button></div>
+                      : members.length === 0 ? <p className="organization-members-feedback">Ainda não há usuários vinculados.</p>
+                        : <ul className="organization-members-list">{members.map((member) => <li className="organization-member-row" key={member.user_id}>
+                          <span className="access-member-avatar" aria-hidden="true">{member.full_name.trim().slice(0, 1).toLocaleUpperCase("pt-BR") || "?"}</span>
+                          <span className="organization-member-copy"><strong>{member.full_name}</strong><span>{member.email || "E-mail não informado"}</span></span>
+                          <span className={`organization-user-role role-${member.role}`}>{roleLabels[member.role]}</span>
+                        </li>)}</ul>}
+                </section>
               </div>}
             </article>;
           })}
         </div>}
       </section>
 
-      <p className="access-helper"><Link2 size={14} aria-hidden="true" /> Cada usuário entra em uma organização por convite. Para transferir uma pessoa entre empresas, será necessário um fluxo específico de migração.</p>
+      <p className="access-helper"><Link2 size={14} aria-hidden="true" /> A preparação desta etapa cobre dados gerais e alertas. O acesso temporário aos módulos para cadastrar materiais, estoque e demais informações será implementado separadamente.</p>
     </main>
   );
 }

@@ -204,6 +204,14 @@ const secretKeys = Deno.env.get("SUPABASE_SECRET_KEYS");
 const serviceKey = (secretKeys ? JSON.parse(secretKeys).default : "") || Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") || Deno.env.get("SUPABASE_SECRET_KEY") || "";
 const admin = createClient(supabaseUrl, serviceKey, { auth: { autoRefreshToken: false, persistSession: false } });
 
+async function organizationIsActive(organizationId: string) {
+  const { data, error } = await admin.from("organizations")
+    .select("lifecycle_status")
+    .eq("id", organizationId)
+    .maybeSingle();
+  return !error && data?.lifecycle_status === "active";
+}
+
 Deno.serve(async (request) => {
   const origin = request.headers.get("origin");
   if (origin && !allowedOrigins.has(origin)) return respond({ error: "Origem não autorizada." }, 403, origin);
@@ -249,6 +257,7 @@ Deno.serve(async (request) => {
     : userClient.from("profiles").select("organization_id,role,full_name,organization:organizations(name,logo_url,cnpj,address,phone)").eq("id", user.id).maybeSingle();
   const { data: profile, error: profileError } = await profileQuery;
   if (profileError || !profile?.organization_id) return respond({ error: "Não foi possível identificar a organização." }, 403, origin);
+  if (!(await organizationIsActive(String(profile.organization_id)))) return respond({ error: "A organização está temporariamente indisponível." }, 403, origin);
   const requiredPage = recordType === "return" ? "/returns" : recordType === "deduction" || recordType === "witness" ? "/discounts" : "/deliveries";
   let pagePaths: unknown = null;
   const transactionQuery = userClient.from(table).select(select).eq("id", recordId).maybeSingle();

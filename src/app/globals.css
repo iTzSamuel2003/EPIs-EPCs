@@ -2514,6 +2514,72 @@ body{max-width:100%;overflow-x:hidden;}
   .organization-member-row{grid-template-columns:36px minmax(0,1fr)}
   .organization-member-row .organization-user-role{grid-column:2;justify-self:start;margin-top:-2px}
 }
+
+.organization-draft-create{display:grid;grid-template-columns:minmax(220px,1.3fr) minmax(180px,.8fr) auto;align-items:end;gap:14px;margin-top:20px}
+.organization-draft-create label,.organization-config-grid label,.organization-invite-form label,.organization-action-confirm label{display:grid;gap:7px;min-width:0;color:#43536c;font-size:12px;font-weight:700}
+.organization-draft-create input,.organization-config-grid input,.organization-invite-form input,.organization-action-confirm textarea{width:100%;min-width:0;min-height:44px;padding:10px 12px;border:1px solid #dce3ef;border-radius:9px;background:#fff;color:#162844;font:inherit;font-size:13px;box-sizing:border-box}
+.organization-status,.organization-invitation-state{display:inline-flex;align-items:center;justify-content:center;max-width:100%;padding:6px 10px;border-radius:30px;font-size:11px;font-weight:700;line-height:1.25;text-align:center;white-space:normal}
+.organization-status-draft{background:#fff5d9;color:#8b6500}
+.organization-status-awaiting_admin{background:#eaf3ff;color:#326eaa}
+.organization-status-active,.invitation-accepted{background:#e8f7ef;color:#28794e}
+.organization-status-suspended,.invitation-expired,.invitation-revoked{background:#fff0ee;color:#b84539}
+.invitation-pending{background:#fff5d9;color:#8b6500}
+.organization-setup-section{display:grid;gap:15px;margin-top:16px;padding-top:17px;border-top:1px solid #e7ebf3}
+.organization-section-heading{display:flex;align-items:flex-start;justify-content:space-between;gap:14px}
+.organization-section-heading h3{margin:0 0 4px;color:#263954;font-size:15px}
+.organization-section-heading p{margin:0;color:#8290a8;font-size:12px;line-height:1.5}
+.organization-section-heading>span{flex:none;color:#8290a8;font-size:12px;font-weight:700}
+.organization-config-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));align-items:end;gap:13px}
+.organization-config-wide{grid-column:span 2}
+.organization-config-grid input:focus,.organization-draft-create input:focus,.organization-invite-form input:focus,.organization-action-confirm textarea:focus{outline:3px solid #ddd6ff;border-color:#8065df}
+.organization-form-actions{grid-column:1/-1;display:flex;justify-content:flex-end;padding-top:2px}
+.organization-invite-form{display:grid;grid-template-columns:minmax(0,1fr) auto;align-items:end;gap:12px}
+.organization-invite-form>.secondary-button{min-height:44px}
+.organization-current-invite{margin:0;color:#71819a;font-size:12px;overflow-wrap:anywhere}
+.organization-current-invite strong{color:#263954}
+.organization-invite-link{margin-top:1px}
+.organization-invite-link input{min-width:0;overflow:hidden;text-overflow:ellipsis}
+.organization-text-action{display:inline-flex;align-items:center;justify-content:center;gap:7px;min-height:38px;width:max-content;max-width:100%;padding:7px 10px;border:1px solid transparent;border-radius:8px;background:transparent;color:#63748e;font:inherit;font-size:12px;font-weight:700;cursor:pointer}
+.organization-text-action:hover{background:#f4f5fa}
+.organization-danger-action{color:#b64b42}
+.organization-danger-action:hover{background:#fff0ee}
+.organization-lifecycle-actions{display:flex;align-items:center;justify-content:flex-end;gap:8px;flex-wrap:wrap}
+.organization-action-confirm{display:grid;gap:13px;padding:15px;border:1px solid #f2d4cf;border-radius:12px;background:#fff9f8}
+.organization-confirm-heading{display:grid;grid-template-columns:22px minmax(0,1fr) 36px;align-items:start;gap:10px;color:#a94a40}
+.organization-confirm-heading h4{margin:0 0 4px;color:#813a34;font-size:14px}
+.organization-confirm-heading p{margin:0;color:#795b59;font-size:12px;line-height:1.5}
+.organization-confirm-heading .close-modal{width:36px;height:36px;min-width:36px;min-height:36px;border:0;border-radius:8px;background:transparent;color:#795b59;cursor:pointer}
+.organization-action-confirm textarea{resize:vertical;min-height:72px}
+.organization-confirm-actions{display:flex;justify-content:flex-end;gap:9px}
+.organization-readonly-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:13px;margin:0}
+.organization-readonly-grid>div{min-width:0;padding:11px 12px;border:1px solid #e7ebf3;border-radius:9px;background:#fff}
+.organization-readonly-grid dt{margin-bottom:4px;color:#8290a8;font-size:11px;font-weight:700}
+.organization-readonly-grid dd{margin:0;color:#263954;font-size:13px;overflow-wrap:anywhere}
+
+@media(max-width:760px){
+  .organization-draft-create{grid-template-columns:1fr 1fr}
+  .organization-draft-create>.primary-button{grid-column:1/-1;width:100%;justify-content:center}
+  .organization-config-grid{grid-template-columns:repeat(2,minmax(0,1fr))}
+  .organization-config-wide{grid-column:1/-1}
+  .organization-invite-form{grid-template-columns:1fr}
+  .organization-invite-form>.secondary-button{width:100%;justify-content:center}
+  .organization-lifecycle-actions{justify-content:stretch}
+  .organization-lifecycle-actions>*{flex:1 1 180px}
+}
+@media(max-width:480px){
+  .organization-draft-create,.organization-config-grid,.organization-readonly-grid{grid-template-columns:1fr}
+  .organization-config-wide,.organization-form-actions{grid-column:1}
+  .organization-form-actions,.organization-form-actions>.primary-button{width:100%}
+  .organization-form-actions>.primary-button,.organization-confirm-actions>*{justify-content:center}
+  .organization-section-heading{align-items:flex-start;flex-direction:column}
+  .organization-confirm-actions{flex-direction:column-reverse}
+  .organization-confirm-actions>*{width:100%}
+  .organization-lifecycle-actions{display:grid;grid-template-columns:1fr}
+  .organization-lifecycle-actions>*{width:100%}
+  .organization-text-action{width:100%;justify-content:flex-start;text-align:left}
+  .organization-invite-link{display:grid;grid-template-columns:1fr}
+  .organization-invite-link>.secondary-button{width:100%;justify-content:center}
+}
 .sidebar-bottom>a{
   min-height:36px!important;
   padding:7px 10px!important;
