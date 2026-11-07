@@ -131,5 +131,5 @@
 - Validação local: 80 testes pgTAP passam no projeto Supabase descartável; lint SQL, lint frontend, build e verificação de codificação foram executados localmente.
 - Ainda não validado por navegador autenticado: fluxo visual completo de criar rascunho, convidar administrador e concluir o primeiro acesso.
 - Cenários de borda ainda não cobertos por pgTAP: promoção/idempotência de perfil já vinculado à mesma organização e autorização direta de leitura/escrita em cada tabela tenant para todos os estados inativos. O fluxo de exclusão já é testado contra perfil, convite revogado, linha com `organization_id` e objeto Storage.
-- Não publicado: o histórico local e o remoto do Supabase divergem. A nova migração não foi aplicada no projeto hospedado, e não houve push/deploy.
+- Não publicado: o histórico local e o remoto do Supabase ainda divergem. As duas migrações remotas de grants para `base_id` foram reconstruídas localmente; a nova migração de ciclo de vida não foi aplicada no projeto hospedado, e ainda não houve push/deploy.
 - Fora desta fase: sessão temporária de gestão que permita ao administrador da plataforma entrar nos módulos de uma organização. A exclusão deverá verificar sessões ativas quando essa tabela for criada.

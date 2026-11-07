@@ -5,7 +5,7 @@
 - Repositório: `C:\Users\tomro\Desktop\Samuel\EPIs-EPCs`.
 - Banco Supabase vinculado consultado somente para leitura em 2026-11-06.
 - Migração mais recente no remoto e no repositório antes desta tarefa: `20261104032615_accept_pending_organization_invitation`.
-- `supabase migration list --linked` identificou 141 versões iguais, 16 versões apenas locais e 17 apenas remotas antes da nova migração desta tarefa. Portanto, o histórico diverge apesar do mesmo último timestamp; não aplicar a nova migração no Supabase hospedado até reconciliar as histórias.
+- `supabase migration list --linked` identificou 141 versões iguais, 16 versões apenas locais e 17 apenas remotas antes desta tarefa. Portanto, o histórico diverge apesar do mesmo último timestamp.
 - Versões apenas locais: `20260915100000`, `20260915110000`, `20260915120000`, `20260919231108`, `20260920081326`, `20260924000100`, `20260924000200`, `20260930100000`, `20260930110000`, `20260930120000`, `20261001090000`, `20261001100000`, `20261002100000`, `20261002110000`, `20261002120000`, `20261021183314`.
 - Versões apenas remotas: `20260915114455`, `20260916153807`, `20260916154238`, `20260919231120`, `20260924124723`, `20260924124822`, `20260930190924`, `20260930191818`, `20260930192009`, `20261001130632`, `20261001131120`, `20261002141555`, `20261002141831`, `20261002142056`, `20261021184942`, `20261030140533`, `20261030141252`.
 - A tabela `organizations` ainda não possui estado de ciclo de vida.
@@ -53,6 +53,6 @@ Os objetos privados usam políticas relacionadas ao escopo organizacional e os f
 ## Estado após implementação local — 2026-11-07
 
 - A migração `20261107015818_organization_drafts_and_lifecycle.sql` existe apenas no repositório local e foi aplicada no Supabase descartável usado para testes.
-- Com essa migração, a contagem observada passa a 141 versões em comum, 17 somente locais e 17 somente remotas. A migração não foi aplicada no Supabase hospedado.
+- As duas migrações remotas de permissões `base_id` também foram reconstruídas localmente (`20261030140533` e `20261030141252`) e verificadas no banco descartável. A contagem atual observada é 143 versões em comum, 17 somente locais e 15 somente remotas; os 15 pares restantes têm nomes correspondentes, mas timestamps diferentes. A migração de ciclo de vida não foi aplicada no Supabase hospedado.
 - A bateria `supabase/tests/organization_lifecycle.test.sql` concluiu com 80 testes pgTAP aprovados no banco descartável, incluindo recusa de aceitação durante suspensão, proteção contra associação a outra organização e bloqueios de exclusão por perfil, linha tenant, convite revogado e objeto Storage.
 - O projeto ainda não oferece sessão temporária para o administrador da plataforma operar dentro dos módulos de uma organização; isso continua sendo uma etapa separada.
