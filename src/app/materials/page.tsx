@@ -425,7 +425,7 @@ export default function MaterialsPage() {
     {success && <div className="feedback success-feedback" role="status"><Check size={17} /> {success}</div>}
     {error && !showForm && <FeedbackMessage onRetry={() => void loadMaterials()}>{error}</FeedbackMessage>}
     <section className="panel annex-settings-panel" aria-labelledby="annex-settings-title">
-      <div className="panel-header"><div><h2 id="annex-settings-title">Anexos contratuais</h2><p>Desative um anexo para impedir que seus materiais sejam selecionados em Entrada de materiais.</p></div><span className="annex-settings-count">{annexOptions.length} anexos</span></div>
+      <div className="panel-header"><div><h2 id="annex-settings-title">Anexos contratuais</h2><p>Desativar um anexo impede novas operações vinculadas a ele. Os dados e históricos existentes permanecem disponíveis.</p></div><span className="annex-settings-count">{annexOptions.length} anexos</span></div>
       {annexSettingsError && <FeedbackMessage onRetry={() => void loadMaterials()}>{annexSettingsError}</FeedbackMessage>}
       {!annexSettingsLoaded && !annexSettingsError ? <p className="annex-settings-loading">Carregando situação dos anexos...</p> : null}
       {annexSettingsLoaded && <div className="annex-settings-grid">{annexOptions.map((annex) => {
@@ -434,7 +434,7 @@ export default function MaterialsPage() {
         const saving = savingAnnex === annex;
         return <label className={`annex-setting-card ${active ? "is-active" : "is-inactive"}`} key={annex}>
           <input type="checkbox" checked={active} disabled={Boolean(savingAnnex)} onChange={(event) => void updateAnnexStatus(annex, event.target.checked)} aria-label={`${active ? "Desativar" : "Ativar"} ${contractAnnexLabel(annex)}`} />
-          <span className="annex-setting-copy"><strong>{contractAnnexLabel(annex)}</strong><small>{count} material(is) no catálogo</small></span>
+          <span className="annex-setting-copy"><strong>{contractAnnexLabel(annex)}</strong><small>{annex === "03" ? "Cursos e certificados dos colaboradores" : `${count} material(is) no catálogo`}</small></span>
           <span className={`status-pill ${active ? "success" : "danger"}`}>{saving ? "Salvando..." : active ? "Ativo" : "Desativado"}</span>
         </label>;
       })}</div>}

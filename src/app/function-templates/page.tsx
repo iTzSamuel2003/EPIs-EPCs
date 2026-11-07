@@ -6,19 +6,25 @@ import { createClient } from "@/lib/supabase/client";
 import { getCurrentOrganizationProfile } from "@/lib/organization-context";
 import { friendlyError } from "@/lib/ui-feedback";
 import { FeedbackMessage } from "@/components/feedback-message";
+import { getContractAnnexNumbers, type ContractAnnexAssociation } from "@/lib/contract-annex";
 
 type ItemType = "EPI" | "EPC" | "FERRAMENTAL";
 type TemplateItem = { id?: string; material_id?: string | null; material_name: string; quantity: number; item_type: ItemType };
-type ContractScenario = { id: string; code: string; name: string; source_annex: string; active: boolean };
+type ContractScenario = { id: string; code: string; name: string; source_annex: string };
 type Template = { id: string; name: string; source_document: string | null; function_group: string | null; contract_scenario_id: string | null; contract_scenario: ContractScenario | null; function_template_items: TemplateItem[] };
-type MaterialOption = { id: string; name: string; type: ItemType; unit: string };
+type MaterialOption = { id: string; name: string; type: ItemType; unit: string; contract_item_code: string | null; contract_source: string | null };
+type AnnexSetting = { annex_number: string; active: boolean };
+type MaterialContractAnnex = ContractAnnexAssociation & { material_id: string };
 type DraftItem = { material_id: string; material_name: string; quantity: string; item_type: ItemType };
 
 const emptyItem = (): DraftItem => ({ material_id: "", material_name: "", quantity: "1", item_type: "EPI" });
+function annexNumber(value: string | null | undefined) { return value?.match(/\d{1,2}/)?.[0].padStart(2, "0") ?? null; }
+function isAnnexEnabled(sourceAnnex: string | null | undefined, enabledAnnexes: Set<string>) { const number = annexNumber(sourceAnnex); return !number || enabledAnnexes.has(number); }
 
 export default function FunctionTemplatesPage() {
   const [templates, setTemplates] = useState<Template[]>([]);
   const [materials, setMaterials] = useState<MaterialOption[]>([]);
+  const [allMaterials, setAllMaterials] = useState<MaterialOption[]>([]);
   const [scenarios, setScenarios] = useState<ContractScenario[]>([]);
   const [selectedId, setSelectedId] = useState("");
   const [loading, setLoading] = useState(true);
@@ -42,21 +48,35 @@ export default function FunctionTemplatesPage() {
     setError("");
     setTemplates([]);
     setMaterials([]);
+    setAllMaterials([]);
     setScenarios([]);
     try {
       const supabase = createClient();
-      const [{ data: templateData, error: templateError }, { data: materialData, error: materialError }, { data: scenarioData, error: scenarioError }] = await Promise.all([
+      const [{ data: templateData, error: templateError }, { data: materialData, error: materialError }, { data: scenarioData, error: scenarioError }, { data: annexSettings, error: annexSettingsError }, { data: annexData, error: annexError }] = await Promise.all([
         supabase.from("function_templates").select("id, name, source_document, function_group, contract_scenario_id, contract_scenario:contract_scenarios(id, code, name, source_annex), function_template_items(id, material_id, material_name, quantity, item_type)").order("name"),
-        supabase.from("materials").select("id, name, type, unit").eq("status", "active").order("name"),
-        supabase.from("contract_scenarios").select("id, code, name, source_annex, active").eq("active", true).order("name"),
+        supabase.from("materials").select("id, name, type, unit, contract_item_code, contract_source").eq("status", "active").order("name"),
+        supabase.from("contract_scenarios").select("id, code, name, source_annex").order("name"),
+        supabase.from("organization_annex_settings").select("annex_number,active"),
+        supabase.from("material_contract_annexes").select("material_id,annex_number,contract_item_code,contract_source"),
       ]);
       if (version !== loadVersion.current) return;
-      if (templateError || materialError || scenarioError) setError(friendlyError(templateError ?? materialError ?? scenarioError, "Não foi possível carregar as listas."));
+      if (templateError || materialError || scenarioError || annexSettingsError || annexError) setError(friendlyError(templateError ?? materialError ?? scenarioError ?? annexSettingsError ?? annexError, "Não foi possível carregar as listas."));
       else {
         const rows = (templateData ?? []) as unknown as Template[];
+        const enabledAnnexes = new Set(((annexSettings ?? []) as AnnexSetting[]).filter((setting) => setting.active).map((setting) => annexNumber(setting.annex_number) ?? ""));
+        const associationsByMaterial = new Map<string, MaterialContractAnnex[]>();
+        for (const association of (annexData ?? []) as MaterialContractAnnex[]) {
+          const links = associationsByMaterial.get(association.material_id) ?? [];
+          links.push(association);
+          associationsByMaterial.set(association.material_id, links);
+        }
         setTemplates(rows);
-        setMaterials((materialData ?? []) as MaterialOption[]);
-        setScenarios((scenarioData ?? []) as ContractScenario[]);
+        setMaterials(((materialData ?? []) as MaterialOption[]).filter((material) => {
+          const annexes = getContractAnnexNumbers(material, associationsByMaterial.get(material.id) ?? []);
+          return !annexes.length || annexes.some((annex) => enabledAnnexes.has(annex));
+        }));
+        setAllMaterials((materialData ?? []) as MaterialOption[]);
+        setScenarios(((scenarioData ?? []) as ContractScenario[]).filter((scenario) => isAnnexEnabled(scenario.source_annex, enabledAnnexes)));
         setSelectedId(preferredId && rows.some((template) => template.id === preferredId) ? preferredId : rows[0]?.id ?? "");
       }
     } catch (caught) {
@@ -103,6 +123,11 @@ export default function FunctionTemplatesPage() {
     let atomicItems = items.map((item) => ({ material_id: item.material_id || null, material_name: item.material_name.trim().toLocaleUpperCase("pt-BR"), quantity: Number(item.quantity), item_type: item.item_type }))
       .filter((item) => item.material_name && Number.isInteger(item.quantity) && item.quantity > 0);
     if (!name.trim()) { setError("Informe o nome da função."); return; }
+    if (scenarioId && !scenarios.some((scenario) => scenario.id === scenarioId)) { setError("O cenário escolhido pertence a um anexo inativo. Selecione um cenário habilitado ou remova o vínculo."); return; }
+    const unavailableMaterial = atomicItems.find((item) => item.material_id && !materials.some((material) => material.id === item.material_id));
+    if (unavailableMaterial) { setError(`“${unavailableMaterial.material_name}” está vinculado a um anexo inativo. Remova o item ou selecione um material disponível.`); return; }
+    const inactiveMaterialName = atomicItems.find((item) => !item.material_id && allMaterials.some((material) => material.name.trim().toLocaleLowerCase("pt-BR") === item.material_name.toLocaleLowerCase("pt-BR")) && !materials.some((material) => material.name.trim().toLocaleLowerCase("pt-BR") === item.material_name.toLocaleLowerCase("pt-BR")));
+    if (inactiveMaterialName) { setError(`“${inactiveMaterialName.material_name}” existe apenas em um anexo inativo. Selecione outro material ou ajuste o vínculo contratual.`); return; }
     if (!atomicItems.length || atomicItems.length !== items.length) { setError("Informe o material e uma quantidade maior que zero em todos os itens."); return; }
     if (new Set(atomicItems.map((item) => item.material_name.toLocaleLowerCase("pt-BR"))).size !== atomicItems.length) { setError("Não repita o mesmo material na lista."); return; }
     saveLockRef.current = true;

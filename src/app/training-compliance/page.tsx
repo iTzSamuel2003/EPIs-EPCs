@@ -9,6 +9,10 @@ import { FeedbackMessage } from "@/components/feedback-message";
 
 type Requirement = { id: string; function_group: string; course_name: string; source_annex: string; mandatory: boolean; validity_months: number | null; notes: string | null };
 type ComplianceCount = { requirement_id: string; applicable_count: number; approved_count: number; active_employee_count: number };
+type AnnexSetting = { annex_number: string; active: boolean };
+
+function annexNumber(value: string | null | undefined) { return value?.match(/\d{1,2}/)?.[0].padStart(2, "0") ?? null; }
+function isAnnexEnabled(sourceAnnex: string | null | undefined, enabledAnnexes: Set<string>) { const number = annexNumber(sourceAnnex); return !number || enabledAnnexes.has(number); }
 
 export default function TrainingCompliancePage() {
   const [requirements, setRequirements] = useState<Requirement[]>([]); const [counts, setCounts] = useState<ComplianceCount[]>([]); const [functionFilter, setFunctionFilter] = useState("all"); const [courseFilter, setCourseFilter] = useState("all"); const [statusFilter, setStatusFilter] = useState("all"); const [loading, setLoading] = useState(true); const [error, setError] = useState(""); const [retryKey, setRetryKey] = useState(0); const loadVersion = useRef(0); const mountedRef = useRef(true);
@@ -22,15 +26,19 @@ export default function TrainingCompliancePage() {
     }
     try {
       const supabase = createClient();
-      const [{ data: requirementData, error: requirementError }, { data: countData, error: countError }] = await Promise.all([
+      const [{ data: requirementData, error: requirementError }, { data: countData, error: countError }, { data: annexSettings, error: annexSettingsError }] = await Promise.all([
         supabase.from("contract_training_requirements").select("id, function_group, course_name, source_annex, mandatory, validity_months, notes").order("function_group").order("course_name"),
         supabase.rpc("get_training_compliance_counts"),
+        supabase.from("organization_annex_settings").select("annex_number,active"),
       ]);
       if (!mountedRef.current || version !== loadVersion.current) return;
-      const loadError = requirementError ?? countError;
+      const loadError = requirementError ?? countError ?? annexSettingsError;
       if (loadError) { setError(friendlyError(loadError, "Não foi possível carregar a matriz de treinamentos.")); return; }
-      setRequirements((requirementData ?? []) as Requirement[]);
-      setCounts((countData ?? []) as ComplianceCount[]);
+      const enabledAnnexes = new Set(((annexSettings ?? []) as AnnexSetting[]).filter((setting) => setting.active).map((setting) => setting.annex_number.trim().match(/\d{1,2}/)?.[0].padStart(2, "0") ?? ""));
+      const visibleRequirements = ((requirementData ?? []) as Requirement[]).filter((requirement) => isAnnexEnabled(requirement.source_annex, enabledAnnexes));
+      const visibleRequirementIds = new Set(visibleRequirements.map((requirement) => requirement.id));
+      setRequirements(visibleRequirements);
+      setCounts(((countData ?? []) as ComplianceCount[]).filter((count) => visibleRequirementIds.has(count.requirement_id)));
     } catch (caught) {
       if (mountedRef.current && version === loadVersion.current) setError(friendlyError(caught, "Não foi possível carregar a matriz de treinamentos."));
     } finally {

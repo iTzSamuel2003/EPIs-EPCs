@@ -11,14 +11,18 @@ import { friendlyError } from "@/lib/ui-feedback";
 
 type Employee = { id: string; registration: string | null; full_name: string; cpf: string; job_title: string | null; function_name: string | null; function_classification: string | null; department: string | null; unit: string | null; admission_date: string | null; termination_date: string | null; phone: string | null; email: string | null; status: "active" | "away" | "terminated"; notes: string | null };
 type EmployeeForm = { registration: string; full_name: string; cpf: string; cargo_funcao: string; function_classification: string; department: string; unit: string; admission_date: string; phone: string; email: string; status: "active" | "away" | "terminated"; notes: string };
-type FunctionTemplate = { id: string; name: string };
+type FunctionTemplate = { id: string; name: string; contract_scenario: { source_annex: string } | { source_annex: string }[] | null };
 type OperationalBase = { id: string; name: string; is_active: boolean };
+type AnnexSetting = { annex_number: string; active: boolean };
 
 const emptyForm: EmployeeForm = { registration: "", full_name: "", cpf: "", cargo_funcao: "", function_classification: "", department: "", unit: "", admission_date: "", phone: "", email: "", status: "active", notes: "" };
 const statusLabels = { active: ["Ativo", "success"], away: ["Afastado", "warning"], terminated: ["Desligado", "danger"] } as const;
 const functionLabel = (value: string) => value.replace(/\s+(VI|V|IV|III|II|I)$/i, "");
 const classificationOptions = ["I", "II", "III", "IV", "V", "VI"];
 function normalizeSearch(value: string) { return value.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().trim(); }
+function annexNumber(value: string | null | undefined) { return value?.match(/\d{1,2}/)?.[0].padStart(2, "0") ?? null; }
+function isAnnexEnabled(sourceAnnex: string | null | undefined, enabledAnnexes: Set<string>) { const number = annexNumber(sourceAnnex); return !number || enabledAnnexes.has(number); }
+function templateAnnex(template: Pick<FunctionTemplate, "contract_scenario">) { const scenario = Array.isArray(template.contract_scenario) ? template.contract_scenario[0] : template.contract_scenario; return scenario?.source_annex; }
 function isValidCpf(value: string) {
   const digits = value.replace(/\D/g, "");
   if (digits.length !== 11 || /^([0-9])\1+$/.test(digits)) return false;
@@ -59,19 +63,30 @@ export default function EmployeesPage() {
     setError("");
     try {
       const supabase = createClient();
-      const [{ data, error: loadError }, { data: templateData, error: templateError }, { data: baseData, error: baseError }] = await Promise.all([
+      const [{ data, error: loadError }, { data: templateData, error: templateError }, { data: baseData, error: baseError }, { data: annexSettings, error: annexSettingsError }] = await Promise.all([
         supabase.rpc("get_hr_employee_records", { p_employee_id: null }),
-        supabase.from("function_templates").select("id,name").order("name"),
+        supabase.from("function_templates").select("id,name,contract_scenario:contract_scenarios(source_annex)").order("name"),
         supabase.from("organization_bases").select("id,name,is_active").order("name"),
+        supabase.from("organization_annex_settings").select("annex_number,active"),
       ]);
       if (!mountedRef.current || requestId !== loadRequestRef.current) return;
-      if (loadError || templateError || baseError) {
+      if (loadError || baseError) {
         setEmployees([]);
         setFunctionTemplates([]);
         setBases([]);
-        setError(friendlyError(loadError ?? templateError ?? baseError, "Não foi possível carregar os dados."));
+        setError(friendlyError(loadError ?? baseError, "Não foi possível carregar os dados."));
       }
-      else { setEmployees((data ?? []) as Employee[]); setFunctionTemplates((templateData ?? []) as FunctionTemplate[]); setBases((baseData ?? []) as OperationalBase[]); }
+      else {
+        setEmployees((data ?? []) as Employee[]);
+        setBases((baseData ?? []) as OperationalBase[]);
+        if (templateError || annexSettingsError) {
+          setFunctionTemplates([]);
+          setError(friendlyError(templateError ?? annexSettingsError, "Não foi possível carregar as funções disponíveis."));
+        } else {
+          const enabledAnnexes = new Set(((annexSettings ?? []) as AnnexSetting[]).filter((setting) => setting.active).map((setting) => setting.annex_number.trim().match(/\d{1,2}/)?.[0].padStart(2, "0") ?? ""));
+          setFunctionTemplates(((templateData ?? []) as FunctionTemplate[]).filter((template) => isAnnexEnabled(templateAnnex(template), enabledAnnexes)));
+        }
+      }
     } catch (caught) {
       if (mountedRef.current && requestId === loadRequestRef.current) setError(friendlyError(caught, "Não foi possível carregar os dados."));
     } finally {

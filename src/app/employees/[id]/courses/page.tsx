@@ -13,9 +13,12 @@ import { FeedbackMessage } from "@/components/feedback-message";
 
 type Course = { id: string; name: string; provider: string | null; completed_at: string | null; expires_at: string | null; certificate_number: string | null; certificate_file_path: string | null; review_status: "pending" | "approved" | "rejected"; reviewed_at: string | null; review_notes: string | null };
 type Requirement = { id: string; function_group: string; course_name: string; source_annex: string; mandatory: boolean; validity_months: number | null; notes: string | null };
+type AnnexSetting = { annex_number: string; active: boolean };
 const emptyCourse = { name: "", provider: "", completed_at: "", expires_at: "", certificate_number: "" };
 const acceptedCertificateTypes = ["application/pdf", "image/jpeg", "image/png", "image/webp"];
 function normalize(value: string) { return value.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase(); }
+function annexNumber(value: string | null | undefined) { return value?.match(/\d{1,2}/)?.[0].padStart(2, "0") ?? null; }
+function isAnnexEnabled(sourceAnnex: string | null | undefined, enabledAnnexes: Set<string>) { const number = annexNumber(sourceAnnex); return !number || enabledAnnexes.has(number); }
 function matchesGroup(functionName: string, group: string) { if (group === "Todos os grupos") return true; const text = normalize(functionName); return text.includes(normalize(group)) || (group === "Poda" && text.includes("pod")) || (group === "Operador de Guindauto" && (text.includes("munck") || text.includes("guindauto"))); }
 function localDateKey(value = new Date()) { const year = value.getFullYear(); const month = String(value.getMonth() + 1).padStart(2, "0"); const day = String(value.getDate()).padStart(2, "0"); return `${year}-${month}-${day}`; }
 function hasValidCourse(courses: Course[], requirement: Requirement) { return courses.some((item) => item.review_status === "approved" && normalize(item.name).includes(normalize(requirement.course_name.split(" - ")[0])) && (!item.expires_at || item.expires_at >= localDateKey())); }
@@ -31,18 +34,25 @@ export default function EmployeeCoursesPage() {
     setError("");
     try {
       const supabase = createClient();
-      const [{ data: employee, error: employeeError }, { data, error: loadError }, { data: requirementData, error: requirementError }] = await Promise.all([
+      const [{ data: employee, error: employeeError }, { data, error: loadError }, { data: requirementData, error: requirementError }, { data: annexSettings, error: annexSettingsError }] = await Promise.all([
         supabase.rpc("get_hr_employee_records", { p_employee_id: id }),
         supabase.rpc("get_employee_course_records", { p_employee_id: id }),
         supabase.from("contract_training_requirements").select("id,function_group,course_name,source_annex,mandatory,validity_months,notes").order("function_group").order("course_name"),
+        supabase.from("organization_annex_settings").select("annex_number,active"),
       ]);
       if (!mountedRef.current || version !== loadVersion.current) return;
-      const loadErrorResult = employeeError ?? loadError ?? requirementError;
+      const loadErrorResult = employeeError ?? loadError;
       if (loadErrorResult || !employee?.[0]) { setError(friendlyError(loadErrorResult, "Não foi possível carregar os cursos.")); return; }
       setName(employee[0].full_name ?? "");
       setFunctionName(employee[0].job_title || employee[0].function_name || "");
       setCourses((data ?? []) as Course[]);
-      setRequirements((requirementData ?? []) as Requirement[]);
+      if (requirementError || annexSettingsError) {
+        setRequirements([]);
+        setError(friendlyError(requirementError ?? annexSettingsError, "Não foi possível carregar os requisitos ativos da função."));
+      } else {
+        const enabledAnnexes = new Set(((annexSettings ?? []) as AnnexSetting[]).filter((setting) => setting.active).map((setting) => setting.annex_number.trim().match(/\d{1,2}/)?.[0].padStart(2, "0") ?? ""));
+        setRequirements(((requirementData ?? []) as Requirement[]).filter((requirement) => isAnnexEnabled(requirement.source_annex, enabledAnnexes)));
+      }
     } catch (caught) {
       if (mountedRef.current && version === loadVersion.current) setError(friendlyError(caught, "Não foi possível carregar os cursos."));
     } finally {

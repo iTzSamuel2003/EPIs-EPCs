@@ -6,8 +6,18 @@ import { createClient } from "@/lib/supabase/client";
 import { FeedbackMessage } from "@/components/feedback-message";
 import { friendlyError } from "@/lib/ui-feedback";
 
-type Scenario = { id: string; code: string; name: string; source_annex: string; team_size: number | null; composition: string | null; active: boolean };
+type Scenario = { id: string; code: string; name: string; source_annex: string; team_size: number | null; composition: string | null };
 type Requirement = { id: string; scenario_id: string; source_annex: string; source_item_number: number | null; quantity: number; unit: string; usage_scope: "individual" | "coletivo"; notes: string | null; materials: { id: string; name: string; type: "EPI" | "EPC" | "FERRAMENTAL"; contract_item_code: string | null; contract_category: string; contract_specification: string | null; ca_required: boolean; test_required: boolean } | null };
+type AnnexSetting = { annex_number: string; active: boolean };
+
+function annexNumber(value: string | null | undefined) {
+  return value?.match(/\d{1,2}/)?.[0].padStart(2, "0") ?? null;
+}
+
+function isAnnexEnabled(sourceAnnex: string | null | undefined, enabledAnnexes: Set<string>) {
+  const number = annexNumber(sourceAnnex);
+  return !number || enabledAnnexes.has(number);
+}
 
 function requirementContractCode(requirement: Pick<Requirement, "source_annex" | "source_item_number" | "materials">) {
   const annexNumber = requirement.source_annex.match(/\d{1,2}/)?.[0];
@@ -43,18 +53,21 @@ export default function ContractRequirementsPage() {
       setCaAvailable({});
       try {
         const supabase = createClient();
-        const [{ data: scenarioData, error: scenarioError }, { data: requirementData, error: requirementError }, { data: lotData, error: lotError }] = await Promise.all([
-          supabase.from("contract_scenarios").select("id, code, name, source_annex, team_size, composition, active").eq("active", true).order("name"),
+        const [{ data: scenarioData, error: scenarioError }, { data: requirementData, error: requirementError }, { data: lotData, error: lotError }, { data: annexSettings, error: annexSettingsError }] = await Promise.all([
+          supabase.from("contract_scenarios").select("id, code, name, source_annex, team_size, composition").order("name"),
           supabase.from("contract_requirements").select("id, scenario_id, source_annex, source_item_number, quantity, unit, usage_scope, notes, materials(id, name, type, contract_item_code, contract_category, contract_specification, ca_required, test_required)"),
           supabase.from("material_lots").select("material_id, available_quantity, ca_number, ca_expires_at"),
+          supabase.from("organization_annex_settings").select("annex_number, active"),
         ]);
         if (version !== loadVersion.current) return;
-        const loadError = scenarioError ?? requirementError ?? lotError;
+        const loadError = scenarioError ?? requirementError ?? lotError ?? annexSettingsError;
         if (loadError) { setError(friendlyError(loadError, "Não foi possível carregar os requisitos contratuais.")); return; }
-        const rows = (scenarioData ?? []) as Scenario[];
+        const enabledAnnexes = new Set(((annexSettings ?? []) as AnnexSetting[]).filter((setting) => setting.active).map((setting) => setting.annex_number.trim().match(/\d{1,2}/)?.[0].padStart(2, "0") ?? ""));
+        const rows = ((scenarioData ?? []) as Scenario[]).filter((scenario) => isAnnexEnabled(scenario.source_annex, enabledAnnexes));
+        const enabledScenarioIds = new Set(rows.map((scenario) => scenario.id));
         const lots = (lotData ?? []) as Lot[];
         setScenarios(rows);
-        setRequirements((requirementData ?? []) as unknown as Requirement[]);
+        setRequirements(((requirementData ?? []) as unknown as Requirement[]).filter((requirement) => enabledScenarioIds.has(requirement.scenario_id) && isAnnexEnabled(requirement.source_annex, enabledAnnexes)));
         setStock(lots.reduce<Record<string, number>>((total, lot) => ({ ...total, [lot.material_id]: (total[lot.material_id] ?? 0) + Number(lot.available_quantity ?? 0) }), {}));
         const now = new Date();
         const today = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")}`;

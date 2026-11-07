@@ -60,6 +60,18 @@ type ConfirmationAction = {
 
 type CreatedInvitation = { invitation_id: string; expires_at: string };
 
+type ContractTemplateStatus = {
+  organization_id: string;
+  organization_name: string;
+  lifecycle_status: LifecycleStatus;
+  installed_version: number | null;
+  current_version: number;
+  installed_sha256: string | null;
+  current_sha256: string;
+  is_current: boolean;
+  is_source_organization: boolean;
+};
+
 function OrganizationLogoBadge({ logoUrl }: { logoUrl: string | null }) {
   const [failedLogoUrl, setFailedLogoUrl] = useState<string | null>(null);
   const shouldShowLogo = Boolean(logoUrl && failedLogoUrl !== logoUrl);
@@ -142,11 +154,33 @@ export default function OrganizationsSettingsPage() {
   const [managementRequest, setManagementRequest] = useState<{ organization: Organization; reason: string } | null>(null);
   const [managementModalError, setManagementModalError] = useState("");
   const [startingManagement, setStartingManagement] = useState(false);
+  const [contractTemplateStatuses, setContractTemplateStatuses] = useState<Record<string, ContractTemplateStatus>>({});
+  const [contractTemplateError, setContractTemplateError] = useState("");
+  const [contractTemplateLoading, setContractTemplateLoading] = useState(false);
+  const [contractTemplateApplyingId, setContractTemplateApplyingId] = useState<string | null>(null);
+  const [contractTemplateConfirmationId, setContractTemplateConfirmationId] = useState<string | null>(null);
 
   const loadOrganizations = useCallback(async () => {
     setLoading(true);
     setError("");
-    const { data, error: loadError } = await createClient().rpc("list_platform_organizations");
+    const client = createClient();
+    setContractTemplateLoading(true);
+    const [organizationsResult, templateStatusResult] = await Promise.all([
+      client.rpc("list_platform_organizations"),
+      client.rpc("list_platform_contract_template_status"),
+    ]);
+    const { data, error: loadError } = organizationsResult;
+    if (templateStatusResult.error) {
+      setContractTemplateStatuses({});
+      setContractTemplateError(templateStatusResult.error.code === "PGRST202"
+        ? "A situação do padrão contratual ficará disponível após a migration ser aplicada."
+        : "Não foi possível consultar o padrão contratual. Verifique a conexão e as permissões da plataforma.");
+    } else {
+      const statuses = (templateStatusResult.data ?? []) as ContractTemplateStatus[];
+      setContractTemplateStatuses(Object.fromEntries(statuses.map((status) => [status.organization_id, status])));
+      setContractTemplateError("");
+    }
+    setContractTemplateLoading(false);
     if (loadError) {
       setError("Não foi possível carregar as organizações. Confirme se sua conta é administradora da plataforma e se a migração foi aplicada.");
       setOrganizations([]);
@@ -249,6 +283,39 @@ export default function OrganizationsSettingsPage() {
       setError("Não foi possível salvar as configurações. Tente novamente.");
     } finally {
       setBusyOrganizationId(null);
+    }
+  }
+
+  async function applyContractTemplate(organization: Organization) {
+    setContractTemplateApplyingId(organization.id);
+    setContractTemplateError("");
+    setError("");
+    setSuccess("");
+    try {
+      const { data, error: applyError } = await createClient().rpc("apply_contract_template_version", {
+        p_organization_id: organization.id,
+      });
+      if (applyError) {
+        setError(applyError.message || "Não foi possível aplicar o padrão contratual.");
+        return;
+      }
+      const result = data && typeof data === "object" ? data as Record<string, unknown> : {};
+      const version = Number(result.version ?? contractTemplateStatuses[organization.id]?.current_version ?? 1);
+      const counts = [
+        `${Number(result.added ?? 0)} item(ns) adicionados`,
+        `${Number(result.updated ?? 0)} atualizados`,
+        `${Number(result.overrides_preserved ?? 0)} campos personalizados preservados`,
+        `${Number(result.review_required ?? 0)} item(ns) para revisão manual`,
+      ].join("; ");
+      setSuccess(result.no_op === true
+        ? `${organization.name} já estava na versão v${version}; nenhuma duplicidade foi criada.`
+        : `Padrão contratual v${version} aplicado a ${organization.name}: ${counts}. Estoque, colaboradores e bases não foram copiados.`);
+      setContractTemplateConfirmationId(null);
+      await loadOrganizations();
+    } catch {
+      setError("Não foi possível aplicar o padrão contratual. Tente novamente.");
+    } finally {
+      setContractTemplateApplyingId(null);
     }
   }
 
@@ -390,7 +457,7 @@ export default function OrganizationsSettingsPage() {
       <section className="panel access-panel" aria-labelledby="create-organization-title">
         <div className="access-panel-heading">
           <div className="access-heading-icon"><Plus size={20} aria-hidden="true" /></div>
-          <div><h2 id="create-organization-title">Criar rascunho</h2><p>Use um nome provisório; você poderá completar ou corrigir os dados depois.</p></div>
+          <div><h2 id="create-organization-title">Criar rascunho</h2><p>Use um nome provisório; você poderá completar ou corrigir os dados depois.</p><p>O catálogo contratual vigente será copiado automaticamente. Anexos 03, 04 e 05 começam ativos; 06 e 07, inativos. A organização poderá ajustar isso em Materiais.</p><p>Bases, cidades, pessoas e estoque são cadastrados separadamente para cada organização.</p></div>
         </div>
         <form className="organization-draft-create" onSubmit={(event) => void createDraft(event)} aria-busy={saving}>
           <label>Nome provisório da organização<input value={draftName} onChange={(event) => setDraftName(event.target.value)} autoComplete="organization" minLength={2} maxLength={150} placeholder="Ex.: Organização 1" required /></label>
@@ -414,6 +481,9 @@ export default function OrganizationsSettingsPage() {
             const isEditable = organization.lifecycle_status === "draft" || organization.lifecycle_status === "awaiting_admin";
             const isBusy = busyOrganizationId === organization.id;
             const invitationLink = invitationLinks[organization.id];
+            const templateStatus = contractTemplateStatuses[organization.id];
+            const templateIsOutdated = Boolean(templateStatus && !templateStatus.is_current && !templateStatus.is_source_organization);
+            const isApplyingTemplate = contractTemplateApplyingId === organization.id;
 
             return <article className={`access-role-card organization-card ${isOpen ? "is-open" : ""}`} key={organization.id}>
               <button className="access-role-summary organization-summary" type="button" onClick={() => toggleOrganization(organization.id)} aria-expanded={isOpen} aria-controls={isOpen ? membersPanelId : undefined}>
@@ -424,6 +494,28 @@ export default function OrganizationsSettingsPage() {
                 <span className="organization-expand-label">{isOpen ? "Ocultar detalhes" : "Configurar e ver detalhes"}<ChevronDown size={16} className="access-chevron" aria-hidden="true" /></span>
               </button>
               {isOpen && <div className="organization-members-panel" id={membersPanelId}>
+                <section className="organization-setup-section" aria-labelledby={`organization-template-${organization.id}`}>
+                  <div className="organization-section-heading"><div><h3 id={`organization-template-${organization.id}`}>Padrão contratual</h3><p>Materiais, anexos, requisitos, listas por função, aliases e cursos, sem dados operacionais.</p></div>
+                    {templateStatus?.is_source_organization
+                      ? <span className="status-pill success">Fonte do padrão</span>
+                      : templateStatus
+                        ? <span className={`status-pill ${templateStatus.is_current ? "success" : "warning"}`}>{templateStatus.installed_version ? `v${templateStatus.installed_version} instalada` : "Não instalado"}</span>
+                        : <span className="status-pill">{contractTemplateLoading ? "Consultando..." : "Indisponível"}</span>}
+                  </div>
+                  {contractTemplateError && <p className="organization-members-feedback" role="status">{contractTemplateError}</p>}
+                  {templateStatus && <p className="organization-current-invite">Versão vigente: <strong>v{templateStatus.current_version}</strong>{templateStatus.installed_version ? ` · Conteúdo SHA-256 ${templateStatus.installed_sha256?.slice(0, 12)}…` : " · Esta organização ainda não recebeu o padrão."}</p>}
+                  {templateStatus?.is_source_organization
+                    ? <p className="organization-members-feedback">Esta organização é a fonte do catálogo e já está registrada na versão atual. Ela não recebe uma cópia sobre seus próprios dados.</p>
+                    : templateIsOutdated && <>
+                      {contractTemplateConfirmationId === organization.id
+                        ? <div className="organization-action-confirm" role="group" aria-labelledby={`organization-template-confirm-${organization.id}`}>
+                          <div className="organization-confirm-heading"><AlertTriangle size={17} aria-hidden="true" /><div><h4 id={`organization-template-confirm-${organization.id}`}>Aplicar versão v{templateStatus.current_version}?</h4><p>Campos contratuais ainda iguais ao padrão anterior podem ser atualizados. Personalizações e ativações dos anexos serão preservadas; itens ausentes não serão excluídos e ficarão para revisão. A operação é apenas para esta organização.</p></div><button type="button" className="close-modal" aria-label="Cancelar aplicação" onClick={() => setContractTemplateConfirmationId(null)}><X size={17} aria-hidden="true" /></button></div>
+                          <div className="organization-confirm-actions"><button className="secondary-button" type="button" onClick={() => setContractTemplateConfirmationId(null)}>Cancelar</button><button className="primary-button" type="button" onClick={() => void applyContractTemplate(organization)} disabled={isApplyingTemplate} aria-busy={isApplyingTemplate}>{isApplyingTemplate ? "Aplicando..." : `Aplicar v${templateStatus.current_version}`}</button></div>
+                        </div>
+                        : <button className="secondary-button" type="button" onClick={() => setContractTemplateConfirmationId(organization.id)} disabled={contractTemplateLoading || Boolean(contractTemplateApplyingId)}><RotateCw size={15} aria-hidden="true" /> Aplicar padrão v{templateStatus.current_version}</button>}
+                    </>}
+                  {organization.lifecycle_status === "draft" && !templateStatus?.is_source_organization && <p className="organization-members-feedback">Ao criar um novo rascunho, a versão vigente é instalada automaticamente. Bases, colaboradores, cursos realizados e estoque devem ser cadastrados nesta organização.</p>}
+                </section>
                 {isEditable ? <>
                   <section className="organization-setup-section" aria-labelledby={`organization-config-${organization.id}`}>
                     <div className="organization-section-heading"><div><h3 id={`organization-config-${organization.id}`}>Dados e parâmetros gerais</h3><p>Os módulos operacionais detalhados poderão ser configurados em uma próxima etapa de gestão.</p></div><span>Preparação</span></div>

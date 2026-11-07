@@ -7,11 +7,14 @@ import { getCurrentOrganizationProfile } from "@/lib/organization-context";
 import { friendlyError } from "@/lib/ui-feedback";
 import { FeedbackMessage } from "@/components/feedback-message";
 
-type Scenario = { id: string; name: string; source_annex: string; team_size: number | null; active: boolean };
+type Scenario = { id: string; name: string; source_annex: string; team_size: number | null };
 type Employee = { id: string; full_name: string; registration: string | null; job_title?: string | null; function_name?: string | null; function_classification?: string | null };
 type TeamMember = { employee_id: string; role: string | null; active?: boolean; employee: Employee | null };
 type Team = { id: string; name: string; scenario_id: string; vehicle_identifier: string | null; notes: string | null; status: string; scenario: Scenario | null; members: TeamMember[] };
+type AnnexSetting = { annex_number: string; active: boolean };
 const emptyForm = { name: "", scenario_id: "", vehicle_identifier: "", notes: "" };
+function annexNumber(value: string | null | undefined) { return value?.match(/\d{1,2}/)?.[0].padStart(2, "0") ?? null; }
+function isAnnexEnabled(sourceAnnex: string | null | undefined, enabledAnnexes: Set<string>) { const number = annexNumber(sourceAnnex); return !number || enabledAnnexes.has(number); }
 function employeeTeamRole(employee: Employee) {
   const title = (employee.job_title || employee.function_name || "").replace(/\s+(VI|V|IV|III|II|I)$/i, "").trim();
   return [title, employee.function_classification ? `Classe ${employee.function_classification}` : ""].filter(Boolean).join(" · ");
@@ -20,6 +23,7 @@ function employeeTeamRole(employee: Employee) {
 export default function TeamsPage() {
   const [retryKey, setRetryKey] = useState(0);
   const [scenarios, setScenarios] = useState<Scenario[]>([]); const [employees, setEmployees] = useState<Employee[]>([]); const [teams, setTeams] = useState<Team[]>([]); const [form, setForm] = useState(emptyForm); const [teamId, setTeamId] = useState(""); const [employeeId, setEmployeeId] = useState(""); const [role, setRole] = useState(""); const [memberToManage, setMemberToManage] = useState<TeamMember | null>(null); const [memberRole, setMemberRole] = useState(""); const [targetTeamId, setTargetTeamId] = useState(""); const [confirmRemoveMember, setConfirmRemoveMember] = useState(false); const [showAddMember, setShowAddMember] = useState(false); const [editingTeamId, setEditingTeamId] = useState<string | null>(null); const [showForm, setShowForm] = useState(false); const [loading, setLoading] = useState(true); const [saving, setSaving] = useState(false); const [error, setError] = useState(""); const [success, setSuccess] = useState("");
+  const [enabledAnnexes, setEnabledAnnexes] = useState<Set<string>>(new Set());
   const loadRequestRef = useRef(0);
   const mountedRef = useRef(true);
   async function load() {
@@ -28,13 +32,14 @@ export default function TeamsPage() {
     setLoading(true);
     try {
       const supabase = createClient();
-      const [{ data: scenarioData, error: scenarioError }, { data: employeeData, error: employeeError }, { data: teamData, error: teamError }] = await Promise.all([
-        supabase.from("contract_scenarios").select("id,name,source_annex,team_size,active").eq("active", true).order("name"),
+      const [{ data: scenarioData, error: scenarioError }, { data: employeeData, error: employeeError }, { data: teamData, error: teamError }, { data: annexSettings, error: annexSettingsError }] = await Promise.all([
+        supabase.from("contract_scenarios").select("id,name,source_annex,team_size").order("name"),
         supabase.from("employees").select("id,full_name,registration,job_title,function_name,function_classification").eq("status", "active").order("full_name"),
-        supabase.from("contract_teams").select("id,name,scenario_id,vehicle_identifier,notes,status,scenario:contract_scenarios(id,name,source_annex,team_size,active),members:contract_team_members(employee_id,role,active,employee:employees(id,full_name,registration))").order("name"),
+        supabase.from("contract_teams").select("id,name,scenario_id,vehicle_identifier,notes,status,scenario:contract_scenarios(id,name,source_annex,team_size),members:contract_team_members(employee_id,role,active,employee:employees(id,full_name,registration))").order("name"),
+        supabase.from("organization_annex_settings").select("annex_number,active"),
       ]);
       if (!mountedRef.current || requestId !== loadRequestRef.current) return;
-      const firstError = scenarioError ?? employeeError ?? teamError;
+      const firstError = scenarioError ?? employeeError ?? teamError ?? annexSettingsError;
       if (firstError) {
         setScenarios([]);
         setEmployees([]);
@@ -42,7 +47,9 @@ export default function TeamsPage() {
         setError(friendlyError(firstError, "Não foi possível carregar as equipes."));
         return;
       }
-      setScenarios((scenarioData ?? []) as Scenario[]);
+      const enabled = new Set(((annexSettings ?? []) as AnnexSetting[]).filter((setting) => setting.active).map((setting) => annexNumber(setting.annex_number) ?? ""));
+      setEnabledAnnexes(enabled);
+      setScenarios(((scenarioData ?? []) as Scenario[]).filter((scenario) => isAnnexEnabled(scenario.source_annex, enabled)));
       setEmployees((employeeData ?? []) as Employee[]);
       const loadedTeams = (teamData ?? []) as unknown as Team[];
       setTeams(loadedTeams.map((team) => ({ ...team, members: team.members.filter((member) => member.active !== false) })));
@@ -74,6 +81,8 @@ export default function TeamsPage() {
     event.preventDefault(); setSaving(true); setError("");
     const { supabase, organizationId, error: contextError } = await getOrganizationContext();
     if (!organizationId) { setError(contextError); setSaving(false); return; }
+    const existingTeam = editingTeamId ? teams.find((team) => team.id === editingTeamId) : null;
+    if (!scenarios.some((scenario) => scenario.id === form.scenario_id) && existingTeam?.scenario_id !== form.scenario_id) { setError("Selecione um cenário vinculado a um anexo ativo."); setSaving(false); return; }
     let saveError = "";
     if (editingTeamId) {
       const { data: updatedTeam, error: updateError } = await supabase.from("contract_teams").update(form).eq("id", editingTeamId).eq("organization_id", organizationId).select("id").maybeSingle();
@@ -87,7 +96,7 @@ export default function TeamsPage() {
     else { setSuccess(editingTeamId ? "Dados da equipe atualizados." : "Equipe contratual cadastrada."); closeTeamForm(); await load(); }
     setSaving(false);
   }
-  async function addMember(event: FormEvent) { event.preventDefault(); if (!teamId || !employeeId) return; setSaving(true); setError(""); const { supabase, organizationId, error: contextError } = await getOrganizationContext(); if (!organizationId) { setError(contextError); setSaving(false); return; } const { error: memberError } = await supabase.from("contract_team_members").upsert({ organization_id: organizationId, team_id: teamId, employee_id: employeeId, role: role || null, active: true }, { onConflict: "team_id,employee_id" }); if (memberError) setError(friendlyError(memberError, "Não foi possível concluir a operação.")); else { setSuccess("Colaborador vinculado à equipe."); setEmployeeId(""); setRole(""); setShowAddMember(false); await load(); } setSaving(false); }
+  async function addMember(event: FormEvent) { event.preventDefault(); if (!teamId || !employeeId) return; const targetTeam = teams.find((team) => team.id === teamId); if (!targetTeam || !isAnnexEnabled(targetTeam.scenario?.source_annex, enabledAnnexes)) { setError("Não é possível adicionar colaboradores a uma equipe vinculada a um anexo inativo."); return; } setSaving(true); setError(""); const { supabase, organizationId, error: contextError } = await getOrganizationContext(); if (!organizationId) { setError(contextError); setSaving(false); return; } const { error: memberError } = await supabase.from("contract_team_members").upsert({ organization_id: organizationId, team_id: teamId, employee_id: employeeId, role: role || null, active: true }, { onConflict: "team_id,employee_id" }); if (memberError) setError(friendlyError(memberError, "Não foi possível concluir a operação.")); else { setSuccess("Colaborador vinculado à equipe."); setEmployeeId(""); setRole(""); setShowAddMember(false); await load(); } setSaving(false); }
   async function saveMemberRole() {
     if (!selectedTeam || !memberToManage) return;
     setSaving(true); setError("");
@@ -102,7 +111,8 @@ export default function TeamsPage() {
   async function moveMember() {
     if (!selectedTeam || !memberToManage || !targetTeamId) return;
     const targetTeam = teams.find((team) => team.id === targetTeamId);
-    if (!targetTeam || targetTeam.members.some((member) => member.employee_id === memberToManage.employee_id)) { setError("Este colaborador já está vinculado à equipe selecionada."); return; }
+    if (!targetTeam || !isAnnexEnabled(targetTeam.scenario?.source_annex, enabledAnnexes)) { setError("Selecione uma equipe vinculada a um anexo ativo."); return; }
+    if (targetTeam.members.some((member) => member.employee_id === memberToManage.employee_id)) { setError("Este colaborador já está vinculado à equipe selecionada."); return; }
     setSaving(true); setError("");
     const { supabase, organizationId, error: contextError } = await getOrganizationContext();
     if (!organizationId) { setError(contextError); setSaving(false); return; }
@@ -124,7 +134,9 @@ export default function TeamsPage() {
     setSaving(false);
   }
   const selectedTeam = teams.find((team) => team.id === teamId);
-  const destinationTeams = memberToManage ? teams.filter((team) => team.status === "active" && team.id !== teamId && !team.members.some((member) => member.employee_id === memberToManage.employee_id)) : [];
+  const destinationTeams = memberToManage ? teams.filter((team) => team.status === "active" && isAnnexEnabled(team.scenario?.source_annex, enabledAnnexes) && team.id !== teamId && !team.members.some((member) => member.employee_id === memberToManage.employee_id)) : [];
+  const editingTeam = editingTeamId ? teams.find((team) => team.id === editingTeamId) : null;
+  const scenarioOptions = editingTeam?.scenario && !scenarios.some((scenario) => scenario.id === editingTeam.scenario_id) ? [...scenarios, editingTeam.scenario] : scenarios;
   function openTeamEditor(team: Team) { setEditingTeamId(team.id); setForm({ name: team.name, scenario_id: team.scenario_id, vehicle_identifier: team.vehicle_identifier ?? "", notes: team.notes ?? "" }); setShowForm(true); setError(""); }
   function openNewTeamForm() { setEditingTeamId(null); setForm(emptyForm); setShowForm(true); setError(""); }
   function closeTeamForm() { setShowForm(false); setEditingTeamId(null); setForm(emptyForm); setError(""); }
@@ -201,7 +213,7 @@ export default function TeamsPage() {
                       <button className="secondary-button" disabled={saving}><Plus size={16} /> Vincular colaborador</button>
                     </div>
                   </form>
-                ) : <button type="button" className="secondary-button" onClick={() => { setError(""); setShowAddMember(true); }}><Plus size={16} /> Adicionar colaborador</button>}
+                ) : <button type="button" className="secondary-button" disabled={!isAnnexEnabled(selectedTeam.scenario?.source_annex, enabledAnnexes)} title={!isAnnexEnabled(selectedTeam.scenario?.source_annex, enabledAnnexes) ? "O anexo deste cenário está inativo." : undefined} onClick={() => { setError(""); setShowAddMember(true); }}><Plus size={16} /> Adicionar colaborador</button>}
               </div>
             </section>
           )}
@@ -258,7 +270,7 @@ export default function TeamsPage() {
             <form className="material-form" onSubmit={saveTeam}>
               <div className="form-grid two">
                 <label>Nome da equipe<input value={form.name} onChange={(event) => setForm({ ...form, name: event.target.value })} placeholder="Ex.: Equipe LM 01" required /></label>
-                <label>Cenário contratual<select value={form.scenario_id} onChange={(event) => setForm({ ...form, scenario_id: event.target.value })} required><option value="">Selecione</option>{scenarios.map((scenario) => <option key={scenario.id} value={scenario.id}>{scenario.name}</option>)}</select></label>
+                <label>Cenário contratual<select value={form.scenario_id} onChange={(event) => setForm({ ...form, scenario_id: event.target.value })} required><option value="">Selecione</option>{scenarioOptions.map((scenario) => <option key={scenario.id} value={scenario.id} disabled={!scenarios.some((available) => available.id === scenario.id)}>{scenario.name}{!scenarios.some((available) => available.id === scenario.id) ? " · anexo inativo (atual)" : ""}</option>)}</select></label>
               </div>
               <div className="form-grid two">
                 <label>Veículo / ativo<input value={form.vehicle_identifier} onChange={(event) => setForm({ ...form, vehicle_identifier: event.target.value })} placeholder="Placa, patrimônio ou guindauto" /></label>

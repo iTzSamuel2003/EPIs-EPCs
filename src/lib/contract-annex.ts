@@ -10,6 +10,7 @@ export type ContractAnnexAssociation = {
 };
 
 export const CONTRACT_ANNEX_LABELS: Record<string, string> = {
+  "03": "Treinamentos obrigatórios",
   "04": "C&M e Poda",
   "05": "Linha Viva Distribuição",
   "06": "STC - Operação e Perdas",

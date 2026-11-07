@@ -10,14 +10,17 @@ import { RecentDeliveries } from "@/components/recent-deliveries";
 import { DeliveryTermPrintSheet, type DeliveryTermSnapshot } from "@/components/delivery-term-print-sheet";
 import { uploadTransactionPhotos } from "@/lib/transaction-attachments";
 import { FeedbackMessage } from "@/components/feedback-message";
+import { getContractAnnexNumbers, type ContractAnnexAssociation } from "@/lib/contract-annex";
 
 type Employee = { id: string; full_name: string; registration: string; department: string | null; unit: string | null; base_id: string | null; job_title?: string | null; function_name?: string | null };
-type Material = { id: string; name: string; internal_code: string; unit: string; replacement_interval_days: number | null; test_required: boolean; report_required: boolean; ca_required: boolean };
+type Material = { id: string; name: string; internal_code: string; unit: string; replacement_interval_days: number | null; test_required: boolean; report_required: boolean; ca_required: boolean; contract_item_code: string | null; contract_source: string | null };
 type MaterialVariant = { id: string; material_id: string; name: string; size: string | null; active: boolean };
 type TestLot = { base_id: string; material_id: string; variant_id: string | null; lot_number: string; entry_date: string; available_quantity: number; expires_at: string | null; ca_number: string | null; ca_expires_at: string | null; test_number: string | null; test_performed_at: string | null; test_expires_at: string | null; test_report_number: string | null };
 type CaCertificate = { ca_number: string; valid_until: string | null; status: string | null };
 type DeliveryItem = { material_id: string; materialQuery: string; variant_id: string; quantity: string; expected_replacement_at: string };
-type FunctionTemplate = { id: string; name: string; items: Array<{ material_name: string; material_id: string | null; quantity: number }> };
+type FunctionTemplate = { id: string; name: string; contract_scenario: { source_annex: string } | { source_annex: string }[] | null; items: Array<{ material_name: string; material_id: string | null; quantity: number }> };
+type AnnexSetting = { annex_number: string; active: boolean };
+type MaterialContractAnnex = ContractAnnexAssociation & { material_id: string };
 type DeliverySnapshot = DeliveryTermSnapshot;
 type PendingDelivery = { id: string; organization_id: string; employee_id: string; requested_by: string; delivered_at: string; reason: string; notes: string | null; request_items: Array<{ material_id: string; variant_id: string | null; quantity: number; expected_replacement_at: string | null }>; snapshot: DeliverySnapshot | null; status: "pending_signature" | "completed" | "cancelled"; completed_delivery_id: string | null; created_at: string; employee: { full_name: string; registration: string | null } | null };
 type PendingLink = { id: string; url: string; expires_at: string; snapshot: DeliverySnapshot };
@@ -25,6 +28,9 @@ const newDeliveryItem = (): DeliveryItem => ({ material_id: "", materialQuery: "
 function calculateReplacementDate(deliveredAt: string, intervalDays: number | null) { if (!deliveredAt || !intervalDays) return ""; const date = new Date(`${deliveredAt}T00:00:00`); date.setDate(date.getDate() + intervalDays); return localDateValue(date); }
 function localDateValue(date = new Date()) { return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`; }
 function normalize(value: string) { return value.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().trim(); }
+function annexNumber(value: string | null | undefined) { return value?.match(/\d{1,2}/)?.[0].padStart(2, "0") ?? null; }
+function isAnnexEnabled(sourceAnnex: string | null | undefined, enabledAnnexes: Set<string>) { const number = annexNumber(sourceAnnex); return !number || enabledAnnexes.has(number); }
+function templateAnnex(template: Pick<FunctionTemplate, "contract_scenario">) { const scenario = Array.isArray(template.contract_scenario) ? template.contract_scenario[0] : template.contract_scenario; return scenario?.source_annex; }
 function isValidDateValue(value: string) { if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) return false; const [year, month, day] = value.split("-").map(Number); const date = new Date(year, month - 1, day); return date.getFullYear() === year && date.getMonth() === month - 1 && date.getDate() === day; }
 function functionKey(value: string) { return normalize(value).replace(/\s+(vi|v|iv|iii|ii|i)$/, "").replace(/\beletricista\s+lm\b/g, "eletricista de linha morta").replace(/\beletricista\s+lv\b/g, "eletricista de linha viva").replace(/\beletricista\s+linha\s+morta\b/g, "eletricista de linha morta").replace(/\beletricista\s+linha\s+viva\b/g, "eletricista de linha viva").replace(/\bmotorista\s+operador\s+munck\b/g, "motorista operador de munck"); }
 const reasons = [["admission", "Admissão"], ["periodic_change", "Troca periódica"], ["damaged", "Equipamento danificado"], ["lost", "Equipamento perdido"], ["role_change", "Alteração de função"], ["replacement", "Substituição"], ["other", "Outro"]];
@@ -32,7 +38,7 @@ const reasons = [["admission", "Admissão"], ["periodic_change", "Troca periódi
 export default function DeliveriesPage() {
   const [recordInEmployeeHistory, setRecordInEmployeeHistory] = useState(false);
   const [variants, setVariants] = useState<MaterialVariant[]>([]); const [testLots, setTestLots] = useState<TestLot[]>([]); const [caCertificates, setCaCertificates] = useState<Record<string, CaCertificate>>({});
-  const [employees, setEmployees] = useState<Employee[]>([]); const [materials, setMaterials] = useState<Material[]>([]); const [templates, setTemplates] = useState<FunctionTemplate[]>([]); const [employeeId, setEmployeeId] = useState(""); const [employeeFunction, setEmployeeFunction] = useState(""); const [employeeQuery, setEmployeeQuery] = useState(""); const [employeeSuggestionsOpen, setEmployeeSuggestionsOpen] = useState(false); const [materialSuggestionsOpen, setMaterialSuggestionsOpen] = useState<number | null>(null); const [reason, setReason] = useState("admission"); const [deliveredAt, setDeliveredAt] = useState(localDateValue()); const [notes, setNotes] = useState(""); const [items, setItems] = useState<DeliveryItem[]>([newDeliveryItem()]); const [photoFiles, setPhotoFiles] = useState<File[]>([]); const [loading, setLoading] = useState(true); const [variantsLoading, setVariantsLoading] = useState(true); const [saving, setSaving] = useState(false); const [error, setError] = useState(""); const [success, setSuccess] = useState(""); const [canRetryLoad, setCanRetryLoad] = useState(true);
+  const [employees, setEmployees] = useState<Employee[]>([]); const [materials, setMaterials] = useState<Material[]>([]); const [allMaterials, setAllMaterials] = useState<Material[]>([]); const [templates, setTemplates] = useState<FunctionTemplate[]>([]); const [employeeId, setEmployeeId] = useState(""); const [employeeFunction, setEmployeeFunction] = useState(""); const [employeeQuery, setEmployeeQuery] = useState(""); const [employeeSuggestionsOpen, setEmployeeSuggestionsOpen] = useState(false); const [materialSuggestionsOpen, setMaterialSuggestionsOpen] = useState<number | null>(null); const [reason, setReason] = useState("admission"); const [deliveredAt, setDeliveredAt] = useState(localDateValue()); const [notes, setNotes] = useState(""); const [items, setItems] = useState<DeliveryItem[]>([newDeliveryItem()]); const [photoFiles, setPhotoFiles] = useState<File[]>([]); const [loading, setLoading] = useState(true); const [variantsLoading, setVariantsLoading] = useState(true); const [saving, setSaving] = useState(false); const [error, setError] = useState(""); const [success, setSuccess] = useState(""); const [canRetryLoad, setCanRetryLoad] = useState(true);
   const loadOptionsRequestRef = useRef(0);
   const submitLockRef = useRef(false);
   const mountedRef = useRef(true);
@@ -55,6 +61,7 @@ export default function DeliveriesPage() {
   function clearLoadedOptions() {
     setEmployees([]);
     setMaterials([]);
+    setAllMaterials([]);
     setTemplates([]);
     setVariants([]); setTestLots([]); setCaCertificates({});
   }
@@ -65,14 +72,16 @@ export default function DeliveriesPage() {
     setLoading(true);
     try {
       const supabase = createClient();
-      const [{ data: employeeData, error: employeeError }, { data: materialData, error: materialError }, { data: lotData, error: lotError }, { data: templateData, error: templateError }] = await Promise.all([
+      const [{ data: employeeData, error: employeeError }, { data: materialData, error: materialError }, { data: lotData, error: lotError }, { data: templateData, error: templateError }, { data: annexSettings, error: annexSettingsError }, { data: annexData, error: annexError }] = await Promise.all([
         supabase.from("employees").select("id, full_name, registration, department, unit, base_id, job_title, function_name").eq("status", "active").order("full_name"),
-        supabase.from("materials").select("id, name, internal_code, unit, replacement_interval_days, test_required, report_required, ca_required").eq("status", "active").order("name"),
+        supabase.from("materials").select("id, name, internal_code, unit, replacement_interval_days, test_required, report_required, ca_required, contract_item_code, contract_source").eq("status", "active").order("name"),
         supabase.from("material_lots").select("base_id, material_id, variant_id, lot_number, entry_date, expires_at, available_quantity, ca_number, ca_expires_at, test_number, test_performed_at, test_expires_at, test_report_number"),
-        supabase.from("function_templates").select("id, name, function_template_items(material_name, material_id, quantity)").order("name"),
+        supabase.from("function_templates").select("id, name, contract_scenario:contract_scenarios(source_annex), function_template_items(material_name, material_id, quantity)").order("name"),
+        supabase.from("organization_annex_settings").select("annex_number,active"),
+        supabase.from("material_contract_annexes").select("material_id,annex_number,contract_item_code,contract_source"),
       ]);
       if (!mountedRef.current || requestId !== loadOptionsRequestRef.current) return;
-      const firstError = employeeError ?? materialError ?? lotError ?? templateError;
+      const firstError = employeeError ?? materialError ?? lotError ?? templateError ?? annexSettingsError ?? annexError;
       if (firstError) {
         clearLoadedOptions();
         setCanRetryLoad(true);
@@ -87,10 +96,23 @@ export default function DeliveriesPage() {
       } else {
         setCaCertificates({});
       }
+      const enabledAnnexes = new Set(((annexSettings ?? []) as AnnexSetting[]).filter((setting) => setting.active).map((setting) => annexNumber(setting.annex_number) ?? ""));
+      const associationsByMaterial = new Map<string, MaterialContractAnnex[]>();
+      for (const association of (annexData ?? []) as MaterialContractAnnex[]) {
+        const links = associationsByMaterial.get(association.material_id) ?? [];
+        links.push(association);
+        associationsByMaterial.set(association.material_id, links);
+      }
+      const loadedMaterials = (materialData ?? []) as Material[];
+      const availableMaterials = loadedMaterials.filter((material) => {
+        const annexes = getContractAnnexNumbers(material, associationsByMaterial.get(material.id) ?? []);
+        return !annexes.length || annexes.some((annex) => enabledAnnexes.has(annex));
+      });
       setEmployees((employeeData ?? []) as Employee[]);
+      setAllMaterials(loadedMaterials);
       setTestLots((lotData ?? []) as TestLot[]);
-      setMaterials((materialData ?? []) as Material[]);
-      setTemplates(((templateData ?? []) as Array<{ id: string; name: string; function_template_items: Array<{ material_name: string; material_id: string | null; quantity: number }> }>).map((template) => ({ id: template.id, name: template.name, items: template.function_template_items })));
+      setMaterials(availableMaterials);
+      setTemplates(((templateData ?? []) as Array<{ id: string; name: string; contract_scenario: { source_annex: string } | { source_annex: string }[] | null; function_template_items: Array<{ material_name: string; material_id: string | null; quantity: number }> }>).filter((template) => isAnnexEnabled(templateAnnex(template), enabledAnnexes)).map((template) => ({ id: template.id, name: template.name, contract_scenario: template.contract_scenario, items: template.function_template_items })));
     } catch (unexpectedError) {
       if (mountedRef.current && requestId === loadOptionsRequestRef.current) {
         clearLoadedOptions();
@@ -390,7 +412,7 @@ export default function DeliveriesPage() {
       const employee = pending.employee?.full_name || employees.find((candidate) => candidate.id === pending.employee_id)?.full_name || "Colaborador";
       const canManage = pending.requested_by === currentUserId;
       const itemSummary = pending.request_items.map((request) => {
-        const material = materials.find((candidate) => candidate.id === request.material_id);
+        const material = allMaterials.find((candidate) => candidate.id === request.material_id);
         const variant = variants.find((candidate) => candidate.id === request.variant_id);
         return `${request.quantity}× ${material?.name || "Material"}${variant ? ` · ${variant.size || variant.name}` : ""}`;
       }).join("; ");

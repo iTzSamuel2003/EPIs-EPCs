@@ -208,10 +208,10 @@ export default function EntriesPage() {
         );
         setCanRetryMaterials(true);
       } else {
-        const disabledAnnexes = new Set(
+        const enabledAnnexes = new Set(
           ((annexSettings ?? []) as AnnexSetting[])
-            .filter((setting) => !setting.active)
-            .map((setting) => setting.annex_number),
+            .filter((setting) => setting.active)
+            .map((setting) => setting.annex_number.trim().match(/\d{1,2}/)?.[0].padStart(2, "0") ?? ""),
         );
         const associations = (annexData ?? []) as MaterialContractAnnex[];
         const associationsByMaterial = new Map<string, MaterialContractAnnex[]>();
@@ -223,7 +223,7 @@ export default function EntriesPage() {
         setMaterials(((data ?? []) as MaterialOption[]).filter((material) => {
           const links = associationsByMaterial.get(material.id) ?? [];
           const annexNumbers = getContractAnnexNumbers(material, links);
-          return !annexNumbers.length || annexNumbers.some((annex) => !disabledAnnexes.has(annex));
+          return !annexNumbers.length || annexNumbers.some((annex) => enabledAnnexes.has(annex));
         }));
         setVariants((variantData ?? []) as MaterialVariant[]);
       }
