@@ -2,6 +2,7 @@
 
 import { FormEvent, useCallback, useEffect, useState } from "react";
 import Link from "next/link";
+import Image from "next/image";
 import { AlertTriangle, ArrowLeft, Ban, Building2, Check, ChevronDown, Copy, Link2, Plus, RotateCw, Save, Trash2, Users, X } from "lucide-react";
 import { FeedbackMessage } from "@/components/feedback-message";
 import { useCurrentUser } from "@/components/app-shell";
@@ -58,6 +59,17 @@ type ConfirmationAction = {
 };
 
 type CreatedInvitation = { invitation_id: string; expires_at: string };
+
+function OrganizationLogoBadge({ logoUrl }: { logoUrl: string | null }) {
+  const [failedLogoUrl, setFailedLogoUrl] = useState<string | null>(null);
+  const shouldShowLogo = Boolean(logoUrl && failedLogoUrl !== logoUrl);
+
+  return <span className={`access-role-icon organization-logo-badge ${shouldShowLogo ? "has-logo" : ""}`} aria-hidden="true">
+    {shouldShowLogo && logoUrl
+      ? <Image src={logoUrl} alt="" width={44} height={44} unoptimized className="organization-logo-image" onError={() => setFailedLogoUrl(logoUrl)} />
+      : <Building2 size={18} aria-hidden="true" />}
+  </span>;
+}
 
 const lifecycleLabels: Record<LifecycleStatus, string> = {
   draft: "Rascunho",
@@ -405,7 +417,7 @@ export default function OrganizationsSettingsPage() {
 
             return <article className={`access-role-card organization-card ${isOpen ? "is-open" : ""}`} key={organization.id}>
               <button className="access-role-summary organization-summary" type="button" onClick={() => toggleOrganization(organization.id)} aria-expanded={isOpen} aria-controls={isOpen ? membersPanelId : undefined}>
-                <span className="access-role-icon"><Building2 size={18} aria-hidden="true" /></span>
+                <OrganizationLogoBadge logoUrl={organization.logo_url} />
                 <span className="access-role-copy"><strong>{organization.name}</strong><small>{organization.cnpj ? `CNPJ ${organization.cnpj}` : "CNPJ não informado"} · Criada em {new Date(organization.created_at).toLocaleDateString("pt-BR")}</small></span>
                 <span className={`organization-status organization-status-${organization.lifecycle_status}`}>{lifecycleLabels[organization.lifecycle_status]}</span>
                 <span className="access-count"><Users size={14} aria-hidden="true" /> {organization.member_count} {organization.member_count === 1 ? "usuário" : "usuários"}</span>
