@@ -3,6 +3,7 @@
 import { FormEvent, useEffect, useRef, useState } from "react";
 import { Boxes, Check, LoaderCircle, Pencil, Plus, ShieldCheck, Trash2, X } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
+import { getCurrentOrganizationProfile } from "@/lib/organization-context";
 import { friendlyError } from "@/lib/ui-feedback";
 import { FeedbackMessage } from "@/components/feedback-message";
 
@@ -111,7 +112,7 @@ export default function FunctionTemplatesPage() {
       const { data: auth, error: authError } = await supabase.auth.getUser();
       if (authError) { setError(friendlyError(authError, "Não foi possível concluir a operação.")); return; }
       if (!auth.user) { setError("Sua sessão expirou. Entre novamente."); return; }
-      const { data: profile, error: profileError } = await supabase.from("profiles").select("organization_id").eq("id", auth.user.id).single();
+      const { data: profile, error: profileError } = await getCurrentOrganizationProfile(supabase, auth.user.id, auth.user.user_metadata?.full_name);
       if (profileError) { setError(friendlyError(profileError, "Não foi possível concluir a operação.")); return; }
       if (!profile?.organization_id) { setError("Não foi possível identificar a organização do usuário."); return; }
       const materialByName = new Map(materials.map((material) => [material.name.trim().toLocaleLowerCase("pt-BR"), material.id]));
@@ -157,7 +158,7 @@ export default function FunctionTemplatesPage() {
     setSaving(true);
     const supabase = createClient();
     const { data: auth } = await supabase.auth.getUser();
-    const { data: profile } = auth.user ? await supabase.from("profiles").select("organization_id").eq("id", auth.user.id).single() : { data: null };
+    const { data: profile } = auth.user ? await getCurrentOrganizationProfile(supabase, auth.user.id, auth.user.user_metadata?.full_name) : { data: null };
     if (!profile?.organization_id) { setError("Não foi possível identificar a organização do usuário."); setSaving(false); return; }
 
     let templateId = editingId;

@@ -3,6 +3,7 @@
 import { FormEvent, useEffect, useRef, useState } from "react";
 import { Check, LoaderCircle, PackageSearch, Plus, Search, X } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
+import { getCurrentOrganizationProfile } from "@/lib/organization-context";
 import { friendlyError } from "@/lib/ui-feedback";
 import { FeedbackMessage } from "@/components/feedback-message";
 
@@ -48,7 +49,7 @@ export default function UnitsPage() {
       const { data: auth, error: authError } = await supabase.auth.getUser();
       if (authError) throw authError;
       if (!auth.user) throw new Error("Sua sessão expirou. Entre novamente.");
-      const { data: profile, error: profileError } = await supabase.from("profiles").select("organization_id").eq("id", auth.user.id).single();
+      const { data: profile, error: profileError } = await getCurrentOrganizationProfile(supabase, auth.user.id, auth.user.user_metadata?.full_name);
       if (profileError) throw profileError;
       if (!profile?.organization_id) throw new Error("Não foi possível identificar a organização do usuário.");
       const { error: saveError } = await supabase.from("material_units").insert({ ...form, organization_id: profile.organization_id, lot_number: form.lot_number || null, serial_number: form.serial_number || null, manufacturer: form.manufacturer || null, model: form.model || null, size: form.size || null, manufactured_at: form.manufactured_at || null, expires_at: form.expires_at || null });

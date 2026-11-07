@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { createClient } from "@/lib/supabase/client";
+import { getCurrentOrganizationProfile } from "@/lib/organization-context";
 
 export type OperationalBase = { id: string; name: string; address: string | null; is_active: boolean };
 const STORAGE_KEY = "epis.selectedBaseId";
@@ -24,7 +25,7 @@ export function useBaseContext() {
         if (authError) throw authError;
         if (!auth.user) throw new Error("Sua sessão expirou. Entre novamente.");
         const [{ data: profile, error: profileError }, { data: baseRows, error: baseError }, { data: assignments, error: assignmentError }] = await Promise.all([
-          supabase.from("profiles").select("role").eq("id", auth.user.id).maybeSingle(),
+          getCurrentOrganizationProfile(supabase, auth.user.id, auth.user.user_metadata?.full_name),
           supabase.from("organization_bases").select("id,name,address,is_active").eq("is_active", true).order("name"),
           supabase.from("profile_base_access").select("base_id").eq("profile_id", auth.user.id),
         ]);

@@ -3,6 +3,7 @@
 import { FormEvent, useEffect, useRef, useState } from "react";
 import { Boxes, Check, LoaderCircle, Plus, Trash2 } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
+import { getCurrentOrganizationProfile } from "@/lib/organization-context";
 import { friendlyError } from "@/lib/ui-feedback";
 import { FeedbackMessage } from "@/components/feedback-message";
 
@@ -38,7 +39,7 @@ export default function VariantsPage() { const [confirmingVariantId, setConfirmi
       const { data: auth, error: authError } = await supabase.auth.getUser();
       if (authError) { setError(friendlyError(authError, "Não foi possível concluir a operação.")); return; }
       if (!auth.user) { setError("Sua sessão expirou. Entre novamente."); return; }
-      const { data: profile, error: profileError } = await supabase.from("profiles").select("organization_id").eq("id", auth.user.id).single();
+      const { data: profile, error: profileError } = await getCurrentOrganizationProfile(supabase, auth.user.id, auth.user.user_metadata?.full_name);
       if (profileError) { setError(friendlyError(profileError, "Não foi possível concluir a operação.")); return; }
       if (!profile?.organization_id) { setError("Não foi possível identificar a organização do usuário."); return; }
       const { error: saveError } = await supabase.from("material_variants").insert({ ...form, organization_id: profile.organization_id, unit_cost: Number(form.unit_cost) || 0, size: form.size || null, color: form.color || null, model: form.model || null, sku: form.sku || null });

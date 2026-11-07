@@ -9,6 +9,21 @@ import { rolePageDefaults } from "@/lib/access-control";
 
 type MenuItem = readonly [string, typeof LayoutDashboard, string];
 type MenuSection = { label: string; items: readonly MenuItem[] };
+type ManagementContext = {
+  management_session_id: string;
+  organization_id: string;
+  organization_name: string;
+  organization_logo_url: string | null;
+  expires_at: string;
+};
+type ManagementReadAudit = { sessionId: string; resource: string; status: "checking" | "ready" | "error"; message?: string };
+const managementSessionChangeKey = "epis.management-session-change";
+const sensitiveManagementRoutes = ["/employees", "/employee-history", "/attendance", "/asos", "/requests", "/returns", "/discounts", "/deliveries", "/training-compliance", "/compliance"];
+
+function getSensitiveManagementRoute(pathname: string) {
+  return sensitiveManagementRoutes.find((route) => pathname === route || pathname.startsWith(`${route}/`)) ?? null;
+}
+
 const menuSections: readonly MenuSection[] = [
   { label: "Visão geral", items: [["Dashboard", LayoutDashboard, "/"]] },
   { label: "Cadastros", items: [["Bases", Building2, "/bases"], ["Materiais", Boxes, "/materials"], ["Funcionários", Users, "/employees"], ["Equipes", Users, "/teams"], ["Unidades físicas", Boxes, "/units"], ["Variações", Boxes, "/variants"], ["Listas por função", ClipboardList, "/function-templates"]] },
@@ -43,6 +58,11 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   const [isPlatformAdmin, setIsPlatformAdmin] = useState(false);
   const [platformOnly, setPlatformOnly] = useState(false);
   const [organizationAccessError, setOrganizationAccessError] = useState("");
+  const [managementContext, setManagementContext] = useState<ManagementContext | null>(null);
+  const [managementReadAudit, setManagementReadAudit] = useState<ManagementReadAudit | null>(null);
+  const managementSessionId = managementContext?.management_session_id ?? null;
+  const [managementExiting, setManagementExiting] = useState(false);
+  const managementAuditRoute = managementContext ? getSensitiveManagementRoute(pathname) : null;
   const publicRoute = pathname === "/login" || pathname === "/reset-password" || pathname === "/no-access" || pathname === "/organization-pending" || pathname.startsWith("/medidas/") || pathname.startsWith("/assinar/") || pathname === "/portal" || pathname.startsWith("/invite/");
   useEffect(() => {
     if (!mobileMenu) return;
@@ -91,6 +111,8 @@ export function AppShell({ children }: { children: React.ReactNode }) {
     setIsPlatformAdmin(false);
     setPlatformOnly(false);
     setAllowedPaths(null);
+    setManagementContext(null);
+    setManagementReadAudit(null);
     void createClient().auth.getUser().then(async ({ data, error: authError }) => {
       if (cancelled) return;
       if (authError || !data.user) {
@@ -98,6 +120,28 @@ export function AppShell({ children }: { children: React.ReactNode }) {
         return;
       }
       const supabase = createClient();
+      const { data: managementRows, error: managementError } = await supabase.rpc("get_platform_organization_management_context");
+      if (cancelled) return;
+      if (managementError) {
+        setOrganizationAccessError("Não foi possível verificar o modo de gestão da organização. Atualize a página ou tente novamente.");
+        setOrganizationAccess("error");
+        return;
+      }
+      const management = Array.isArray(managementRows) ? managementRows[0] as ManagementContext | undefined : undefined;
+      if (management?.management_session_id && management.organization_id) {
+        const metadata = data.user.user_metadata as Record<string, unknown> | undefined;
+        const platformName = [metadata?.full_name, metadata?.name, data.user.email?.split("@")[0]].find((value) => typeof value === "string" && value.trim()) as string | undefined;
+        setManagementContext(management);
+        setCurrentUserName(platformName?.trim() || "Administrador da plataforma");
+        setCurrentUserRole("admin");
+        setIsPlatformAdmin(false);
+        setPlatformOnly(false);
+        setOrganizationName(management.organization_name?.trim() || "Organização");
+        setOrganizationLogo(management.organization_logo_url || "");
+        setAllowedPaths(rolePageDefaults.admin.filter((path) => path !== "/settings/organizations"));
+        setOrganizationAccess("ready");
+        return;
+      }
       const { data: platformAdmin, error: platformAdminError } = await supabase.rpc("current_user_is_platform_admin");
       if (cancelled) return;
       if (platformAdminError) {
@@ -114,7 +158,9 @@ export function AppShell({ children }: { children: React.ReactNode }) {
         return;
       }
       if (!profile?.organization_id) {
-        setCurrentUserName(profile?.full_name?.trim() || data.user.email?.split("@")[0] || "Usuário");
+        const metadata = data.user.user_metadata as Record<string, unknown> | undefined;
+        const platformName = [profile?.full_name, metadata?.full_name, metadata?.name, data.user.email?.split("@")[0]].find((value) => typeof value === "string" && value.trim()) as string | undefined;
+        setCurrentUserName(platformName?.trim() || "Usuário");
         if (platformAdmin === true) {
           setCurrentUserRole("platform_admin");
           setPlatformOnly(true);
@@ -176,6 +222,55 @@ export function AppShell({ children }: { children: React.ReactNode }) {
     });
     return () => { cancelled = true; };
   }, [publicRoute, router]);
+  useEffect(() => {
+    if (!managementSessionId) return;
+    let cancelled = false;
+    const supabase = createClient();
+    async function validateManagementContext() {
+      const { data, error } = await supabase.rpc("get_platform_organization_management_context");
+      if (cancelled) return;
+      const context = Array.isArray(data) ? data[0] as ManagementContext | undefined : undefined;
+      if (error || !context?.management_session_id) {
+        setManagementContext(null);
+        setOrganizationAccess("checking");
+        window.location.replace(new URL("/settings/organizations", window.location.origin).href);
+        return;
+      }
+      setManagementContext(context);
+      setOrganizationName(context.organization_name?.trim() || "Organização");
+      setOrganizationLogo(context.organization_logo_url || "");
+    }
+    const interval = window.setInterval(() => void validateManagementContext(), 30_000);
+    window.addEventListener("focus", validateManagementContext);
+    return () => {
+      cancelled = true;
+      window.clearInterval(interval);
+      window.removeEventListener("focus", validateManagementContext);
+    };
+  }, [managementSessionId]);
+  useEffect(() => {
+    if (!managementSessionId || !managementAuditRoute) return;
+    let cancelled = false;
+    const sessionId = managementSessionId;
+    setManagementReadAudit({ sessionId, resource: managementAuditRoute, status: "checking" });
+    void createClient().rpc("audit_sensitive_management_read", { p_resource_name: managementAuditRoute }).then(({ error }) => {
+      if (cancelled) return;
+      setManagementReadAudit({
+        sessionId,
+        resource: managementAuditRoute,
+        status: error ? "error" : "ready",
+        message: error ? "Não foi possível registrar o acesso a esta área. O conteúdo foi bloqueado; tente novamente." : undefined,
+      });
+    });
+    return () => { cancelled = true; };
+  }, [managementSessionId, managementAuditRoute]);
+  useEffect(() => {
+    function reloadOnManagementChange(event: StorageEvent) {
+      if (event.key === managementSessionChangeKey) window.location.reload();
+    }
+    window.addEventListener("storage", reloadOnManagementChange);
+    return () => window.removeEventListener("storage", reloadOnManagementChange);
+  }, []);
   useEffect(() => {
     let frame: number | undefined;
     if (mobileMenu) {
@@ -287,7 +382,17 @@ export function AppShell({ children }: { children: React.ReactNode }) {
     setSigningOut(true);
     setSessionError(null);
     try {
-      const { error } = await createClient().auth.signOut();
+      const supabase = createClient();
+      if (managementContext) {
+        const { error: managementError } = await supabase.rpc("end_platform_organization_management_session");
+        if (managementError) {
+          setSessionError("Não foi possível registrar o encerramento da gestão. Tente novamente.");
+          setSigningOut(false);
+          return;
+        }
+        window.localStorage.setItem(managementSessionChangeKey, String(Date.now()));
+      }
+      const { error } = await supabase.auth.signOut();
       if (error) {
         setSessionError("Não foi possível encerrar a sessão. Tente novamente.");
         setSigningOut(false);
@@ -299,10 +404,33 @@ export function AppShell({ children }: { children: React.ReactNode }) {
       setSigningOut(false);
     }
   }
+  async function handleExitManagement() {
+    if (!managementContext || managementExiting) return;
+    setManagementExiting(true);
+    setSessionError(null);
+    try {
+      const { error } = await createClient().rpc("end_platform_organization_management_session");
+      if (error) {
+        setSessionError("Não foi possível encerrar o modo de gestão. Tente novamente.");
+        setManagementExiting(false);
+        return;
+      }
+      window.localStorage.setItem(managementSessionChangeKey, String(Date.now()));
+      window.location.assign(new URL("/settings/organizations", window.location.origin).href);
+    } catch {
+      setSessionError("Não foi possível encerrar o modo de gestão. Tente novamente.");
+      setManagementExiting(false);
+    }
+  }
   function handleMenuKeyDown(event: React.KeyboardEvent<HTMLElement>) { if (event.key !== "Tab" || !mobileMenu) return; const focusable = Array.from(event.currentTarget.querySelectorAll<HTMLElement>('a[href],button:not([disabled]),input:not([disabled]),select:not([disabled]),textarea:not([disabled])')).filter((element) => element.offsetParent !== null); if (!focusable.length) return; const first = focusable[0]; const last = focusable[focusable.length - 1]; if (event.shiftKey && document.activeElement === first) { event.preventDefault(); last.focus(); } else if (!event.shiftKey && document.activeElement === last) { event.preventDefault(); first.focus(); } }
   function closeSearch() { setQuery(""); setResults([]); setSelectedSearchIndex(-1); } function handleSearchKeyDown(event: React.KeyboardEvent<HTMLInputElement>) { if (event.key === "Escape") { closeSearch(); return; } if (!results.length) return; if (event.key === "ArrowDown") { event.preventDefault(); setSelectedSearchIndex((current) => (current + 1) % results.length); } else if (event.key === "ArrowUp") { event.preventDefault(); setSelectedSearchIndex((current) => (current - 1 + results.length) % results.length); } else if (event.key === "Enter" && selectedSearchIndex >= 0) { event.preventDefault(); router.push(results[selectedSearchIndex].href); closeSearch(); } }
   const userInitials = getInitials(currentUserName);
   const userRoleLabel = isPlatformAdmin ? roleLabels.platform_admin : roleLabels[currentUserRole] ?? "Usuário";
+  const managementAuditReady = !managementAuditRoute || (
+    managementReadAudit?.sessionId === managementContext?.management_session_id
+    && managementReadAudit?.resource === managementAuditRoute
+    && managementReadAudit?.status === "ready"
+  );
 
   if (organizationAccess === "blocked") {
     const isSuspended = blockedLifecycleStatus === "suspended";
@@ -357,6 +485,10 @@ export function AppShell({ children }: { children: React.ReactNode }) {
           </div>
         </aside>
         <main className="main-content">
+          {managementContext && <div className="platform-management-banner" role="status">
+            <div className="platform-management-copy"><ShieldCheck size={19} aria-hidden="true" /><div><strong>Modo de gestão da plataforma</strong><span>Organização: {managementContext.organization_name}. Acesso temporário até {new Date(managementContext.expires_at).toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" })}.</span></div></div>
+            <button className="secondary-button" type="button" onClick={() => void handleExitManagement()} disabled={managementExiting} aria-busy={managementExiting}>{managementExiting ? "Encerrando..." : "Sair da gestão"}</button>
+          </div>}
           <header className="topbar">
             <button ref={menuToggleRef} type="button" className="menu-toggle" onClick={() => setMobileMenu(true)} aria-label="Abrir menu" aria-controls="main-navigation" aria-expanded={mobileMenu}><Menu size={22} aria-hidden="true" /></button>
             <div className="breadcrumb"><span>Visão geral</span><span>/</span><strong>{pathname === "/" ? "Dashboard" : menu.find((item) => item[2] === pathname || (item[2] !== "/" && pathname.startsWith(`${item[2]}/`)))?.[0] ?? "EPIS+"}</strong></div>
@@ -373,7 +505,9 @@ export function AppShell({ children }: { children: React.ReactNode }) {
               </div>
             </div>
           </header>
-          {children}
+          {!managementAuditReady ? <section className="module-shell management-audit-gate" aria-live="polite">
+            <div className="panel"><h1>{managementReadAudit?.status === "error" ? "Acesso temporariamente bloqueado" : "Validando acesso"}</h1><p>{managementReadAudit?.message || "Registrando o acesso protegido antes de carregar os dados desta área..."}</p>{managementReadAudit?.status === "error" && <button className="secondary-button" type="button" onClick={() => window.location.reload()}>Tentar novamente</button>}</div>
+          </section> : children}
         </main>
       </div>
     </CurrentUserContext.Provider>

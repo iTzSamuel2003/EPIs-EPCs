@@ -127,6 +127,9 @@ export default function OrganizationsSettingsPage() {
   const [loadingMembersByOrganization, setLoadingMembersByOrganization] = useState<Record<string, boolean>>({});
   const [memberErrorsByOrganization, setMemberErrorsByOrganization] = useState<Record<string, string>>({});
   const [confirmation, setConfirmation] = useState<ConfirmationAction | null>(null);
+  const [managementRequest, setManagementRequest] = useState<{ organization: Organization; reason: string } | null>(null);
+  const [managementModalError, setManagementModalError] = useState("");
+  const [startingManagement, setStartingManagement] = useState(false);
 
   const loadOrganizations = useCallback(async () => {
     setLoading(true);
@@ -316,6 +319,29 @@ export default function OrganizationsSettingsPage() {
     }
   }
 
+  async function startOrganizationManagement(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (!managementRequest || managementRequest.reason.trim().length < 5) return;
+    setStartingManagement(true);
+    setManagementModalError("");
+    try {
+      const { error: startError } = await createClient().rpc("start_platform_organization_management_session", {
+        p_organization_id: managementRequest.organization.id,
+        p_reason: managementRequest.reason.trim(),
+      });
+      if (startError) {
+        setManagementModalError(startError.message || "Não foi possível abrir a gestão desta organização.");
+        return;
+      }
+      window.localStorage.setItem("epis.management-session-change", String(Date.now()));
+      window.location.assign(new URL("/", window.location.origin).href);
+    } catch {
+      setManagementModalError("Não foi possível abrir a gestão desta organização. Tente novamente.");
+    } finally {
+      setStartingManagement(false);
+    }
+  }
+
   function updateForm(organizationId: string, field: keyof OrganizationForm, value: string) {
     setForms((current) => ({
       ...current,
@@ -336,6 +362,18 @@ export default function OrganizationsSettingsPage() {
 
       {error && <FeedbackMessage>{error}</FeedbackMessage>}
       {success && <FeedbackMessage kind="success">{success}</FeedbackMessage>}
+
+      {managementRequest && <div className="modal-backdrop" onMouseDown={(event) => { if (event.target === event.currentTarget && !startingManagement) { setManagementModalError(""); setManagementRequest(null); } }}>
+        <section className="modal-card organization-management-modal" role="dialog" aria-modal="true" aria-labelledby="organization-management-title">
+          <div className="modal-heading"><span className="modal-icon"><Building2 size={19} aria-hidden="true" /></span><div><p className="eyebrow">ACESSO TEMPORÁRIO</p><h2 id="organization-management-title">Abrir gestão da organização</h2></div><button type="button" className="close-modal" aria-label="Fechar" onClick={() => setManagementRequest(null)} disabled={startingManagement}><X size={18} aria-hidden="true" /></button></div>
+          <p className="organization-management-target">Você abrirá <strong>{managementRequest.organization.name}</strong> como administrador temporário da plataforma. O acesso expira automaticamente em 60 minutos e fica registrado para auditoria.</p>
+          {managementModalError && <p className="organization-management-error" role="alert">{managementModalError}</p>}
+          <form onSubmit={(event) => void startOrganizationManagement(event)}>
+            <label htmlFor="organization-management-reason">Motivo do acesso<textarea id="organization-management-reason" value={managementRequest.reason} onChange={(event) => setManagementRequest((current) => current ? { ...current, reason: event.target.value } : current)} minLength={5} maxLength={500} rows={3} placeholder="Ex.: preparação inicial da organização" required autoFocus /></label>
+            <div className="modal-actions"><button className="secondary-button" type="button" onClick={() => setManagementRequest(null)} disabled={startingManagement}>Cancelar</button><button className="primary-button" type="submit" disabled={startingManagement || managementRequest.reason.trim().length < 5} aria-busy={startingManagement}>{startingManagement ? "Abrindo..." : "Abrir gestão"}</button></div>
+          </form>
+        </section>
+      </div>}
 
       <section className="panel access-panel" aria-labelledby="create-organization-title">
         <div className="access-panel-heading">
@@ -408,6 +446,7 @@ export default function OrganizationsSettingsPage() {
 
                 <section className="organization-setup-section" aria-label="Ações da organização">
                   <div className="organization-lifecycle-actions">
+                    {organization.lifecycle_status !== "suspended" && <button className="secondary-button" type="button" onClick={() => { setManagementModalError(""); setManagementRequest({ organization, reason: "" }); }} disabled={isBusy}><Building2 size={15} aria-hidden="true" /> Abrir gestão</button>}
                     {organization.lifecycle_status === "suspended"
                       ? <button className="secondary-button" type="button" onClick={() => setConfirmation({ organizationId: organization.id, kind: "reactivate", reason: "" })}><RotateCw size={15} aria-hidden="true" /> Reativar organização</button>
                       : <button className="organization-text-action organization-danger-action" type="button" onClick={() => setConfirmation({ organizationId: organization.id, kind: "suspend", reason: "" })}><Ban size={14} aria-hidden="true" /> Suspender organização</button>}
@@ -437,7 +476,7 @@ export default function OrganizationsSettingsPage() {
         </div>}
       </section>
 
-      <p className="access-helper"><Link2 size={14} aria-hidden="true" /> A preparação desta etapa cobre dados gerais e alertas. O acesso temporário aos módulos para cadastrar materiais, estoque e demais informações será implementado separadamente.</p>
+      <p className="access-helper"><Link2 size={14} aria-hidden="true" /> Use “Abrir gestão” para acessar temporariamente os módulos da organização. Cada acesso exige justificativa, fica registrado e expira em 60 minutos.</p>
     </main>
   );
 }

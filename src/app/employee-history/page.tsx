@@ -5,6 +5,7 @@ import { ChevronLeft, ChevronRight, Clock3, Download, History, LoaderCircle, Pap
 import { EmployeeAutocomplete } from "@/components/employee-autocomplete";
 import { FeedbackMessage } from "@/components/feedback-message";
 import { createClient } from "@/lib/supabase/client";
+import { getCurrentOrganizationProfile } from "@/lib/organization-context";
 
 const DOCUMENT_BUCKET = "employee-hr-history-documents";
 const PAGE_SIZE = 30;
@@ -164,8 +165,8 @@ export default function EmployeeHistoryPage() {
         if (active) { setError("Sua sessão expirou. Entre novamente para acessar o histórico do RH."); setLoading(false); }
         return;
       }
-      const { data: profile, error: profileError } = await supabase.from("profiles").select("organization_id,role").eq("id", auth.user.id).maybeSingle();
-      if (profileError || !profile?.organization_id || !["admin", "rh"].includes(profile.role)) {
+      const { data: profile, error: profileError } = await getCurrentOrganizationProfile(supabase, auth.user.id, auth.user.user_metadata?.full_name);
+      if (profileError || !profile?.organization_id || !profile.role || !["admin", "rh"].includes(profile.role)) {
         if (active) { setError("Esta página está disponível somente para RH e Administradores."); setLoading(false); }
         return;
       }

@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useRef, useState, type FormEvent } fro
 import { AlertTriangle, CalendarClock, CalendarDays, Check, ChevronDown, CircleHelp, ClipboardList, Download, FileCheck2, FilePlus2, LoaderCircle, Paperclip, Plus, RotateCcw, Search, ShieldCheck, Stethoscope, UserRound, X } from "lucide-react";
 import { FeedbackMessage } from "@/components/feedback-message";
 import { createClient } from "@/lib/supabase/client";
+import { getCurrentOrganizationProfile } from "@/lib/organization-context";
 
 const BUCKET = "employee-aso-documents";
 const EXAM_TYPES = [
@@ -170,8 +171,8 @@ export default function AsosPage() {
         if (active) { setError("Sua sessão expirou. Entre novamente para acessar os ASOs."); setLoading(false); }
         return;
       }
-      const { data: profile, error: profileError } = await supabase.from("profiles").select("organization_id,role").eq("id", auth.user.id).maybeSingle();
-      if (profileError || !profile?.organization_id || !["admin", "rh"].includes(profile.role)) {
+      const { data: profile, error: profileError } = await getCurrentOrganizationProfile(supabase, auth.user.id, auth.user.user_metadata?.full_name);
+      if (profileError || !profile?.organization_id || !profile.role || !["admin", "rh"].includes(profile.role)) {
         if (active) { setError("Esta página está disponível somente para RH e Administradores."); setLoading(false); }
         return;
       }

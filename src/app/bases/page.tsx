@@ -4,6 +4,7 @@ import { FormEvent, useEffect, useMemo, useState } from "react";
 import { Check, LoaderCircle, MapPin, Plus, Search, Users } from "lucide-react";
 import { FeedbackMessage } from "@/components/feedback-message";
 import { createClient } from "@/lib/supabase/client";
+import { getCurrentOrganizationProfile } from "@/lib/organization-context";
 import { friendlyError } from "@/lib/ui-feedback";
 
 type Base = { id: string; name: string; address: string | null; is_active: boolean };
@@ -42,7 +43,7 @@ export default function BasesPage() {
       const { data: auth, error: authError } = await supabase.auth.getUser();
       if (authError) throw authError;
       if (!auth.user) throw new Error("Sua sessão expirou. Entre novamente.");
-      const { data: ownProfile, error: ownProfileError } = await supabase.from("profiles").select("organization_id").eq("id", auth.user.id).maybeSingle();
+      const { data: ownProfile, error: ownProfileError } = await getCurrentOrganizationProfile(supabase, auth.user.id, auth.user.user_metadata?.full_name);
       if (ownProfileError) throw ownProfileError;
       if (!ownProfile?.organization_id) throw new Error("Não foi possível identificar a organização.");
       const [{ data: baseRows, error: baseError }, { data: employeeRows, error: employeeError }, { data: profileRows, error: profileError }, { data: accessRows, error: accessError }] = await Promise.all([

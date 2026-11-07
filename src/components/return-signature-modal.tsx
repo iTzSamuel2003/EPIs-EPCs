@@ -3,6 +3,7 @@
 import { PointerEvent, useEffect, useRef, useState } from "react";
 import { Check, Eraser, PenLine, X } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
+import { getCurrentOrganizationProfile } from "@/lib/organization-context";
 import { friendlyError } from "@/lib/ui-feedback";
 import { TermWhatsAppLinkButton } from "@/components/term-whatsapp-link-button";
 import { useModalFocus } from "@/components/use-modal-focus";
@@ -140,7 +141,7 @@ export function ReturnSignatureModal({ returnId, employee, employeeName, employe
     try {
       const { data: auth, error: authError } = await supabase.auth.getUser();
       const { data: profile, error: profileError } = auth.user
-        ? await supabase.from("profiles").select("organization_id").eq("id", auth.user.id).maybeSingle()
+        ? await getCurrentOrganizationProfile(supabase, auth.user.id, auth.user.user_metadata?.full_name)
         : { data: null, error: authError };
       if (profileError || authError || !auth.user || !profile?.organization_id) throw profileError ?? authError ?? new Error("Não foi possível identificar a organização.");
       let documentOrganization = organization;

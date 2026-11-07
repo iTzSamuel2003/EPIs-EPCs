@@ -4,6 +4,7 @@ import { ChangeEvent, FormEvent, useEffect, useMemo, useRef, useState } from "re
 import { ArrowLeft, Check, ClipboardCheck, ClipboardCopy, Upload, X } from "lucide-react";
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/client";
+import { getCurrentOrganizationProfile } from "@/lib/organization-context";
 import { uploadTransactionPhotos } from "@/lib/transaction-attachments";
 import { RecentReturns } from "@/components/recent-returns";
 import { friendlyError } from "@/lib/ui-feedback";
@@ -66,7 +67,7 @@ export default function ReturnsPage() {
       setEmployees((employeeData ?? []) as Employee[]);
       const { data: auth, error: authError } = await supabase.auth.getUser();
       if (authError || !auth.user) throw authError ?? new Error("Sua sessão expirou. Entre novamente.");
-      const { data: profile, error: profileError } = await supabase.from("profiles").select("organization_id,full_name").eq("id", auth.user.id).maybeSingle();
+      const { data: profile, error: profileError } = await getCurrentOrganizationProfile(supabase, auth.user.id, auth.user.user_metadata?.full_name);
       if (profileError) throw profileError;
       setResponsibleName(profile?.full_name?.trim() || auth.user.email?.split("@")[0] || "");
       if (profile?.organization_id) {
@@ -173,7 +174,7 @@ export default function ReturnsPage() {
       const supabase = createClient();
       const { data: auth, error: authError } = await supabase.auth.getUser();
       if (authError || !auth.user) throw authError ?? new Error("Sua sessão expirou. Entre novamente.");
-      const { data: profile, error: profileError } = await supabase.from("profiles").select("full_name").eq("id", auth.user.id).maybeSingle();
+      const { data: profile, error: profileError } = await getCurrentOrganizationProfile(supabase, auth.user.id, auth.user.user_metadata?.full_name);
       if (profileError) throw profileError;
       const actingUserName = profile?.full_name?.trim() || auth.user.email?.split("@")[0] || "";
       if (!actingUserName) throw new Error("Não foi possível identificar o usuário responsável pela devolução.");

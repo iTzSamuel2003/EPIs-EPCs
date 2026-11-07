@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import { Banknote, CalendarDays, Check, Clock3, LoaderCircle, Plus, Save, Search, ShieldCheck, UserRound, X } from "lucide-react";
 import { EmployeeAutocomplete } from "@/components/employee-autocomplete";
 import { createClient } from "@/lib/supabase/client";
+import { getCurrentOrganizationProfile } from "@/lib/organization-context";
 
 type Employee = {
   id: string;
@@ -461,7 +462,7 @@ export default function AttendancePage() {
         if (active) { setError("Sua sessão expirou. Entre novamente para abrir o controle de assiduidade."); setLoading(false); }
         return;
       }
-      const { data: profile, error: profileError } = await supabase.from("profiles").select("organization_id").eq("id", auth.user.id).maybeSingle();
+      const { data: profile, error: profileError } = await getCurrentOrganizationProfile(supabase, auth.user.id, auth.user.user_metadata?.full_name);
       if (profileError || !profile?.organization_id) {
         if (active) { setError("Não foi possível identificar a organização do usuário."); setLoading(false); }
         return;
