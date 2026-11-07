@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import { ArrowLeft, Check, ChevronDown, Copy, Link2, LockKeyhole, RotateCcw, Save, Shield, UserPlus, Users } from "lucide-react";
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/client";
+import { getCurrentOrganizationProfile } from "@/lib/organization-context";
 import { FeedbackMessage } from "@/components/feedback-message";
 import { PAGE_PERMISSIONS, rolePageDefaults } from "@/lib/access-control";
 
@@ -51,7 +52,7 @@ export default function UsersSettingsPage() {
     const supabase = createClient();
     const { data: auth, error: authError } = await supabase.auth.getUser();
     if (!auth.user) { setError(authError?.message || "Sua sessão expirou. Entre novamente."); setLoading(false); return; }
-    const { data: profile, error: profileError } = await supabase.from("profiles").select("organization_id,role").eq("id", auth.user.id).maybeSingle();
+    const { data: profile, error: profileError } = await getCurrentOrganizationProfile(supabase, auth.user.id, auth.user.user_metadata?.full_name);
     if (profileError || !profile?.organization_id || profile.role !== "admin") { setError("Somente administradores podem gerenciar os acessos da organização."); setLoading(false); return; }
     setViewerId(auth.user.id);
     const [memberResult, roleResult, overrideResult] = await Promise.all([
@@ -81,7 +82,8 @@ export default function UsersSettingsPage() {
   async function saveRole(role: ManagedRole) {
     setSaving(true); setError(""); setSuccess("");
     const { data: auth } = await createClient().auth.getUser();
-    const { data: profile } = auth.user ? await createClient().from("profiles").select("organization_id").eq("id", auth.user.id).maybeSingle() : { data: null };
+    const supabase = createClient();
+    const { data: profile } = auth.user ? await getCurrentOrganizationProfile(supabase, auth.user.id, auth.user.user_metadata?.full_name) : { data: null };
     if (!profile?.organization_id) { setError("Não foi possível identificar a organização."); setSaving(false); return; }
     const { error: saveError } = await createClient().from("organization_role_access").upsert({ organization_id: profile.organization_id, role, page_paths: roleAccess[role], updated_at: new Date().toISOString() }, { onConflict: "organization_id,role" });
     if (saveError) setError("Não foi possível salvar o acesso padrão deste perfil.");
@@ -96,7 +98,7 @@ export default function UsersSettingsPage() {
     if (roleError) { setError("Não foi possível atualizar o perfil do usuário."); setSaving(false); return; }
     if (member.role !== "admin" && member.customPaths !== null) {
       const { data: auth } = await supabase.auth.getUser();
-      const { data: profile } = auth.user ? await supabase.from("profiles").select("organization_id").eq("id", auth.user.id).maybeSingle() : { data: null };
+      const { data: profile } = auth.user ? await getCurrentOrganizationProfile(supabase, auth.user.id, auth.user.user_metadata?.full_name) : { data: null };
       if (!profile?.organization_id) { setError("Não foi possível identificar a organização."); setSaving(false); return; }
       const { error: accessError } = await supabase.from("profile_access_overrides").upsert({ organization_id: profile.organization_id, profile_id: member.id, page_paths: member.customPaths, updated_at: new Date().toISOString() }, { onConflict: "profile_id" });
       if (accessError) { setError("O perfil foi atualizado, mas não foi possível salvar os acessos personalizados."); setSaving(false); return; }

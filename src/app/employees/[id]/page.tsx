@@ -6,6 +6,7 @@ import Link from "next/link";
 import Image from "next/image";
 import { useParams } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
+import { getCurrentOrganizationProfile } from "@/lib/organization-context";
 import { friendlyError } from "@/lib/ui-feedback";
 import { closePendingDownload, finishPendingDownload, openPendingDownload } from "@/lib/external-download";
 import { EmployeeNavigation } from "@/components/employee-navigation";
@@ -288,7 +289,7 @@ export default function EmployeeMaterialsPage() {
     supabase = createClient();
     const { data: auth, error: authError } = await supabase.auth.getUser();
     if (authError || !auth.user) { setError(friendlyError(authError, "Sua sessão expirou. Entre novamente.")); return; }
-    const { data: profileData, error: profileError } = await supabase.from("profiles").select("organization_id").eq("id", auth.user.id).maybeSingle();
+    const { data: profileData, error: profileError } = await getCurrentOrganizationProfile(supabase, auth.user.id, auth.user.user_metadata?.full_name);
     if (profileError || !profileData?.organization_id) { setError(friendlyError(profileError, "Não foi possível identificar a organização.")); return; }
     const path = `${profileData.organization_id}/${sheet.id}/${crypto.randomUUID()}-${safeFileName(file.name)}`;
     uploadedPath = path;
@@ -319,7 +320,7 @@ export default function EmployeeMaterialsPage() {
     if (!["application/pdf", "image/jpeg", "image/png", "image/webp"].includes(file.type)) { setError("Anexe um PDF, JPG, PNG ou WEBP."); return; }
     if (file.size > 10 * 1024 * 1024) { setError("O arquivo do termo deve ter no máximo 10 MB."); return; }
     setUploadingId(sheet.id); setError(""); let uploadedPath = ""; let supabase: ReturnType<typeof createClient> | null = null; try { supabase = createClient(); const { data: auth, error: authError } = await supabase.auth.getUser();
-    if (authError || !auth.user) { setError(friendlyError(authError, "Sua sessão expirou. Entre novamente.")); return; } const { data: profileData, error: profileError } = await supabase.from("profiles").select("organization_id").eq("id", auth.user.id).maybeSingle();
+    if (authError || !auth.user) { setError(friendlyError(authError, "Sua sessão expirou. Entre novamente.")); return; } const { data: profileData, error: profileError } = await getCurrentOrganizationProfile(supabase, auth.user.id, auth.user.user_metadata?.full_name);
     if (profileError || !profileData?.organization_id) { setError(friendlyError(profileError, "Não foi possível identificar a organização.")); return; }
     const path = `${profileData.organization_id}/${sheet.id}/${crypto.randomUUID()}-${safeFileName(file.name)}`;
     uploadedPath = path;

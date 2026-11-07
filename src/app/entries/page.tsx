@@ -14,6 +14,7 @@ import { FeedbackMessage } from "@/components/feedback-message";
 import { BaseSelect } from "@/components/base-select";
 import { useBaseContext } from "@/lib/use-base-context";
 import { createClient } from "@/lib/supabase/client";
+import { getCurrentOrganizationProfile } from "@/lib/organization-context";
 import { friendlyError } from "@/lib/ui-feedback";
 import { getContractAnnexNumbers, type ContractAnnexAssociation } from "@/lib/contract-annex";
 
@@ -521,11 +522,7 @@ export default function EntriesPage() {
                 );
                 return;
               }
-              const { data: profile, error: profileError } = await supabase
-                .from("profiles")
-                .select("organization_id")
-                .eq("id", auth.user.id)
-                .single();
+              const { data: profile, error: profileError } = await getCurrentOrganizationProfile(supabase, auth.user.id, auth.user.user_metadata?.full_name);
               if (profileError || !profile?.organization_id) {
                 setError(
                   friendlyError(
@@ -588,11 +585,7 @@ export default function EntriesPage() {
           );
           return;
         }
-        const { data: profile, error: profileError } = await supabase
-          .from("profiles")
-          .select("organization_id")
-          .eq("id", auth.user.id)
-          .single();
+        const { data: profile, error: profileError } = await getCurrentOrganizationProfile(supabase, auth.user.id, auth.user.user_metadata?.full_name);
         if (profileError) {
           setError(
             friendlyError(

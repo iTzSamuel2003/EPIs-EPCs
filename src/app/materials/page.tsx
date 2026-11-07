@@ -4,6 +4,7 @@ import { FormEvent, useEffect, useMemo, useRef, useState } from "react";
 import { ArrowDownAZ, ArrowUpAZ, Check, LoaderCircle, Pencil, Plus, Search, ShieldCheck, X } from "lucide-react";
 import { useSearchParams } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
+import { getCurrentOrganizationProfile } from "@/lib/organization-context";
 import { friendlyError } from "@/lib/ui-feedback";
 import { CONTRACT_ANNEX_LABELS, contractAnnexLabel, getContractAnnexNumbers, type ContractAnnexAssociation } from "@/lib/contract-annex";
 import type { MaterialType } from "@/types/domain";
@@ -265,11 +266,7 @@ export default function MaterialsPage() {
       const supabase = createClient();
       const { data: { user }, error: userError } = await supabase.auth.getUser();
       if (userError || !user) throw userError ?? new Error("Sessão expirada. Entre novamente.");
-      const { data: profile, error: profileError } = await supabase
-        .from("profiles")
-        .select("organization_id")
-        .eq("id", user.id)
-        .single();
+      const { data: profile, error: profileError } = await getCurrentOrganizationProfile(supabase, user.id, user.user_metadata?.full_name);
       if (profileError || !profile?.organization_id) throw profileError ?? new Error("Usuário sem organização vinculada.");
 
       const { error: saveError } = await supabase
@@ -333,7 +330,7 @@ export default function MaterialsPage() {
     const { data: auth, error: authError } = await supabase.auth.getUser();
     if (authError) { setError(friendlyError(authError, "Não foi possível concluir a operação.")); setSaving(false); return; }
     if (!auth.user) { setError("Sua sessão expirou. Entre novamente."); setSaving(false); return; }
-    const { data: profile, error: profileError } = await supabase.from("profiles").select("organization_id").eq("id", auth.user.id).single();
+    const { data: profile, error: profileError } = await getCurrentOrganizationProfile(supabase, auth.user.id, auth.user.user_metadata?.full_name);
     if (profileError) { setError(friendlyError(profileError, "Não foi possível concluir a operação.")); setSaving(false); return; }
     if (!profile?.organization_id) { setError("Não foi possível identificar a organização do usuário."); setSaving(false); return; }
     let currentVariants: MaterialVariant[] = [];

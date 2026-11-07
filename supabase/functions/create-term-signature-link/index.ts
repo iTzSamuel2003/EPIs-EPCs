@@ -255,8 +255,23 @@ Deno.serve(async (request) => {
   const profileQuery = action === "cancel"
     ? userClient.from("profiles").select("organization_id,role,full_name").eq("id", user.id).maybeSingle()
     : userClient.from("profiles").select("organization_id,role,full_name,organization:organizations(name,logo_url,cnpj,address,phone)").eq("id", user.id).maybeSingle();
-  const { data: profile, error: profileError } = await profileQuery;
-  if (profileError || !profile?.organization_id) return respond({ error: "Não foi possível identificar a organização." }, 403, origin);
+  const [{ data: profileData, error: profileError }, { data: managementRows, error: managementError }] = await Promise.all([
+    profileQuery,
+    userClient.rpc("get_platform_organization_management_context"),
+  ]);
+  if (managementError) return respond({ error: "Não foi possível validar o contexto da organização." }, 403, origin);
+  const managementContext = Array.isArray(managementRows) ? managementRows[0] as { organization_id: string; organization_name: string; organization_logo_url: string | null } | undefined : undefined;
+  const profile = {
+    organization_id: managementContext?.organization_id ?? profileData?.organization_id,
+    role: managementContext ? "admin" : profileData?.role,
+    full_name: managementContext
+      ? text(user.user_metadata?.full_name) || text(user.user_metadata?.name) || user.email || "Administrador da plataforma"
+      : profileData?.full_name,
+    organization: managementContext
+      ? { name: managementContext.organization_name, logo_url: managementContext.organization_logo_url, cnpj: null, address: null, phone: null }
+      : profileData?.organization,
+  };
+  if (profileError || !profile.organization_id) return respond({ error: "Não foi possível identificar a organização." }, 403, origin);
   if (!(await organizationIsActive(String(profile.organization_id)))) return respond({ error: "A organização está temporariamente indisponível." }, 403, origin);
   const requiredPage = recordType === "return" ? "/returns" : recordType === "deduction" || recordType === "witness" ? "/discounts" : "/deliveries";
   let pagePaths: unknown = null;

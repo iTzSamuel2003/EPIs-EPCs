@@ -5,6 +5,7 @@ import { ArrowLeft, Ban, Check, Copy, Mail, MessageCircle, Save, Send, X } from 
 import Link from "next/link";
 import { useParams } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
+import { getCurrentOrganizationProfile } from "@/lib/organization-context";
 import { friendlyError } from "@/lib/ui-feedback";
 import { EmployeeNavigation } from "@/components/employee-navigation";
 import { FeedbackMessage } from "@/components/feedback-message";
@@ -45,7 +46,7 @@ export default function EmployeeProfilePage() {
       const supabase = createClient();
       const { data: auth, error: authError } = await supabase.auth.getUser();
       if (authError || !auth.user) throw authError ?? new Error("Sua sessão expirou. Entre novamente.");
-      const { data: userProfile, error: profileError } = await supabase.from("profiles").select("organization_id").eq("id", auth.user.id).single();
+      const { data: userProfile, error: profileError } = await getCurrentOrganizationProfile(supabase, auth.user.id, auth.user.user_metadata?.full_name);
       if (profileError) throw profileError;
       if (!userProfile?.organization_id) throw new Error("Não foi possível identificar a organização.");
       const { error: saveError } = await supabase.from("employee_profiles").upsert({ employee_id: id, organization_id: userProfile.organization_id, ...profile, updated_at: new Date().toISOString() });
@@ -64,7 +65,7 @@ export default function EmployeeProfilePage() {
       const supabase = createClient();
       const { data: auth, error: authError } = await supabase.auth.getUser();
       if (authError || !auth.user) throw authError ?? new Error("Sua sessão expirou. Entre novamente.");
-      const { data: userProfile, error: profileError } = await supabase.from("profiles").select("organization_id").eq("id", auth.user.id).single();
+      const { data: userProfile, error: profileError } = await getCurrentOrganizationProfile(supabase, auth.user.id, auth.user.user_metadata?.full_name);
       if (profileError) throw profileError;
       if (!userProfile?.organization_id) throw new Error("Não foi possível identificar a organização.");
       const { data, error: requestError } = await supabase.from("employee_measurement_requests").upsert({ employee_id: id, organization_id: userProfile.organization_id, token: crypto.randomUUID(), expires_at: new Date(Date.now() + 30 * 86400000).toISOString(), completed_at: null, updated_at: new Date().toISOString() }, { onConflict: "employee_id" }).select("token,expires_at,completed_at").single();

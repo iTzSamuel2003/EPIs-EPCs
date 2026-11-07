@@ -3,6 +3,7 @@
 import { FormEvent, useEffect, useRef, useState } from "react";
 import { ArrowRightLeft, Check, LoaderCircle, Pencil, Plus, ShieldCheck, Trash2, X } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
+import { getCurrentOrganizationProfile } from "@/lib/organization-context";
 import { friendlyError } from "@/lib/ui-feedback";
 import { FeedbackMessage } from "@/components/feedback-message";
 
@@ -64,7 +65,7 @@ export default function TeamsPage() {
     const { data: auth, error: authError } = await supabase.auth.getUser();
     if (authError) return { supabase, organizationId: null, error: friendlyError(authError, "Não foi possível concluir a operação.") };
     if (!auth.user) return { supabase, organizationId: null, error: "Sua sessão expirou. Entre novamente." };
-    const { data: profile, error: profileError } = await supabase.from("profiles").select("organization_id").eq("id", auth.user.id).single();
+    const { data: profile, error: profileError } = await getCurrentOrganizationProfile(supabase, auth.user.id, auth.user.user_metadata?.full_name);
     if (profileError) return { supabase, organizationId: null, error: friendlyError(profileError, "Não foi possível concluir a operação.") };
     if (!profile?.organization_id) return { supabase, organizationId: null, error: "Não foi possível identificar a organização do usuário." };
     return { supabase, organizationId: profile.organization_id, error: "" };

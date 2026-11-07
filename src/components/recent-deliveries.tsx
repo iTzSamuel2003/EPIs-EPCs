@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import { CalendarClock, Check, ClipboardList, LoaderCircle, UserRound } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
+import { getCurrentOrganizationProfile } from "@/lib/organization-context";
 import { friendlyError } from "@/lib/ui-feedback";
 import { FeedbackMessage } from "@/components/feedback-message";
 import { TermCopyLinkButton } from "@/components/term-copy-link-button";
@@ -150,7 +151,7 @@ export function RecentDeliveries({ onPrintTerm }: { onPrintTerm: (snapshot: Deli
 
         const [{ data, error: loadError }, { data: profile, error: profileError }, { data: bases, error: basesError }] = await Promise.all([
           supabase.from("deliveries").select("id,base_id,delivered_at,reason,notes,term_file_path,term_uploaded_at,term_signature_method,term_signed_at,employee:employees(full_name,registration,department,job_title,function_name,admission_date,termination_date,status),delivery_items(quantity,test_performed_at,test_expires_at,expected_replacement_at,material:materials(name,unit,internal_code),variant:material_variants(name,size),lot:material_lots(ca_number,ca_expires_at,test_number,test_report_number,test_performed_at,test_expires_at),material_units(unit_identifier,valid_until,test_performed_at,test_number,test_report_number,ca_number,ca_expires_at))").order("delivered_at", { ascending: false }).order("created_at", { ascending: false }).limit(10),
-          supabase.from("profiles").select("organization_id,full_name").eq("id", auth.user.id).maybeSingle(),
+          getCurrentOrganizationProfile(supabase, auth.user.id, auth.user.user_metadata?.full_name),
           supabase.from("organization_bases").select("id,name"),
         ]);
 

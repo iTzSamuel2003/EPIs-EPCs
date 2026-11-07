@@ -1983,6 +1983,32 @@ body{max-width:100%;overflow-x:hidden;}
 .sidebar-section nav a{min-height:44px;}
 .sidebar-section nav a.active{box-shadow:inset 3px 0 #7762d6;}
 
+.platform-management-banner{position:sticky;top:0;z-index:18;display:flex;align-items:center;justify-content:space-between;gap:16px;padding:12px clamp(16px,3vw,42px);border-bottom:1px solid #e8d59d;background:#fff8e6;color:#55451d;box-shadow:0 4px 14px #1e2b4210}
+.platform-management-copy{display:flex;align-items:center;gap:11px;min-width:0}
+.platform-management-copy>svg{flex:0 0 auto;color:#9a7416}
+.platform-management-copy strong,.platform-management-copy span{display:block}
+.platform-management-copy strong{font-size:12px;font-weight:700}
+.platform-management-copy span{margin-top:3px;color:#786735;font-size:11px;line-height:1.4}
+.platform-management-banner .secondary-button{flex:0 0 auto;min-height:38px;border-color:#e5d296;background:#fffdf6;color:#65521f}
+.management-audit-gate{max-width:900px}
+.management-audit-gate .panel{display:grid;justify-items:start;gap:10px}
+.management-audit-gate h1{margin:0;font-size:20px}
+.management-audit-gate p{margin:0;color:#8190a8;line-height:1.5}
+.organization-management-modal{width:min(100%,540px)}
+.organization-management-modal .modal-heading{display:flex;align-items:center;gap:12px;margin-bottom:16px}
+.organization-management-modal .modal-heading>div{min-width:0;flex:1}
+.organization-management-modal .modal-heading .eyebrow{margin-bottom:5px;color:#8d7be1}
+.organization-management-modal .modal-heading h2{margin:0;font-size:19px;line-height:1.3}
+.organization-management-modal .modal-icon{width:40px;height:40px;display:grid;place-items:center;flex:0 0 auto;border-radius:11px;background:#efebfc;color:#735dd4}
+.organization-management-modal .organization-management-target{margin:0 0 18px;color:#718099;font-size:13px;line-height:1.55}
+.organization-management-modal .organization-management-target strong{color:#263651}
+.organization-management-modal form{display:grid;gap:16px}
+.organization-management-modal label{display:grid;gap:7px;color:#43536c;font-size:12px;font-weight:700}
+.organization-management-modal textarea{width:100%;min-height:96px;padding:11px 12px;border:1px solid #dce3ef;border-radius:9px;resize:vertical;color:#162844;font:inherit;font-size:13px}
+.organization-management-modal textarea:focus{outline:3px solid #ddd6ff;border-color:#8065df}
+.organization-management-modal .organization-management-error{margin:0 0 14px;padding:10px 12px;border:1px solid #f6c5c0;border-radius:9px;background:#fff3f1;color:#b7352c;font-size:12px;line-height:1.45}
+@media(max-width:600px){.platform-management-banner{align-items:stretch;flex-direction:column;gap:10px;padding:12px 14px}.platform-management-banner .secondary-button{width:100%;justify-content:center}.platform-management-copy{align-items:flex-start}.management-audit-gate{padding:20px 12px}}
+
 @media (max-width:1024px) and (min-width:761px){
   .contract-requirements-page .module-table-card,
   .function-templates-page .template-detail,

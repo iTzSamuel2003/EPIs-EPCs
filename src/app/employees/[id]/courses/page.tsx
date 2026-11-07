@@ -6,6 +6,7 @@ import Link from "next/link";
 import { useParams } from "next/navigation";
 import { EmployeeNavigation } from "@/components/employee-navigation";
 import { createClient } from "@/lib/supabase/client";
+import { getCurrentOrganizationProfile } from "@/lib/organization-context";
 import { friendlyError } from "@/lib/ui-feedback";
 import { closePendingDownload, finishPendingDownload, openPendingDownload } from "@/lib/external-download";
 import { FeedbackMessage } from "@/components/feedback-message";
@@ -69,7 +70,7 @@ export default function EmployeeCoursesPage() {
       const { data: auth, error: authError } = await supabase.auth.getUser();
       if (authError) throw authError;
       if (!auth.user) throw new Error("Sua sessão expirou. Entre novamente.");
-      const { data: profile, error: profileError } = await supabase.from("profiles").select("organization_id").eq("id", auth.user.id).single();
+      const { data: profile, error: profileError } = await getCurrentOrganizationProfile(supabase, auth.user.id, auth.user.user_metadata?.full_name);
       if (profileError) throw profileError;
       if (!profile?.organization_id) throw new Error("Não foi possível identificar a organização do usuário.");
       if (certificateFile) {

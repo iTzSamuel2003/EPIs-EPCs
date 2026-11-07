@@ -3,6 +3,7 @@
 import { ChangeEvent, useEffect, useRef, useState } from "react";
 import { Check, ClipboardList, Download, LoaderCircle, RotateCcw, Upload, UserRound } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
+import { getCurrentOrganizationProfile } from "@/lib/organization-context";
 import { TermCopyLinkButton } from "@/components/term-copy-link-button";
 import { friendlyError } from "@/lib/ui-feedback";
 import { FeedbackMessage } from "@/components/feedback-message";
@@ -133,7 +134,7 @@ export function RecentReturns({ organization }: { organization: ReturnTermOrgani
       supabase = createClient();
       const { data: auth, error: authError } = await supabase.auth.getUser();
       if (authError || !auth.user) { setError(friendlyError(authError, "Sua sessão expirou. Entre novamente.")); return; }
-      const { data: profile, error: profileError } = await supabase.from("profiles").select("organization_id").eq("id", auth.user.id).maybeSingle();
+      const { data: profile, error: profileError } = await getCurrentOrganizationProfile(supabase, auth.user.id, auth.user.user_metadata?.full_name);
       if (profileError || !profile?.organization_id) { setError(friendlyError(profileError, "Não foi possível identificar a organização.")); return; }
       const path = `${profile.organization_id}/${item.id}/${crypto.randomUUID()}-${safeFileName(file.name) || "termo"}`;
       const { error: uploadError } = await supabase.storage.from("delivery-terms").upload(path, file, { contentType: file.type, upsert: false });

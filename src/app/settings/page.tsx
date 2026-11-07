@@ -4,6 +4,7 @@ import { FormEvent, useEffect, useState } from "react";
 import Link from "next/link";
 import { Building2, QrCode, Save, Settings, Users } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
+import { getCurrentOrganizationProfile } from "@/lib/organization-context";
 import { FeedbackMessage } from "@/components/feedback-message";
 import { friendlyError } from "@/lib/ui-feedback";
 
@@ -36,7 +37,7 @@ export default function SettingsPage() {
         setIsPlatformAdmin(platformAdmin === true);
       }
       const { data: profile, error: profileError } = auth.user
-        ? await supabase.from("profiles").select("organization_id,role").eq("id", auth.user.id).maybeSingle()
+        ? await getCurrentOrganizationProfile(supabase, auth.user.id, auth.user.user_metadata?.full_name)
         : { data: null, error: authError };
       if (profileError || !profile) {
         setError(friendlyError(profileError ?? authError, "Não foi possível identificar a organização."));
@@ -73,7 +74,7 @@ export default function SettingsPage() {
       const supabase = createClient();
       const { data: auth, error: authError } = await supabase.auth.getUser();
       const { data: profile, error: profileError } = auth.user
-        ? await supabase.from("profiles").select("organization_id").eq("id", auth.user.id).maybeSingle()
+        ? await getCurrentOrganizationProfile(supabase, auth.user.id, auth.user.user_metadata?.full_name)
         : { data: null, error: authError };
       if (profileError || !profile?.organization_id) {
         setError(friendlyError(profileError ?? authError, "Não foi possível identificar a organização."));
@@ -103,7 +104,7 @@ export default function SettingsPage() {
     try {
       const supabase = createClient();
       const { data: auth } = await supabase.auth.getUser();
-      const { data: profile } = auth.user ? await supabase.from("profiles").select("organization_id").eq("id", auth.user.id).maybeSingle() : { data: null };
+      const { data: profile } = auth.user ? await getCurrentOrganizationProfile(supabase, auth.user.id, auth.user.user_metadata?.full_name) : { data: null };
       if (!profile?.organization_id) { setError("Não foi possível identificar a organização."); return; }
       const path = `${profile.organization_id}/logo`;
       const { error: uploadError } = await supabase.storage.from("organization-logos").upload(path, file, { contentType: file.type, upsert: true });

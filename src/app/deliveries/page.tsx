@@ -4,6 +4,7 @@ import { ChangeEvent, FormEvent, useCallback, useEffect, useRef, useState } from
 import { ArrowLeft, Check, ClipboardCheck, Plus, Trash2 } from "lucide-react";
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/client";
+import { getCurrentOrganizationProfile } from "@/lib/organization-context";
 import { friendlyError } from "@/lib/ui-feedback";
 import { RecentDeliveries } from "@/components/recent-deliveries";
 import { DeliveryTermPrintSheet, type DeliveryTermSnapshot } from "@/components/delivery-term-print-sheet";
@@ -271,7 +272,7 @@ export default function DeliveriesPage() {
     try {
       const { data: auth, error: authError } = await supabase.auth.getUser();
       if (authError || !auth.user) throw authError ?? new Error("Sua sessão expirou. Entre novamente.");
-      const { data: profile, error: profileError } = await supabase.from("profiles").select("organization_id").eq("id", auth.user.id).maybeSingle();
+      const { data: profile, error: profileError } = await getCurrentOrganizationProfile(supabase, auth.user.id, auth.user.user_metadata?.full_name);
       if (profileError || !profile?.organization_id) throw profileError ?? new Error("Não foi possível identificar sua organização.");
       const safeName = file.name.replace(/[^\p{L}\p{N}._-]+/gu, "-").slice(-100) || "ficha-assinada";
       uploadedPath = `${profile.organization_id}/${pending.id}/physical-${crypto.randomUUID()}-${safeName}`;

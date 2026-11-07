@@ -1,4 +1,5 @@
 import { SupabaseClient } from "@supabase/supabase-js";
+import { getCurrentOrganizationProfile } from "@/lib/organization-context";
 
 type AttachmentInput = { files: File[]; recordId: string; type: "delivery" | "return" };
 
@@ -11,7 +12,7 @@ export async function uploadTransactionPhotos(supabase: SupabaseClient, { files,
   if (files.some((file) => !allowedMimeTypes.has(file.type))) return { error: "As fotos devem estar em formato JPG, PNG ou WEBP.", count: 0 };
   const { data: auth, error: authError } = await supabase.auth.getUser();
   if (authError || !auth.user) return { error: "Sua sessão expirou. Entre novamente.", count: 0 };
-  const { data: profile, error: profileError } = await supabase.from("profiles").select("organization_id").eq("id", auth.user.id).maybeSingle();
+  const { data: profile, error: profileError } = await getCurrentOrganizationProfile(supabase, auth.user.id, auth.user.user_metadata?.full_name);
   if (profileError) return { error: "Não foi possível identificar a organização.", count: 0 };
   if (!profile?.organization_id) return { error: "Não foi possível identificar a organização.", count: 0 };
   const uploadedPaths: string[] = [];
