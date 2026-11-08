@@ -450,8 +450,8 @@ export function AppShell({ children }: { children: React.ReactNode }) {
       <div className="app-shell">
         {mobileMenu && <button type="button" className="sidebar-backdrop" onClick={() => setMobileMenu(false)} aria-label="Fechar menu" />}
         <aside id="main-navigation" className={`sidebar ${mobileMenu ? "open" : ""}`} aria-label="Navegação principal" onKeyDown={handleMenuKeyDown}>
-          <div className="brand">
-            <div className={`brand-mark ${organizationLogo ? "brand-mark-custom" : ""}`}>{organizationLogo ? <img src={organizationLogo} alt="" /> : <ShieldCheck size={22} />}</div>
+          <div className={`brand ${organizationLogo ? "brand-with-custom-logo" : ""}`}>
+            <div className={`brand-mark ${organizationLogo ? "brand-mark-custom" : ""}`}>{organizationLogo ? <img src={organizationLogo} alt={organizationName ? `Logo ${organizationName}` : "Logo da organização"} /> : <ShieldCheck size={22} />}</div>
             <div className="brand-copy"><strong className="brand-title" title={organizationName || "EPIS+"}>{organizationName || <>EPIS<span>+</span></>}</strong><small>Gestão inteligente</small></div>
             <button ref={closeMenuRef} className="close-menu" type="button" onClick={() => setMobileMenu(false)} aria-label="Fechar menu"><X size={20} /></button>
           </div>
