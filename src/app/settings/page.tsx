@@ -2,7 +2,7 @@
 
 import { FormEvent, useEffect, useState } from "react";
 import Link from "next/link";
-import { Building2, QrCode, Save, Settings, Users } from "lucide-react";
+import { Building2, QrCode, Save, Settings, UserRound, Users } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 import { getCurrentOrganizationProfile } from "@/lib/organization-context";
 import { FeedbackMessage } from "@/components/feedback-message";
@@ -25,6 +25,11 @@ export default function SettingsPage() {
   const [viewerRole, setViewerRole] = useState<Role>("user");
   const [isPlatformAdmin, setIsPlatformAdmin] = useState(false);
   const [uploadingLogo, setUploadingLogo] = useState(false);
+  const [profileName, setProfileName] = useState("");
+  const [profileEmail, setProfileEmail] = useState("");
+  const [savingProfile, setSavingProfile] = useState(false);
+  const [profileError, setProfileError] = useState("");
+  const [profileSuccess, setProfileSuccess] = useState("");
 
   useEffect(() => {
     async function load() {
@@ -32,6 +37,7 @@ export default function SettingsPage() {
       setError("");
       const supabase = createClient();
       const { data: auth, error: authError } = await supabase.auth.getUser();
+      setProfileEmail(auth.user?.email ?? "");
       if (auth.user) {
         const { data: platformAdmin } = await supabase.rpc("current_user_is_platform_admin");
         setIsPlatformAdmin(platformAdmin === true);
@@ -42,6 +48,10 @@ export default function SettingsPage() {
       if (profileError || !profile) {
         setError(friendlyError(profileError ?? authError, "Não foi possível identificar a organização."));
       } else {
+        const candidateName = profile.full_name?.trim()
+          || (typeof auth.user?.user_metadata?.full_name === "string" ? auth.user.user_metadata.full_name.trim() : "");
+        const emailLocalPart = auth.user?.email?.split("@")[0]?.trim().toLocaleLowerCase("pt-BR");
+        setProfileName(candidateName.toLocaleLowerCase("pt-BR") === emailLocalPart ? "" : candidateName);
         setViewerRole(profile.role as Role);
         if (profile.organization_id) {
           const { data, error: loadError } = await supabase.from("organizations")
@@ -58,6 +68,36 @@ export default function SettingsPage() {
       setLoading(false);
     });
   }, []);
+
+  async function saveProfileName(event: FormEvent) {
+    event.preventDefault();
+    const normalizedName = profileName.trim();
+    if (!normalizedName) {
+      setProfileError("Informe seu nome completo.");
+      return;
+    }
+    if (normalizedName.length > 200) {
+      setProfileError("O nome completo deve ter no máximo 200 caracteres.");
+      return;
+    }
+    setSavingProfile(true);
+    setProfileError("");
+    setProfileSuccess("");
+    try {
+      const { error: saveError } = await createClient().rpc("update_my_profile_full_name", { p_full_name: normalizedName });
+      if (saveError) {
+        setProfileError(friendlyError(saveError, "Não foi possível atualizar seu nome."));
+        return;
+      }
+      setProfileName(normalizedName);
+      setProfileSuccess("Nome atualizado. Recarregando para atualizar o cabeçalho...");
+      window.setTimeout(() => window.location.reload(), 700);
+    } catch (caught) {
+      setProfileError(friendlyError(caught, "Falha ao atualizar seu nome."));
+    } finally {
+      setSavingProfile(false);
+    }
+  }
 
   useEffect(() => {
     if (!success) return;
@@ -120,7 +160,7 @@ export default function SettingsPage() {
   if (loading) return <main className="module-shell"><div className="module-loading" role="status">Carregando configurações...</div></main>;
 
   return (
-    <main className="module-shell">
+    <main className="module-shell settings-page">
       <header className="module-header">
         <div><p className="eyebrow">ADMINISTRAÇÃO</p><h1>Configurações</h1><p className="module-subtitle">Gerencie os dados da organização e os acessos ao sistema.</p></div>
         <div className="settings-header-actions">
@@ -131,6 +171,18 @@ export default function SettingsPage() {
       </header>
       {success && <FeedbackMessage kind="success">{success}</FeedbackMessage>}
       {error && <FeedbackMessage>{error}</FeedbackMessage>}
+      <section className="panel edit-employee-card" aria-labelledby="profile-settings-title">
+        <form className="material-form" onSubmit={saveProfileName} aria-busy={savingProfile}>
+          <div className="form-section-title"><h2 id="profile-settings-title"><UserRound size={17} aria-hidden="true" /> Meu perfil</h2><p>Informe como seu nome deve aparecer no sistema e nos registros de operação.</p></div>
+          <div className="form-grid two">
+            <label>Nome completo<input value={profileName} onChange={(event) => setProfileName(event.target.value)} placeholder="Seu nome completo" autoComplete="name" maxLength={200} required /></label>
+            <label>E-mail da conta<input type="email" value={profileEmail} readOnly /></label>
+          </div>
+          {profileError && <FeedbackMessage>{profileError}</FeedbackMessage>}
+          {profileSuccess && <FeedbackMessage kind="success">{profileSuccess}</FeedbackMessage>}
+          <div className="modal-actions"><button type="submit" className="primary-button" disabled={savingProfile} aria-busy={savingProfile}>{savingProfile ? "Salvando..." : "Salvar meu nome"}<Save size={16} aria-hidden="true" /></button></div>
+        </form>
+      </section>
       <section className="panel edit-employee-card" aria-labelledby="organization-settings-title">
         <form className="material-form" onSubmit={save} aria-busy={saving}>
           <div className="form-section-title"><h2 id="organization-settings-title"><Settings size={17} aria-hidden="true" /> Organização</h2><p>Esses dados aparecem nas operações e relatórios.</p></div>

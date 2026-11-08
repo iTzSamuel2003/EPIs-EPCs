@@ -21,7 +21,7 @@ export default function OrganizationPendingPage() {
         return;
       }
       setEmail(data.user.email || "");
-      setName(typeof data.user.user_metadata?.full_name === "string" ? data.user.user_metadata.full_name : data.user.email?.split("@")[0] || "");
+      setName(typeof data.user.user_metadata?.full_name === "string" ? data.user.user_metadata.full_name : "");
       setLoading(false);
     }).catch(() => {
       if (cancelled) return;
@@ -33,6 +33,10 @@ export default function OrganizationPendingPage() {
 
   async function acceptInvitation() {
     if (saving) return;
+    if (!name.trim()) {
+      setError("Informe seu nome completo para ativar o convite.");
+      return;
+    }
     setSaving(true);
     setError("");
     setSuccess("");
@@ -77,5 +81,5 @@ export default function OrganizationPendingPage() {
     }
   }
 
-  return <main className="login-shell"><div className="login-brand"><div className="brand-mark" aria-hidden="true"><ShieldCheck size={25} /></div><div><strong>EPIS<span>+</span></strong><small>Gestão inteligente</small></div></div><section className="login-card" aria-labelledby="organization-pending-title"><p className="eyebrow">ATIVAÇÃO DA ORGANIZAÇÃO</p><h1 id="organization-pending-title">Vincule sua conta à organização</h1><p className="login-subtitle">Esta conta ainda não está vinculada a uma organização. Se você já recebeu um convite, aceite-o usando o e-mail confirmado abaixo. Sua função e permissões serão aplicadas conforme o convite.</p>{loading ? <p role="status">Verificando sua conta...</p> : <><label htmlFor="pending-email">Conta autenticada<input id="pending-email" type="email" value={email} readOnly /></label><label htmlFor="pending-name">Nome completo<input id="pending-name" value={name} onChange={(event) => setName(event.target.value)} autoComplete="name" /></label>{error && <p className="login-error" role="alert">{error}</p>}{success && <p className="login-success" role="status">{success}</p>}<button className="primary-button login-button" type="button" onClick={acceptInvitation} disabled={saving}>{saving ? "Verificando convite..." : "Localizar e aceitar meu convite"}<ArrowRight size={17} aria-hidden="true" /></button><button className="text-button" type="button" onClick={signOut} disabled={saving}><LogOut size={15} aria-hidden="true" /> Sair e entrar com outra conta</button></>}</section></main>;
+  return <main className="login-shell"><div className="login-brand"><div className="brand-mark" aria-hidden="true"><ShieldCheck size={25} /></div><div><strong>EPIS<span>+</span></strong><small>Gestão inteligente</small></div></div><section className="login-card" aria-labelledby="organization-pending-title"><p className="eyebrow">ATIVAÇÃO DA ORGANIZAÇÃO</p><h1 id="organization-pending-title">Vincule sua conta à organização</h1><p className="login-subtitle">Esta conta ainda não está vinculada a uma organização. Se você já recebeu um convite, aceite-o usando o e-mail confirmado abaixo. Sua função e permissões serão aplicadas conforme o convite.</p>{loading ? <p role="status">Verificando sua conta...</p> : <><label htmlFor="pending-email">Conta autenticada<input id="pending-email" type="email" value={email} readOnly /></label><label htmlFor="pending-name">Nome completo<input id="pending-name" value={name} onChange={(event) => setName(event.target.value)} required maxLength={200} autoComplete="name" /></label>{error && <p className="login-error" role="alert">{error}</p>}{success && <p className="login-success" role="status">{success}</p>}<button className="primary-button login-button" type="button" onClick={acceptInvitation} disabled={saving}>{saving ? "Verificando convite..." : "Localizar e aceitar meu convite"}<ArrowRight size={17} aria-hidden="true" /></button><button className="text-button" type="button" onClick={signOut} disabled={saving}><LogOut size={15} aria-hidden="true" /> Sair e entrar com outra conta</button></>}</section></main>;
 }

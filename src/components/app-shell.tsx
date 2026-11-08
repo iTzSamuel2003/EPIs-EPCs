@@ -49,6 +49,17 @@ function getInitials(name: string) {
   return name.trim().split(/\s+/).filter(Boolean).slice(0, 2).map((part) => part[0]).join("").toLocaleUpperCase("pt-BR") || "U";
 }
 
+function getDisplayName(candidates: unknown[], email: string | undefined, fallback: string) {
+  const emailLocalPart = email?.split("@")[0]?.trim().toLocaleLowerCase("pt-BR");
+  for (const candidate of candidates) {
+    if (typeof candidate !== "string") continue;
+    const name = candidate.trim();
+    if (!name || name.toLocaleLowerCase("pt-BR") === emailLocalPart) continue;
+    return name;
+  }
+  return fallback;
+}
+
 export function AppShell({ children }: { children: React.ReactNode }) {
   const [currentUserName, setCurrentUserName] = useState("Usuário");
   const [currentUserRole, setCurrentUserRole] = useState("user");
@@ -134,9 +145,10 @@ export function AppShell({ children }: { children: React.ReactNode }) {
       const management = Array.isArray(managementRows) ? managementRows[0] as ManagementContext | undefined : undefined;
       if (management?.management_session_id && management.organization_id) {
         const metadata = data.user.user_metadata as Record<string, unknown> | undefined;
-        const platformName = [metadata?.full_name, metadata?.name, data.user.email?.split("@")[0]].find((value) => typeof value === "string" && value.trim()) as string | undefined;
+        const { data: managementProfile } = await supabase.from("profiles").select("full_name").eq("id", data.user.id).maybeSingle();
+        if (cancelled) return;
         setManagementContext(management);
-        setCurrentUserName(platformName?.trim() || "Administrador da plataforma");
+        setCurrentUserName(getDisplayName([managementProfile?.full_name, metadata?.full_name], data.user.email, "Administrador da plataforma"));
         setCurrentUserRole("admin");
         setIsPlatformAdmin(false);
         setPlatformOnly(false);
@@ -163,8 +175,11 @@ export function AppShell({ children }: { children: React.ReactNode }) {
       }
       if (!profile?.organization_id) {
         const metadata = data.user.user_metadata as Record<string, unknown> | undefined;
-        const platformName = [profile?.full_name, metadata?.full_name, metadata?.name, data.user.email?.split("@")[0]].find((value) => typeof value === "string" && value.trim()) as string | undefined;
-        setCurrentUserName(platformName?.trim() || "Usuário");
+        setCurrentUserName(getDisplayName(
+          [profile?.full_name, metadata?.full_name],
+          data.user.email,
+          platformAdmin === true ? "Administrador da plataforma" : "Usuário",
+        ));
         if (platformAdmin === true) {
           setCurrentUserRole("platform_admin");
           setPlatformOnly(true);
@@ -189,7 +204,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
       setOrganizationName(lifecycle.organization_name?.trim() || "Organização");
       if (lifecycle.lifecycle_status !== "active") {
         if (platformAdmin === true) {
-          setCurrentUserName(profile.full_name?.trim() || data.user.email?.split("@")[0] || "Usuário");
+          setCurrentUserName(getDisplayName([profile.full_name], data.user.email, "Administrador da plataforma"));
           setCurrentUserRole("platform_admin");
           setPlatformOnly(true);
           setOrganizationName("Administração da plataforma");
@@ -203,7 +218,8 @@ export function AppShell({ children }: { children: React.ReactNode }) {
         return;
       }
       const role = profile.role || "user";
-      setCurrentUserName(profile.full_name?.trim() || data.user.email?.split("@")[0] || "Usuário");
+      const metadata = data.user.user_metadata as Record<string, unknown> | undefined;
+      setCurrentUserName(getDisplayName([profile.full_name, metadata?.full_name], data.user.email, "Usuário"));
       setCurrentUserRole(role);
       const [{ data: override }, { data: roleAccess }] = role !== "admin" ? await Promise.all([
         supabase.from("profile_access_overrides").select("page_paths").eq("profile_id", data.user.id).eq("organization_id", profile.organization_id).maybeSingle(),

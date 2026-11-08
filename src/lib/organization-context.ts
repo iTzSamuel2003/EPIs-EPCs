@@ -24,11 +24,19 @@ export async function getCurrentOrganizationProfile(
     : undefined;
 
   if (managementContext?.organization_id) {
+    const { data: ownProfile, error: ownProfileError } = await supabase
+      .from("profiles")
+      .select("full_name")
+      .eq("id", userId)
+      .maybeSingle();
+
+    if (ownProfileError) return { data: null, error: ownProfileError };
+
     return {
       data: {
         organization_id: managementContext.organization_id,
         role: "admin",
-        full_name: fallbackName?.trim() || null,
+        full_name: ownProfile?.full_name?.trim() || fallbackName?.trim() || null,
       },
       error: null,
     };
