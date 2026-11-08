@@ -1,7 +1,7 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useRef, useState, type FormEvent } from "react";
-import { ChevronLeft, ChevronRight, Clock3, Download, History, LoaderCircle, Paperclip, Plus, RotateCcw, ShieldCheck, UserRound, X } from "lucide-react";
+import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties, type FormEvent } from "react";
+import { ChevronLeft, ChevronRight, Clock3, Download, History, LoaderCircle, Paperclip, Palette, Plus, RotateCcw, ShieldCheck, UserRound, X } from "lucide-react";
 import { EmployeeAutocomplete } from "@/components/employee-autocomplete";
 import { FeedbackMessage } from "@/components/feedback-message";
 import { createClient } from "@/lib/supabase/client";
@@ -34,6 +34,13 @@ const DELIVERY_LABELS: Record<string, string> = {
 };
 const NEGATIVE_ATTENDANCE_TYPES = new Set(["late", "absence_unjustified", "convocation_absence", "warning"]);
 type EventTone = "positive" | "neutral" | "negative";
+type EventSource = "attendance" | "hr" | "delivery";
+type EventColorGroup = { source: EventSource; label: string; items: Array<{ type: string; label: string }> };
+const EVENT_TONE_COLORS: Record<EventTone, string> = {
+  positive: "#43a96a",
+  neutral: "#8b9bb3",
+  negative: "#d66a60",
+};
 
 type Employee = {
   id: string;
@@ -49,7 +56,7 @@ type HistoryEvent = {
   employee_name: string;
   registration: string | null;
   function_name: string | null;
-  source: "attendance" | "hr" | "delivery";
+  source: EventSource;
   event_type: string;
   occurred_on: string;
   end_date: string | null;
@@ -66,6 +73,36 @@ type HistoryEvent = {
   voided_by_name: string | null;
   void_reason: string | null;
 };
+
+const EVENT_COLOR_GROUPS: EventColorGroup[] = [
+  { source: "attendance", label: "Assiduidade", items: Object.entries(ATTENDANCE_LABELS).map(([type, label]) => ({ type, label })) },
+  { source: "hr", label: "Registros de RH", items: EVENT_TYPES.map(([type, label]) => ({ type, label })) },
+  { source: "delivery", label: "Entregas", items: Object.entries(DELIVERY_LABELS).map(([type, label]) => ({ type, label })) },
+];
+
+function eventColorKey(source: EventSource, eventType: string) {
+  return `${source}:${eventType}`;
+}
+
+function readEventColorPreferences(preferenceKey: string) {
+  try {
+    const stored = window.localStorage.getItem(preferenceKey);
+    if (!stored) return {};
+    const parsed: unknown = JSON.parse(stored);
+    if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) return {};
+    const preferences: Record<string, string> = {};
+    for (const group of EVENT_COLOR_GROUPS) {
+      for (const item of group.items) {
+        const key = eventColorKey(group.source, item.type);
+        const color = (parsed as Record<string, unknown>)[key];
+        if (typeof color === "string" && /^#[0-9a-f]{6}$/i.test(color)) preferences[key] = color;
+      }
+    }
+    return preferences;
+  } catch {
+    return {};
+  }
+}
 
 function localToday() {
   const date = new Date();
@@ -96,12 +133,20 @@ function eventTypeLabel(event: HistoryEvent) {
     : EVENT_TYPES.find(([value]) => value === event.event_type)?.[1] ?? "Registro de RH";
 }
 
-function eventTone(event: HistoryEvent): EventTone {
-  if (event.source === "delivery") return ["damaged", "lost"].includes(event.event_type) ? "negative" : "neutral";
-  if (event.source === "attendance") return NEGATIVE_ATTENDANCE_TYPES.has(event.event_type) ? "negative" : "neutral";
-  if (event.event_type === "recognition") return "positive";
-  if (event.event_type === "suspension") return "negative";
+function eventToneFor(source: EventSource, eventType: string): EventTone {
+  if (source === "delivery") return ["damaged", "lost"].includes(eventType) ? "negative" : "neutral";
+  if (source === "attendance") return NEGATIVE_ATTENDANCE_TYPES.has(eventType) ? "negative" : "neutral";
+  if (eventType === "recognition") return "positive";
+  if (eventType === "suspension") return "negative";
   return "neutral";
+}
+
+function eventTone(event: HistoryEvent): EventTone {
+  return eventToneFor(event.source, event.event_type);
+}
+
+function defaultEventColor(source: EventSource, eventType: string) {
+  return EVENT_TONE_COLORS[eventToneFor(source, eventType)];
 }
 
 function employeeFunction(employee: Employee) {
@@ -113,6 +158,10 @@ function employeeFunction(employee: Employee) {
 
 export default function EmployeeHistoryPage() {
   const [organizationId, setOrganizationId] = useState("");
+  const [colorPreferenceKey, setColorPreferenceKey] = useState("");
+  const [eventColorsReady, setEventColorsReady] = useState(false);
+  const [eventColors, setEventColors] = useState<Record<string, string>>({});
+  const [colorSettingsOpen, setColorSettingsOpen] = useState(false);
   const [employees, setEmployees] = useState<Employee[]>([]);
   const [events, setEvents] = useState<HistoryEvent[]>([]);
   const [totalCount, setTotalCount] = useState(0);
@@ -174,14 +223,27 @@ export default function EmployeeHistoryPage() {
       if (!active) return;
       if (employeeError) setError("Não foi possível carregar os colaboradores. Confirme se a migração do histórico foi aplicada.");
       else {
+        const preferenceKey = `employee-history-event-colors:${profile.organization_id}:${auth.user.id}`;
         setOrganizationId(profile.organization_id);
         setEmployees((data ?? []) as Employee[]);
+        setEventColors(readEventColorPreferences(preferenceKey));
+        setColorPreferenceKey(preferenceKey);
+        setEventColorsReady(true);
       }
       setLoading(false);
     }
     void loadEmployees();
     return () => { active = false; };
   }, []);
+
+  useEffect(() => {
+    if (!eventColorsReady || !colorPreferenceKey) return;
+    try {
+      window.localStorage.setItem(colorPreferenceKey, JSON.stringify(eventColors));
+    } catch {
+      // Preferences remain active for this page session if browser storage is unavailable.
+    }
+  }, [colorPreferenceKey, eventColors, eventColorsReady]);
 
   const loadEvents = useCallback(async () => {
     if (!organizationId) return;
@@ -369,10 +431,10 @@ export default function EmployeeHistoryPage() {
     </section>
 
     <section className="panel employee-history-results" aria-labelledby="employee-history-results-heading">
-      <div className="employee-history-results-heading"><div><h2 id="employee-history-results-heading">Linha do tempo</h2><p>Os registros são ordenados pela data da ocorrência; o horário abaixo indica quando o sistema recebeu o lançamento.</p></div><div className="employee-history-results-actions"><span className="employee-history-total">{totalCount} resultado(s)</span><button className="text-action" type="button" onClick={() => setRefreshKey((current) => current + 1)} disabled={loading}><RotateCcw size={14} /> Atualizar</button></div></div>
+      <div className="employee-history-results-heading"><div><h2 id="employee-history-results-heading">Linha do tempo</h2><p>Os registros são ordenados pela data da ocorrência; o horário abaixo indica quando o sistema recebeu o lançamento.</p></div><div className="employee-history-results-actions"><span className="employee-history-total">{totalCount} resultado(s)</span><button className="text-action" type="button" onClick={() => setColorSettingsOpen(true)} disabled={!eventColorsReady}><Palette size={14} /> Personalizar cores</button><button className="text-action" type="button" onClick={() => setRefreshKey((current) => current + 1)} disabled={loading}><RotateCcw size={14} /> Atualizar</button></div></div>
       {loading ? <div className="employee-history-state"><LoaderCircle size={21} className="spin" /> Carregando histórico...</div>
         : events.length === 0 ? <div className="employee-history-empty"><History size={25} /><strong>Nenhum registro encontrado</strong><span>Assiduidade, RH e entregas marcadas aparecem aqui depois de registrados e, no caso das entregas, após a assinatura.</span></div>
-          : <div className="employee-history-days">{groupedEvents.map((group) => <section className="employee-history-day" key={group.date}><div className="employee-history-day-heading"><span>{formatDate(group.date)}</span></div><div className="employee-history-list">{group.items.map((item) => <article className={`employee-history-event tone-${eventTone(item)} ${item.voided_at ? "is-voided" : ""}`} key={`${item.source}-${item.event_id}`}>
+          : <div className="employee-history-days">{groupedEvents.map((group) => <section className="employee-history-day" key={group.date}><div className="employee-history-day-heading"><span>{formatDate(group.date)}</span></div><div className="employee-history-list">{group.items.map((item) => { const colorKey = eventColorKey(item.source, item.event_type); const customColor = eventColors[colorKey]; return <article className={`employee-history-event tone-${eventTone(item)} ${customColor ? "has-custom-color" : ""} ${item.voided_at ? "is-voided" : ""}`} style={customColor ? { "--employee-history-event-color": customColor } as CSSProperties & { "--employee-history-event-color": string } : undefined} key={`${item.source}-${item.event_id}`}>
             <div className="employee-history-event-main">
               <div className="employee-history-event-heading"><div><h3>{item.title}</h3><p>{item.employee_name}{item.registration ? ` · Matrícula ${item.registration}` : ""}{item.function_name ? ` · ${item.function_name}` : ""}</p></div><span className={`employee-history-source source-${item.source}`}>{item.source === "attendance" ? "Assiduidade" : item.source === "delivery" ? "Entrega" : "RH"}</span></div>
               <div className="employee-history-event-meta">
@@ -390,9 +452,18 @@ export default function EmployeeHistoryPage() {
                 {item.source === "hr" && !item.voided_at && <button className="employee-history-cancel-button" type="button" onClick={() => { setVoidTarget(item); setVoidReason(""); }}><X size={14} /> Cancelar registro</button>}
               </div></div>
             </div>
-          </article>)}</div></section>)}</div>}
+          </article>; })}</div></section>)}</div>}
       {!loading && totalCount > PAGE_SIZE && <div className="employee-history-pagination"><span>Página {page + 1} de {pageCount}</span><div><button className="secondary-button" type="button" onClick={() => setPage((current) => Math.max(0, current - 1))} disabled={page === 0}><ChevronLeft size={16} /> Anterior</button><button className="secondary-button" type="button" onClick={() => setPage((current) => Math.min(pageCount - 1, current + 1))} disabled={page + 1 >= pageCount}>Próxima <ChevronRight size={16} /></button></div></div>}
     </section>
+
+    {colorSettingsOpen && <div className="employee-history-modal-backdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) setColorSettingsOpen(false); }}>
+      <section className="employee-history-modal employee-history-color-modal" role="dialog" aria-modal="true" aria-labelledby="employee-history-color-title" aria-describedby="employee-history-color-description" onKeyDown={(event) => { if (event.key === "Escape") setColorSettingsOpen(false); }}>
+        <div className="employee-history-modal-heading"><div><span className="eyebrow">PREFERÊNCIAS DE EXIBIÇÃO</span><h2 id="employee-history-color-title">Personalizar cores do histórico</h2><p id="employee-history-color-description">Escolha uma cor para cada tipo de lançamento. A paleta atual continua como padrão quando nenhuma cor personalizada for definida.</p></div><button className="icon-button" type="button" onClick={() => setColorSettingsOpen(false)} aria-label="Fechar configuração de cores"><X size={19} /></button></div>
+        <p className="employee-history-color-storage-note">As preferências são salvas neste navegador para seu usuário e organização; não alteram a visualização de outras pessoas.</p>
+        <div className="employee-history-color-groups">{EVENT_COLOR_GROUPS.map((group) => <section className="employee-history-color-group" key={group.source}><h3>{group.label}</h3><div className="employee-history-color-options">{group.items.map((item) => { const key = eventColorKey(group.source, item.type); const color = eventColors[key] ?? defaultEventColor(group.source, item.type); return <label className="employee-history-color-option" key={key}><span><strong>{item.label}</strong><small>{color.toUpperCase()}</small></span><input type="color" value={color} aria-label={`Cor para ${item.label}`} onChange={(event) => setEventColors((current) => ({ ...current, [key]: event.target.value }))} /></label>; })}</div></section>)}</div>
+        <div className="employee-history-modal-actions"><button className="secondary-button" type="button" onClick={() => setEventColors({})} disabled={Object.keys(eventColors).length === 0}><RotateCcw size={14} /> Restaurar padrão</button><button className="primary-button" type="button" onClick={() => setColorSettingsOpen(false)}>Concluir</button></div>
+      </section>
+    </div>}
 
     {formOpen && <div className="employee-history-modal-backdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget && !saving) setFormOpen(false); }}>
       <section className="employee-history-modal" role="dialog" aria-modal="true" aria-labelledby="employee-history-form-title" onKeyDown={(event) => { if (event.key === "Escape" && !saving) setFormOpen(false); }}>

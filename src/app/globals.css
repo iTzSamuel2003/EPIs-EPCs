@@ -5572,6 +5572,8 @@ html,body{max-width:100%;overflow-x:hidden}
 .employee-history-event.tone-neutral::before { background: #8b9bb3; box-shadow: 0 0 0 1px #d4dce8; }
 .employee-history-event.tone-negative { border-color: #f3d9d6; background: #fff5f4; }
 .employee-history-event.tone-negative::before { background: #d66a60; box-shadow: 0 0 0 1px #ecc2bd; }
+.employee-history-event.has-custom-color { border-color: color-mix(in srgb, var(--employee-history-event-color) 30%, #fff); background: color-mix(in srgb, var(--employee-history-event-color) 7%, #fff); }
+.employee-history-event.has-custom-color::before { background: var(--employee-history-event-color); box-shadow: 0 0 0 1px color-mix(in srgb, var(--employee-history-event-color) 38%, #fff); }
 .employee-history-event-date{display:flex;align-items:flex-start;align-content:flex-start;flex-wrap:wrap;gap:7px;color:#6c5ac6;font-size:11px}
 .employee-history-event-date svg{flex-shrink:0}
 .employee-history-event-date strong{color:#34435d}
@@ -5599,6 +5601,17 @@ html,body{max-width:100%;overflow-x:hidden}
 .employee-history-pagination .secondary-button{min-height:36px;padding:7px 10px;font-size:10px}
 .employee-history-modal-backdrop{position:fixed;z-index:1200;inset:0;display:grid;place-items:center;overflow:auto;padding:22px;background:#14203980;backdrop-filter:blur(3px)}
 .employee-history-modal{width:min(100%,680px);max-height:min(92vh,900px);overflow:auto;border:1px solid #e5e8ef;border-radius:16px;background:#fff;padding:24px;box-shadow:0 24px 80px #101d3538}
+.employee-history-color-modal{width:min(100%,760px)}
+.employee-history-color-storage-note{margin:-7px 0 15px;border-radius:8px;background:#f7f8fc;padding:10px 12px;color:#77839a;font-size:10px;line-height:1.5}
+.employee-history-color-groups{display:grid;max-height:min(54vh,560px);gap:17px;overflow:auto;padding:2px 3px 3px 0}
+.employee-history-color-group{display:grid;gap:9px}
+.employee-history-color-group h3{margin:0;color:#40506b;font-size:12px}
+.employee-history-color-options{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px}
+.employee-history-color-option{display:flex;min-width:0;align-items:center;justify-content:space-between;gap:10px;border:1px solid #e7eaf1;border-radius:9px;background:#fcfcfe;padding:9px 10px;cursor:pointer}
+.employee-history-color-option>span{display:grid;min-width:0;gap:3px}
+.employee-history-color-option strong{overflow:hidden;color:#43516b;font-size:10px;text-overflow:ellipsis;white-space:nowrap}
+.employee-history-color-option small{color:#909bad;font-size:9px;font-weight:500}
+.employee-history-color-option input[type=color]{flex:0 0 38px;width:38px;height:32px;min-height:32px;border:1px solid #dfe4ed;border-radius:7px;background:#fff;padding:3px;cursor:pointer}
 .employee-history-modal-heading{display:flex;align-items:flex-start;justify-content:space-between;gap:18px;margin-bottom:20px;padding-bottom:16px;border-bottom:1px solid #edf0f5}
 .employee-history-modal-heading h2{margin:6px 0;color:#253651;font-size:19px}
 .employee-history-modal-heading p{margin:0;color:#8591a8;font-size:11px;line-height:1.5}
@@ -5618,7 +5631,7 @@ html,body{max-width:100%;overflow-x:hidden}
 .employee-history-page :where(button,input,select,textarea):focus-visible{outline:3px solid #6954c9;outline-offset:2px}
 @media(max-width:1050px){.employee-history-filter-grid{grid-template-columns:repeat(3,minmax(0,1fr))}.employee-history-filter-employee{grid-column:span 2}}
 @media(max-width:760px){.employee-history-header{align-items:stretch;flex-direction:column}.employee-history-header .primary-button{width:100%;justify-content:center}.employee-history-intro{grid-template-columns:38px minmax(0,1fr)}.employee-history-count{grid-column:2;justify-items:start}.employee-history-event{grid-template-columns:1fr;gap:8px}.employee-history-event-date small{width:auto;padding-left:0}.employee-history-form-grid{grid-template-columns:1fr 1fr}.employee-history-form-grid label:first-child{grid-column:1/-1}}
-@media(max-width:520px){.employee-history-page{gap:13px}.employee-history-filters,.employee-history-results{padding:15px 12px}.employee-history-filter-grid{grid-template-columns:1fr 1fr;gap:9px}.employee-history-filter-employee{grid-column:1/-1}.employee-history-filter-grid label:nth-child(3){grid-column:1/-1}.employee-history-filter-heading,.employee-history-results-heading{align-items:flex-start;flex-direction:column}.employee-history-results-actions{width:100%;justify-content:space-between}.employee-history-event{padding:12px}.employee-history-event-footer{align-items:flex-start;flex-direction:column}.employee-history-pagination{align-items:stretch;flex-direction:column}.employee-history-pagination>div{justify-content:space-between}.employee-history-modal-backdrop{align-items:end;padding:0}.employee-history-modal{width:100%;max-height:94vh;border-radius:16px 16px 0 0;padding:20px 15px}.employee-history-form-grid{grid-template-columns:1fr}.employee-history-form-grid label:first-child{grid-column:auto}.employee-history-modal-actions{flex-direction:column-reverse}.employee-history-modal-actions button{width:100%;justify-content:center}}
+@media(max-width:520px){.employee-history-page{gap:13px}.employee-history-filters,.employee-history-results{padding:15px 12px}.employee-history-filter-grid{grid-template-columns:1fr 1fr;gap:9px}.employee-history-filter-employee{grid-column:1/-1}.employee-history-filter-grid label:nth-child(3){grid-column:1/-1}.employee-history-filter-heading,.employee-history-results-heading{align-items:flex-start;flex-direction:column}.employee-history-results-actions{width:100%;justify-content:space-between;flex-wrap:wrap}.employee-history-event{padding:12px}.employee-history-event-footer{align-items:flex-start;flex-direction:column}.employee-history-pagination{align-items:stretch;flex-direction:column}.employee-history-pagination>div{justify-content:space-between}.employee-history-modal-backdrop{align-items:end;padding:0}.employee-history-modal{width:100%;max-height:94vh;border-radius:16px 16px 0 0;padding:20px 15px}.employee-history-form-grid{grid-template-columns:1fr}.employee-history-form-grid label:first-child{grid-column:auto}.employee-history-color-options{grid-template-columns:1fr}.employee-history-color-groups{max-height:47vh}.employee-history-modal-actions{flex-direction:column-reverse}.employee-history-modal-actions button{width:100%;justify-content:center}}
 
 .asos-page{display:grid;gap:17px}
 .asos-header{align-items:flex-end;justify-content:space-between;gap:18px}
