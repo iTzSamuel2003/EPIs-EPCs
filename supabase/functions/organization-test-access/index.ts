@@ -265,7 +265,7 @@ Deno.serve(async (request) => {
         email,
         password,
         email_confirm: true,
-        user_metadata: { full_name: "Acesso temporário de teste" },
+        user_metadata: { full_name: "Acesso tempor\u00e1rio de teste" },
       });
     if (createError || !createdUser.user) {
       console.error("organization test account creation failed");
