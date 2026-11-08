@@ -18,7 +18,7 @@ function money(value: number) { return `R$ ${value.toFixed(2).replace(".", ",")}
 function date(value: string) { const parsed = value.length === 10 ? new Date(`${value}T00:00:00`) : new Date(value); return parsed.toLocaleDateString("pt-BR"); }
 
 export default function Home() {
-  const { name: currentUserName } = useCurrentUser();
+  const { name: currentUserName, isTestAccess } = useCurrentUser();
   const [materials, setMaterials] = useState<Material[]>([]);
   const [lots, setLots] = useState<Lot[]>([]);
   const [employees, setEmployees] = useState(0);
@@ -81,7 +81,7 @@ export default function Home() {
       <section className="welcome">
         <div>
           <p className="eyebrow">PAINEL OPERACIONAL</p>
-          <h1>Bom dia, {greetingName} <span>👋</span></h1>
+          <h1>{isTestAccess ? "Bom dia" : `Bom dia, ${greetingName}`} <span>👋</span></h1>
           <p className="subtitle">Acompanhe estoque, movimentações e custos em tempo real.</p>
         </div>
         <Link className="primary-button" href="/deliveries"><ArrowUpRight size={17} /> Nova entrega</Link>

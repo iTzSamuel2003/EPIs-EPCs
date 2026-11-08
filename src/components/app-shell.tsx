@@ -18,6 +18,7 @@ type ManagementContext = {
 };
 type ManagementReadAudit = { sessionId: string; resource: string; status: "checking" | "ready" | "error"; message?: string };
 const managementSessionChangeKey = "epis.management-session-change";
+const testAccessEmailSuffix = "@test.epistemporario.invalid";
 const sensitiveManagementRoutes = ["/employees", "/employee-history", "/attendance", "/asos", "/requests", "/returns", "/discounts", "/deliveries", "/training-compliance", "/compliance"];
 
 function getSensitiveManagementRoute(pathname: string) {
@@ -35,9 +36,9 @@ const menuSections: readonly MenuSection[] = [
 const allMenuSections: readonly MenuSection[] = [...menuSections, { label: "Plataforma", items: [["Organizações", Building2, "/settings/organizations"]] }];
 const menu = allMenuSections.flatMap((section) => section.items);
 type SearchResult = { id: string; label: string; detail: string | null; href: string; kind: "Material" | "Funcionário" };
-type CurrentUser = { name: string; role: string; isPlatformAdmin: boolean; platformOnly: boolean };
+type CurrentUser = { name: string; role: string; isPlatformAdmin: boolean; platformOnly: boolean; isTestAccess: boolean };
 
-const CurrentUserContext = createContext<CurrentUser>({ name: "Usuário", role: "user", isPlatformAdmin: false, platformOnly: false });
+const CurrentUserContext = createContext<CurrentUser>({ name: "Usuário", role: "user", isPlatformAdmin: false, platformOnly: false, isTestAccess: false });
 const roleLabels: Record<string, string> = { admin: "Administrador", rh: "RH", tst: "TST", user: "Usuário", platform_admin: "Administrador da plataforma" };
 
 export function useCurrentUser() {
@@ -56,6 +57,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   const [organizationAccess, setOrganizationAccess] = useState<"checking" | "ready" | "missing" | "blocked" | "error">("checking");
   const [blockedLifecycleStatus, setBlockedLifecycleStatus] = useState<string | null>(null);
   const [isPlatformAdmin, setIsPlatformAdmin] = useState(false);
+  const [isTestAccess, setIsTestAccess] = useState(false);
   const [platformOnly, setPlatformOnly] = useState(false);
   const [organizationAccessError, setOrganizationAccessError] = useState("");
   const [managementContext, setManagementContext] = useState<ManagementContext | null>(null);
@@ -109,6 +111,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
     setOrganizationLogo("");
     setOrganizationName("");
     setIsPlatformAdmin(false);
+    setIsTestAccess(false);
     setPlatformOnly(false);
     setAllowedPaths(null);
     setManagementContext(null);
@@ -119,6 +122,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
         router.replace("/login");
         return;
       }
+      setIsTestAccess(data.user.email?.toLowerCase().endsWith(testAccessEmailSuffix) ?? false);
       const supabase = createClient();
       const { data: managementRows, error: managementError } = await supabase.rpc("get_platform_organization_management_context");
       if (cancelled) return;
@@ -425,6 +429,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   function handleMenuKeyDown(event: React.KeyboardEvent<HTMLElement>) { if (event.key !== "Tab" || !mobileMenu) return; const focusable = Array.from(event.currentTarget.querySelectorAll<HTMLElement>('a[href],button:not([disabled]),input:not([disabled]),select:not([disabled]),textarea:not([disabled])')).filter((element) => element.offsetParent !== null); if (!focusable.length) return; const first = focusable[0]; const last = focusable[focusable.length - 1]; if (event.shiftKey && document.activeElement === first) { event.preventDefault(); last.focus(); } else if (!event.shiftKey && document.activeElement === last) { event.preventDefault(); first.focus(); } }
   function closeSearch() { setQuery(""); setResults([]); setSelectedSearchIndex(-1); } function handleSearchKeyDown(event: React.KeyboardEvent<HTMLInputElement>) { if (event.key === "Escape") { closeSearch(); return; } if (!results.length) return; if (event.key === "ArrowDown") { event.preventDefault(); setSelectedSearchIndex((current) => (current + 1) % results.length); } else if (event.key === "ArrowUp") { event.preventDefault(); setSelectedSearchIndex((current) => (current - 1 + results.length) % results.length); } else if (event.key === "Enter" && selectedSearchIndex >= 0) { event.preventDefault(); router.push(results[selectedSearchIndex].href); closeSearch(); } }
   const userInitials = getInitials(currentUserName);
+  const displayedUserName = isTestAccess ? "Acesso de teste" : currentUserName;
   const userRoleLabel = isPlatformAdmin ? roleLabels.platform_admin : roleLabels[currentUserRole] ?? "Usuário";
   const managementAuditReady = !managementAuditRoute || (
     managementReadAudit?.sessionId === managementContext?.management_session_id
@@ -446,7 +451,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   }
 
   return (
-    <CurrentUserContext.Provider value={{ name: currentUserName, role: currentUserRole, isPlatformAdmin, platformOnly }}>
+    <CurrentUserContext.Provider value={{ name: currentUserName, role: currentUserRole, isPlatformAdmin, platformOnly, isTestAccess }}>
       <div className="app-shell">
         {mobileMenu && <button type="button" className="sidebar-backdrop" onClick={() => setMobileMenu(false)} aria-label="Fechar menu" />}
         <aside id="main-navigation" className={`sidebar ${mobileMenu ? "open" : ""}`} aria-label="Navegação principal" onKeyDown={handleMenuKeyDown}>
@@ -478,7 +483,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
             {sessionError && <span className="login-error" role="alert">{sessionError}</span>}
             <div className="user-mini">
               <div className="avatar avatar-dark">{userInitials}</div>
-              <div><strong>{currentUserName}</strong><small>{userRoleLabel}</small></div>
+              <div><strong title={displayedUserName}>{displayedUserName}</strong><small>{userRoleLabel}</small></div>
               <button type="button" className="icon-button" onClick={handleSignOut} aria-label="Sair da conta" title="Sair" disabled={signingOut} aria-busy={signingOut}><LogOut size={16} aria-hidden="true" /></button>
               <ChevronDown size={15} aria-hidden="true" />
             </div>
@@ -500,7 +505,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
               <Link className="icon-button notification" href="/validities" aria-label="Ver alertas de validade"><Bell size={19} aria-hidden="true" /><i /></Link>
               <div className="profile">
                 <div className="avatar avatar-blue">{userInitials}</div>
-                <div><strong>{currentUserName}</strong><small>{userRoleLabel}</small></div>
+                <div><strong title={displayedUserName}>{displayedUserName}</strong><small>{userRoleLabel}</small></div>
                 <ChevronDown size={15} aria-hidden="true" />
               </div>
             </div>
