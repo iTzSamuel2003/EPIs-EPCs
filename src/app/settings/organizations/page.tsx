@@ -51,6 +51,23 @@ type OrganizationMember = {
   role: "admin" | "rh" | "tst" | "user";
 };
 
+type OrganizationTestAccess = {
+  organization_id: string;
+  user_id: string;
+  login_name: string;
+  expires_at: string;
+  revoked_at: string | null;
+  is_active: boolean;
+};
+
+type IssuedTestCredentials = {
+  login_name: string;
+  password: string;
+  expires_at: string;
+};
+
+type TestAccessConfirmation = { organizationId: string; action: "rotate" | "revoke" };
+
 type ConfirmationAction = {
   organizationId: string;
   kind: "suspend" | "reactivate" | "delete" | "revoke";
@@ -159,15 +176,24 @@ export default function OrganizationsSettingsPage() {
   const [contractTemplateLoading, setContractTemplateLoading] = useState(false);
   const [contractTemplateApplyingId, setContractTemplateApplyingId] = useState<string | null>(null);
   const [contractTemplateConfirmationId, setContractTemplateConfirmationId] = useState<string | null>(null);
+  const [testAccessByOrganization, setTestAccessByOrganization] = useState<Record<string, OrganizationTestAccess>>({});
+  const [testAccessLoading, setTestAccessLoading] = useState(false);
+  const [testAccessError, setTestAccessError] = useState("");
+  const [testAccessBusyOrganizationId, setTestAccessBusyOrganizationId] = useState<string | null>(null);
+  const [testAccessConfirmation, setTestAccessConfirmation] = useState<TestAccessConfirmation | null>(null);
+  const [issuedTestCredentials, setIssuedTestCredentials] = useState<Record<string, IssuedTestCredentials>>({});
+  const [copiedTestCredentialsOrganizationId, setCopiedTestCredentialsOrganizationId] = useState<string | null>(null);
 
   const loadOrganizations = useCallback(async () => {
     setLoading(true);
     setError("");
     const client = createClient();
     setContractTemplateLoading(true);
-    const [organizationsResult, templateStatusResult] = await Promise.all([
+    setTestAccessLoading(true);
+    const [organizationsResult, templateStatusResult, testAccessResult] = await Promise.all([
       client.rpc("list_platform_organizations"),
       client.rpc("list_platform_contract_template_status"),
+      client.rpc("list_platform_organization_test_access"),
     ]);
     const { data, error: loadError } = organizationsResult;
     if (templateStatusResult.error) {
@@ -181,6 +207,17 @@ export default function OrganizationsSettingsPage() {
       setContractTemplateError("");
     }
     setContractTemplateLoading(false);
+    if (testAccessResult.error) {
+      setTestAccessByOrganization({});
+      setTestAccessError(testAccessResult.error.code === "PGRST202"
+        ? "O acesso de teste ficará disponível após a migração correspondente do banco."
+        : "Não foi possível consultar os acessos de teste. Atualize a página e tente novamente.");
+    } else {
+      const accesses = (testAccessResult.data ?? []) as OrganizationTestAccess[];
+      setTestAccessByOrganization(Object.fromEntries(accesses.map((access) => [access.organization_id, access])));
+      setTestAccessError("");
+    }
+    setTestAccessLoading(false);
     if (loadError) {
       setError("Não foi possível carregar as organizações. Confirme se sua conta é administradora da plataforma e se a migração foi aplicada.");
       setOrganizations([]);
@@ -364,6 +401,60 @@ export default function OrganizationsSettingsPage() {
     }
   }
 
+  async function manageOrganizationTestAccess(organization: Organization, action: "generate" | "revoke") {
+    setTestAccessBusyOrganizationId(organization.id);
+    if (action === "generate") {
+      setIssuedTestCredentials((current) => Object.fromEntries(Object.entries(current).filter(([id]) => id !== organization.id)));
+      setCopiedTestCredentialsOrganizationId(null);
+    }
+    setTestAccessError("");
+    setError("");
+    setSuccess("");
+    try {
+      const { data, error: requestError } = await createClient().functions.invoke("organization-test-access", {
+        body: { action, organization_id: organization.id },
+      });
+      if (requestError || data?.error) {
+        const message = data?.error || "Não foi possível concluir a operação de acesso de teste.";
+        await Promise.all([loadOrganizations(), loadOrganizationMembers(organization.id)]);
+        setError(message);
+        return;
+      }
+      if (action === "generate") {
+        if (typeof data?.login_name !== "string" || typeof data?.password !== "string" || typeof data?.expires_at !== "string") {
+          setError("A conta foi processada, mas não foi possível exibir as credenciais. Tente gerar uma nova senha.");
+          return;
+        }
+        setIssuedTestCredentials((current) => ({ ...current, [organization.id]: data as IssuedTestCredentials }));
+        setSuccess(data.cleanup_warning
+          ? `Acesso temporário de ${organization.name} gerado. ${data.cleanup_warning}`
+          : `Acesso temporário de ${organization.name} gerado. A senha ficará visível somente nesta sessão.`);
+      } else {
+        setIssuedTestCredentials((current) => Object.fromEntries(Object.entries(current).filter(([id]) => id !== organization.id)));
+        setSuccess(`Acesso de teste de ${organization.name} revogado e removido.`);
+      }
+      setTestAccessConfirmation(null);
+      await Promise.all([loadOrganizations(), loadOrganizationMembers(organization.id)]);
+    } catch {
+      setError("Não foi possível concluir a operação de acesso de teste. Tente novamente.");
+    } finally {
+      setTestAccessBusyOrganizationId(null);
+    }
+  }
+
+  async function copyTestCredentials(organizationId: string) {
+    const credentials = issuedTestCredentials[organizationId];
+    if (!credentials) return;
+    const expiry = new Date(credentials.expires_at).toLocaleString("pt-BR");
+    try {
+      await navigator.clipboard.writeText(`Usuário: ${credentials.login_name}\nSenha temporária: ${credentials.password}\nVálido até: ${expiry}`);
+      setCopiedTestCredentialsOrganizationId(organizationId);
+      window.setTimeout(() => setCopiedTestCredentialsOrganizationId((current) => current === organizationId ? null : current), 2500);
+    } catch {
+      setError("Não foi possível copiar as credenciais automaticamente.");
+    }
+  }
+
   async function confirmAction() {
     if (!confirmation) return;
     const { organizationId, kind, invitationId, reason } = confirmation;
@@ -484,6 +575,10 @@ export default function OrganizationsSettingsPage() {
             const templateStatus = contractTemplateStatuses[organization.id];
             const templateIsOutdated = Boolean(templateStatus && !templateStatus.is_current && !templateStatus.is_source_organization);
             const isApplyingTemplate = contractTemplateApplyingId === organization.id;
+            const testAccess = testAccessByOrganization[organization.id];
+            const issuedCredentials = issuedTestCredentials[organization.id];
+            const isBusyWithTestAccess = testAccessBusyOrganizationId === organization.id;
+            const isConfirmingTestAccess = testAccessConfirmation?.organizationId === organization.id;
 
             return <article className={`access-role-card organization-card ${isOpen ? "is-open" : ""}`} key={organization.id}>
               <button className="access-role-summary organization-summary" type="button" onClick={() => toggleOrganization(organization.id)} aria-expanded={isOpen} aria-controls={isOpen ? membersPanelId : undefined}>
@@ -547,6 +642,25 @@ export default function OrganizationsSettingsPage() {
                   <div className="organization-section-heading"><div><h3>Dados da organização</h3><p>Organização ativa; edição operacional pela plataforma depende do modo de gestão da próxima etapa.</p></div></div>
                   <dl className="organization-readonly-grid"><div><dt>CNPJ</dt><dd>{organization.cnpj || "Não informado"}</dd></div><div><dt>Telefone</dt><dd>{organization.phone || "Não informado"}</dd></div><div><dt>Responsável SESMT</dt><dd>{organization.sesmt_manager || "Não informado"}</dd></div><div><dt>Endereço</dt><dd>{organization.address || "Não informado"}</dd></div></dl>
                 </section>}
+
+                <section className="organization-setup-section" aria-labelledby={`organization-test-access-${organization.id}`}>
+                  <div className="organization-section-heading"><div><h3 id={`organization-test-access-${organization.id}`}>Acesso temporário de teste</h3><p>Conta de administrador somente desta organização, útil para validar o sistema sem cadastrar um e-mail real. Expira em 7 dias.</p></div>{testAccess && <span className={`organization-test-access-status ${testAccess.is_active ? "is-active" : testAccess.revoked_at ? "is-revoked" : "is-expired"}`}>{testAccess.is_active ? "Ativo" : testAccess.revoked_at ? "Revogado" : organization.lifecycle_status === "suspended" ? "Suspenso" : "Expirado"}</span>}</div>
+                  {testAccessError && <p className="organization-test-access-note" role="status">{testAccessError}</p>}
+                  {testAccess && <p className="organization-current-invite">Usuário: <strong>{testAccess.login_name}</strong> · Válido até {new Date(testAccess.expires_at).toLocaleString("pt-BR")}</p>}
+                  {issuedCredentials && <div className="organization-test-credentials" role="status" aria-live="polite">
+                    <div><strong>Guarde a senha temporária agora</strong><p>Por segurança, a senha não é armazenada para consulta futura. Se ela for perdida, gere uma nova; a anterior deixará de funcionar.</p></div>
+                    <dl><div><dt>Usuário</dt><dd>{issuedCredentials.login_name}</dd></div><div><dt>Senha temporária</dt><dd><code>{issuedCredentials.password}</code></dd></div><div><dt>Expira em</dt><dd>{new Date(issuedCredentials.expires_at).toLocaleString("pt-BR")}</dd></div></dl>
+                    <button className="secondary-button" type="button" onClick={() => void copyTestCredentials(organization.id)}>{copiedTestCredentialsOrganizationId === organization.id ? <Check size={15} aria-hidden="true" /> : <Copy size={15} aria-hidden="true" />}{copiedTestCredentialsOrganizationId === organization.id ? "Credenciais copiadas" : "Copiar credenciais"}</button>
+                  </div>}
+                  {isConfirmingTestAccess && <div className="organization-test-access-confirm" role="group" aria-labelledby={`organization-test-access-confirm-${organization.id}`}>
+                    <div><h4 id={`organization-test-access-confirm-${organization.id}`}>{testAccessConfirmation?.action === "revoke" ? "Revogar o acesso de teste?" : "Gerar outro acesso?"}</h4><p>{testAccessConfirmation?.action === "revoke" ? "A conta será removida e sessões existentes perderão acesso aos dados desta organização." : "Será criado um novo usuário e senha; a conta anterior e suas sessões perderão acesso. O prazo de 7 dias começará novamente."}</p></div>
+                    <div className="organization-test-access-actions"><button className="secondary-button" type="button" onClick={() => setTestAccessConfirmation(null)} disabled={isBusyWithTestAccess}>Cancelar</button><button className={testAccessConfirmation?.action === "revoke" ? "organization-text-action organization-danger-action" : "primary-button"} type="button" onClick={() => void manageOrganizationTestAccess(organization, testAccessConfirmation?.action === "revoke" ? "revoke" : "generate")} disabled={isBusyWithTestAccess} aria-busy={isBusyWithTestAccess}>{isBusyWithTestAccess ? "Processando..." : testAccessConfirmation?.action === "revoke" ? "Revogar acesso" : "Gerar novo acesso"}</button></div>
+                  </div>}
+                  <div className="organization-test-access-actions">
+                    <button className="secondary-button" type="button" onClick={() => testAccess?.is_active ? setTestAccessConfirmation({ organizationId: organization.id, action: "rotate" }) : void manageOrganizationTestAccess(organization, "generate")} disabled={organization.lifecycle_status === "suspended" || testAccessLoading || Boolean(testAccessError) || isBusyWithTestAccess} aria-busy={isBusyWithTestAccess}>{isBusyWithTestAccess ? "Processando..." : organization.lifecycle_status === "suspended" ? "Organização suspensa" : testAccess?.is_active ? "Gerar novo acesso" : testAccess ? "Renovar acesso de teste" : "Gerar acesso de teste"}</button>
+                    {testAccess && <button className="organization-text-action organization-danger-action" type="button" onClick={() => setTestAccessConfirmation({ organizationId: organization.id, action: "revoke" })} disabled={isBusyWithTestAccess}>{testAccess.revoked_at ? "Tentar remover conta" : "Revogar e remover conta"}</button>}
+                  </div>
+                </section>
 
                 <section className="organization-setup-section" aria-label="Ações da organização">
                   <div className="organization-lifecycle-actions">
