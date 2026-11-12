@@ -102,9 +102,12 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     if (publicRoute || !allowedPaths || pathname === "/login" || organizationAccess === "blocked") return;
     const protectedPath = pathname === "/portal-qr" ? "/settings" : pathname;
-    const permitted = allowedPaths.some((path) => protectedPath === path || (path !== "/" && protectedPath.startsWith(`${path}/`)));
+    const tstEmployeeRoute = currentUserRole === "tst" && protectedPath.startsWith("/employees")
+      ? protectedPath === "/employees" || /^\/employees\/[^/]+\/profile$/.test(protectedPath)
+      : null;
+    const permitted = tstEmployeeRoute ?? allowedPaths.some((path) => protectedPath === path || (path !== "/" && protectedPath.startsWith(`${path}/`)));
     if (!permitted) router.replace(allowedPaths[0] ?? "/no-access");
-  }, [allowedPaths, organizationAccess, pathname, publicRoute, router]);
+  }, [allowedPaths, currentUserRole, organizationAccess, pathname, publicRoute, router]);
   useEffect(() => {
     if (publicRoute) return;
     const supabase = createClient();
@@ -365,7 +368,9 @@ export function AppShell({ children }: { children: React.ReactNode }) {
       try {
         const [materialResponse, employeeResponse] = await Promise.all([
           supabase.from("materials").select("id,name,internal_code").or(`name.ilike.${pattern},internal_code.ilike.${pattern}`).limit(5),
-          supabase.from("employees").select("id,full_name,registration").or(`full_name.ilike.${pattern},registration.ilike.${pattern}`).limit(5),
+          currentUserRole === "tst"
+            ? supabase.rpc("get_tst_employee_directory", { p_employee_id: null, p_search: query.trim() })
+            : supabase.from("employees").select("id,full_name,registration").or(`full_name.ilike.${pattern},registration.ilike.${pattern}`).limit(5),
         ]);
         if (cancelled || searchRequestRef.current !== requestId) return;
         const failedSources = [
@@ -379,9 +384,12 @@ export function AppShell({ children }: { children: React.ReactNode }) {
           return;
         }
         setSearchError(null);
+        const employeeResults = ((employeeResponse.data ?? []) as Array<{ id: string; full_name: string; registration: string | null }>)
+          .filter((item) => currentUserRole !== "tst" || `${item.full_name} ${item.registration ?? ""}`.toLocaleLowerCase("pt-BR").includes(query.trim().toLocaleLowerCase("pt-BR")))
+          .slice(0, 5);
         setResults([
           ...((materialResponse.data ?? []).map((item) => ({ id: item.id, label: item.name, detail: item.internal_code || "Código não informado", href: `/materials?search=${encodeURIComponent(item.name)}`, kind: "Material" as const }))),
-          ...((employeeResponse.data ?? []).map((item) => ({ id: item.id, label: item.full_name, detail: item.registration, href: `/employees/${item.id}`, kind: "Funcionário" as const }))),
+          ...(employeeResults.map((item) => ({ id: item.id, label: item.full_name, detail: item.registration, href: currentUserRole === "tst" ? `/employees/${item.id}/profile` : `/employees/${item.id}`, kind: "Funcionário" as const }))),
         ]);
         setSelectedSearchIndex(-1);
       } catch {
@@ -395,7 +403,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
       cancelled = true;
       window.clearTimeout(timer);
     };
-  }, [publicRoute, query]);
+  }, [currentUserRole, publicRoute, query]);
   if (publicRoute) return <>{children}</>;
   async function handleSignOut() {
     if (signingOut) return;

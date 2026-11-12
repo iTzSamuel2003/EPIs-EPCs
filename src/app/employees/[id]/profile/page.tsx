@@ -9,6 +9,7 @@ import { getCurrentOrganizationProfile } from "@/lib/organization-context";
 import { friendlyError } from "@/lib/ui-feedback";
 import { EmployeeNavigation } from "@/components/employee-navigation";
 import { FeedbackMessage } from "@/components/feedback-message";
+import { useCurrentUser } from "@/components/app-shell";
 
 type Profile = { shirt_size: string; pants_size: string; shoe_size: string; helmet_size: string; glove_size: string; uniform_notes: string; completed_by_employee: boolean };
 type MeasurementRequest = { token: string; expires_at: string; completed_at: string | null };
@@ -16,6 +17,8 @@ const emptyProfile: Profile = { shirt_size: "", pants_size: "", shoe_size: "", h
 
 export default function EmployeeProfilePage() {
   const { id } = useParams<{ id: string }>();
+  const { role } = useCurrentUser();
+  const isTst = role === "tst";
   const [name, setName] = useState(""); const [profile, setProfile] = useState<Profile>(emptyProfile); const [request, setRequest] = useState<MeasurementRequest | null>(null); const [loading, setLoading] = useState(true); const [saving, setSaving] = useState(false); const [sharing, setSharing] = useState(false); const [error, setError] = useState(""); const [success, setSuccess] = useState(""); const [confirmingRevoke, setConfirmingRevoke] = useState(false);
   const loadVersion = useRef(0);
   const mountedRef = useRef(true);
@@ -24,6 +27,23 @@ export default function EmployeeProfilePage() {
     setLoading(true); setError(""); setSuccess("");
     try {
       const supabase = createClient();
+      if (isTst) {
+        const { data, error: directoryError } = await supabase.rpc("get_tst_employee_directory", { p_employee_id: id });
+        if (!mountedRef.current || version !== loadVersion.current) return;
+        const employee = data?.[0];
+        if (directoryError || !employee) { setError(friendlyError(directoryError, "Funcionário não encontrado nas suas bases.")); return; }
+        setName(employee.full_name);
+        setProfile({
+          ...emptyProfile,
+          shirt_size: employee.shirt_size ?? "",
+          pants_size: employee.pants_size ?? "",
+          shoe_size: employee.shoe_size ?? "",
+          helmet_size: employee.helmet_size ?? "",
+          glove_size: employee.glove_size ?? "",
+        });
+        setRequest(null);
+        return;
+      }
       const [{ data: employee, error: employeeError }, { data: profileData, error: profileDataError }, { data: requestData, error: requestError }] = await Promise.all([
         supabase.from("employees").select("full_name").eq("id", id).single(), supabase.from("employee_profiles").select("shirt_size,pants_size,shoe_size,helmet_size,glove_size,uniform_notes,completed_by_employee").eq("employee_id", id).maybeSingle(), supabase.from("employee_measurement_requests").select("token,expires_at,completed_at").eq("employee_id", id).maybeSingle(),
       ]);
@@ -35,12 +55,12 @@ export default function EmployeeProfilePage() {
     } finally {
       if (mountedRef.current && version === loadVersion.current) setLoading(false);
     }
-  }, [id]);
+  }, [id, isTst]);
   useEffect(() => { mountedRef.current = true; void load(); return () => { mountedRef.current = false; }; }, [load]);
   function update(field: keyof Profile, value: string | boolean) { setProfile((current) => ({ ...current, [field]: value })); }
   async function saveProfile(event: FormEvent) {
     event.preventDefault();
-    if (saving) return;
+    if (isTst || saving) return;
     setSaving(true); setError(""); setSuccess("");
     try {
       const supabase = createClient();
@@ -59,7 +79,7 @@ export default function EmployeeProfilePage() {
     }
   }
   async function createRequest() {
-    if (sharing) return;
+    if (isTst || sharing) return;
     setSharing(true); setError(""); setSuccess("");
     try {
       const supabase = createClient();
@@ -78,7 +98,7 @@ export default function EmployeeProfilePage() {
     }
   }
   async function revokeRequest() {
-    if (sharing) return;
+    if (isTst || sharing) return;
     setSharing(true); setError("");
     try {
       const { error: revokeError } = await createClient().from("employee_measurement_requests").delete().eq("employee_id", id);
@@ -94,9 +114,33 @@ export default function EmployeeProfilePage() {
   const publicBaseUrl = (process.env.NEXT_PUBLIC_APP_URL ?? "https://epis-epcs.vercel.app").replace(/\/$/, ""); const shareLink = !request ? "" : `${publicBaseUrl}/medidas/${request.token}`; const shareMessage = `Olá, ${name}! Preencha suas medidas de uniforme e equipamentos neste link: ${shareLink}`;
   if (loading) return <main className="module-shell"><div className="module-loading">Carregando perfil...</div></main>;
   if (error && !name) return <main className="module-shell"><section className="panel runtime-error-card"><FeedbackMessage onRetry={() => void load()}>{error}</FeedbackMessage></section><Link className="secondary-button" href="/employees"><ArrowLeft size={16} /> Funcionários</Link></main>;
-  return <main className="module-shell"><header className="module-header"><div><Link className="employee-back-link" href="/employees"><ArrowLeft size={14} /> Funcionários</Link><p className="eyebrow">PERFIL DO COLABORADOR</p><h1>Medidas</h1><p className="module-subtitle">Dados usados automaticamente na ficha de materiais de {name}.</p></div><div className="employee-header-tools"><EmployeeNavigation id={id} current="profile" /></div></header>{success && <div className="feedback success-feedback"><Check size={17} /> {success}</div>}{error && <div className="feedback error-feedback"><X size={17} /> {error}</div>}
-    <section className="panel edit-employee-card"><div className="form-section-title"><h2>Formulário para o colaborador</h2><p>Gere um link individual e envie por WhatsApp ou e-mail. O colaborador preenche somente as próprias medidas.</p></div>{request ? <div className="measurement-share"><div className="measurement-request-status"><strong>{request.completed_at ? "Preenchido pelo colaborador" : "Link pendente de preenchimento"}</strong><span>{request.completed_at ? `Recebido em ${new Date(request.completed_at).toLocaleDateString("pt-BR")}` : `Link gerado · válido até ${new Date(request.expires_at).toLocaleDateString("pt-BR")}`}</span></div><div className="share-actions"><button type="button" className="secondary-button" onClick={() => void copyLink()}><Copy size={16} /> Copiar link</button><a className="secondary-button whatsapp-button" href={`https://wa.me/?text=${encodeURIComponent(shareMessage)}`} target="_blank" rel="noreferrer"><MessageCircle size={16} /> WhatsApp</a><a className="secondary-button" href={`mailto:?subject=${encodeURIComponent("Preenchimento de medidas")}&body=${encodeURIComponent(shareMessage)}`}><Mail size={16} /> E-mail</a><button type="button" className="secondary-button" onClick={() => void createRequest()} disabled={sharing}>{sharing ? "Gerando..." : "Gerar novo link"}<Send size={16} /></button><button type="button" className="secondary-button danger-button" onClick={() => { if (confirmingRevoke) void revokeRequest(); else setConfirmingRevoke(true); }} disabled={sharing}><Ban size={16} /> {confirmingRevoke ? "Confirmar revogação" : "Revogar link"}</button></div></div> : <button type="button" className="primary-button" onClick={() => void createRequest()} disabled={sharing}>{sharing ? "Gerando..." : "Gerar link de medidas"}<Send size={16} /></button>}</section>
-    <section className="panel edit-employee-card"><form className="material-form" onSubmit={saveProfile}><div className="form-section-title"><h2>Tamanhos e medidas</h2><p>Preencha manualmente ou use o formulário enviado ao colaborador.</p></div><div className="form-grid three"><label>Camiseta / uniforme<input value={profile.shirt_size} onChange={(e) => update("shirt_size", e.target.value)} placeholder="Ex.: M" /></label><label>Calça<input value={profile.pants_size} onChange={(e) => update("pants_size", e.target.value)} placeholder="Ex.: 42" /></label><label>Calçado / Botina<input value={profile.shoe_size} onChange={(e) => update("shoe_size", e.target.value)} placeholder="Ex.: 40" /></label></div><div className="form-grid two"><label>Capacete<input value={profile.helmet_size} onChange={(e) => update("helmet_size", e.target.value)} placeholder="Ex.: 58" /></label><label>Luvas<input value={profile.glove_size} onChange={(e) => update("glove_size", e.target.value)} placeholder="Ex.: 9 / G" /></label></div><label>Observações de medidas<textarea rows={3} value={profile.uniform_notes} onChange={(e) => update("uniform_notes", e.target.value)} placeholder="Preferências ou medidas especiais" /></label><label className="checkbox-line"><input type="checkbox" checked={profile.completed_by_employee} onChange={(e) => update("completed_by_employee", e.target.checked)} /> Dados preenchidos pelo próprio colaborador</label><div className="modal-actions"><button className="primary-button" disabled={saving}>{saving ? "Salvando..." : "Salvar medidas"}<Save size={16} /></button></div></form></section>
+  return <main className="module-shell">
+    <header className="module-header">
+      <div><Link className="employee-back-link" href="/employees"><ArrowLeft size={14} /> Funcionários</Link><p className="eyebrow">PERFIL DO COLABORADOR</p><h1>Medidas</h1><p className="module-subtitle">Dados usados automaticamente na ficha de materiais de {name}.</p></div>
+      {!isTst && <div className="employee-header-tools"><EmployeeNavigation id={id} current="profile" /></div>}
+    </header>
+    {success && <div className="feedback success-feedback"><Check size={17} /> {success}</div>}
+    {error && <div className="feedback error-feedback"><X size={17} /> {error}</div>}
+    {!isTst && <section className="panel edit-employee-card"><div className="form-section-title"><h2>Formulário para o colaborador</h2><p>Gere um link individual e envie por WhatsApp ou e-mail. O colaborador preenche somente as próprias medidas.</p></div>{request ? <div className="measurement-share"><div className="measurement-request-status"><strong>{request.completed_at ? "Preenchido pelo colaborador" : "Link pendente de preenchimento"}</strong><span>{request.completed_at ? `Recebido em ${new Date(request.completed_at).toLocaleDateString("pt-BR")}` : `Link gerado · válido até ${new Date(request.expires_at).toLocaleDateString("pt-BR")}`}</span></div><div className="share-actions"><button type="button" className="secondary-button" onClick={() => void copyLink()}><Copy size={16} /> Copiar link</button><a className="secondary-button whatsapp-button" href={`https://wa.me/?text=${encodeURIComponent(shareMessage)}`} target="_blank" rel="noreferrer"><MessageCircle size={16} /> WhatsApp</a><a className="secondary-button" href={`mailto:?subject=${encodeURIComponent("Preenchimento de medidas")}&body=${encodeURIComponent(shareMessage)}`}><Mail size={16} /> E-mail</a><button type="button" className="secondary-button" onClick={() => void createRequest()} disabled={sharing}>{sharing ? "Gerando..." : "Gerar novo link"}<Send size={16} /></button><button type="button" className="secondary-button danger-button" onClick={() => { if (confirmingRevoke) void revokeRequest(); else setConfirmingRevoke(true); }} disabled={sharing}><Ban size={16} /> {confirmingRevoke ? "Confirmar revogação" : "Revogar link"}</button></div></div> : <button type="button" className="primary-button" onClick={() => void createRequest()} disabled={sharing}>{sharing ? "Gerando..." : "Gerar link de medidas"}<Send size={16} /></button>}</section>}
+    <section className="panel edit-employee-card">
+      {isTst ? <>
+        <div className="form-section-title"><h2>Tamanhos e medidas</h2><p>Consulta somente leitura das medidas disponíveis para este funcionário.</p></div>
+        <div className="form-grid three">
+          <div><strong>Camiseta / uniforme</strong><p>{profile.shirt_size || "Não informado"}</p></div>
+          <div><strong>Calça</strong><p>{profile.pants_size || "Não informado"}</p></div>
+          <div><strong>Calçado / botina</strong><p>{profile.shoe_size || "Não informado"}</p></div>
+          <div><strong>Capacete</strong><p>{profile.helmet_size || "Não informado"}</p></div>
+          <div><strong>Luvas</strong><p>{profile.glove_size || "Não informado"}</p></div>
+        </div>
+      </> : <form className="material-form" onSubmit={saveProfile}>
+        <div className="form-section-title"><h2>Tamanhos e medidas</h2><p>Preencha manualmente ou use o formulário enviado ao colaborador.</p></div>
+        <div className="form-grid three"><label>Camiseta / uniforme<input value={profile.shirt_size} onChange={(e) => update("shirt_size", e.target.value)} placeholder="Ex.: M" /></label><label>Calça<input value={profile.pants_size} onChange={(e) => update("pants_size", e.target.value)} placeholder="Ex.: 42" /></label><label>Calçado / Botina<input value={profile.shoe_size} onChange={(e) => update("shoe_size", e.target.value)} placeholder="Ex.: 40" /></label></div>
+        <div className="form-grid two"><label>Capacete<input value={profile.helmet_size} onChange={(e) => update("helmet_size", e.target.value)} placeholder="Ex.: 58" /></label><label>Luvas<input value={profile.glove_size} onChange={(e) => update("glove_size", e.target.value)} placeholder="Ex.: 9 / G" /></label></div>
+        <label>Observações de medidas<textarea rows={3} value={profile.uniform_notes} onChange={(e) => update("uniform_notes", e.target.value)} placeholder="Preferências ou medidas especiais" /></label>
+        <label className="checkbox-line"><input type="checkbox" checked={profile.completed_by_employee} onChange={(e) => update("completed_by_employee", e.target.checked)} /> Dados preenchidos pelo próprio colaborador</label>
+        <div className="modal-actions"><button className="primary-button" disabled={saving}>{saving ? "Salvando..." : "Salvar medidas"}<Save size={16} /></button></div>
+      </form>}
+    </section>
     
   </main>;
 }

@@ -6,6 +6,6 @@ export const PAGE_PERMISSIONS = [
 export const rolePageDefaults: Record<string, string[]> = {
   admin: PAGE_PERMISSIONS.map(([path]) => path),
   rh: ["/", "/bases", "/employees", "/deliveries", "/returns", "/transfers", "/discounts", "/attendance", "/employee-history", "/asos", "/requests", "/stock", "/validities", "/reports", "/help"],
-  tst: ["/", "/materials", "/entries", "/deliveries", "/returns", "/transfers", "/stock", "/validities", "/ca", "/contract-requirements", "/tests", "/training-compliance", "/compliance", "/costs", "/reports", "/movements", "/help"],
+  tst: ["/", "/materials", "/employees", "/entries", "/deliveries", "/returns", "/transfers", "/stock", "/validities", "/ca", "/contract-requirements", "/tests", "/training-compliance", "/compliance", "/costs", "/reports", "/movements", "/help"],
   user: ["/", "/help"],
 };
