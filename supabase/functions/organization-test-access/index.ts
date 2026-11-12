@@ -16,6 +16,7 @@ type OrganizationSummary = {
   name: string;
   lifecycle_status: string;
 };
+type TestAccessRole = "rh" | "tst" | "user";
 type TestAccessRecord = {
   organization_id: string;
   user_id: string;
@@ -23,7 +24,12 @@ type TestAccessRecord = {
   expires_at: string;
   revoked_at: string | null;
   is_active: boolean;
+  role: TestAccessRole;
 };
+
+function isTestAccessRole(value: unknown): value is TestAccessRole {
+  return value === "rh" || value === "tst" || value === "user";
+}
 
 function corsHeaders(origin: string | null) {
   return {
@@ -124,13 +130,13 @@ Deno.serve(async (request) => {
     return respond({ error: "Entre novamente para continuar." }, 401, origin);
   }
 
-  let body: { action?: unknown; organization_id?: unknown };
+  let body: { action?: unknown; organization_id?: unknown; role?: unknown };
   try {
     const parsed: unknown = await request.json();
     if (!parsed || typeof parsed !== "object") {
       return respond({ error: "Solicitação inválida." }, 400, origin);
     }
-    body = parsed as { action?: unknown; organization_id?: unknown };
+    body = parsed as { action?: unknown; organization_id?: unknown; role?: unknown };
   } catch {
     return respond({ error: "Solicitação inválida." }, 400, origin);
   }
@@ -150,6 +156,16 @@ Deno.serve(async (request) => {
       origin,
     );
   }
+  if (action === "generate" && !isTestAccessRole(body.role)) {
+    return respond(
+      { error: "Escolha uma função válida para o acesso de teste. Administrador não pode ser usado." },
+      400,
+      origin,
+    );
+  }
+  const requestedRole: TestAccessRole = isTestAccessRole(body.role)
+    ? body.role
+    : "tst";
 
   const auth = { persistSession: false, autoRefreshToken: false };
   const userClient = createClient(supabaseUrl, publishableKey, {
@@ -285,12 +301,14 @@ Deno.serve(async (request) => {
         p_organization_id: organizationId,
         p_user_id: userId,
         p_login_name: loginName,
+        p_role: requestedRole,
         p_expected_user_id: previousUserId ?? null,
       },
     );
     if (
       saveError || !Array.isArray(savedRows) ||
-      typeof savedRows[0]?.expires_at !== "string"
+      typeof savedRows[0]?.expires_at !== "string" ||
+      savedRows[0]?.role !== requestedRole
     ) {
       await adminClient.auth.admin.deleteUser(userId);
       console.error("organization test access persistence failed");
@@ -320,6 +338,7 @@ Deno.serve(async (request) => {
       {
         login_name: loginName,
         password,
+        role: savedRows[0].role,
         expires_at: savedRows[0].expires_at,
         cleanup_warning: cleanupWarning,
       },

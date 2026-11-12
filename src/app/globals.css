@@ -2572,6 +2572,9 @@ body{max-width:100%;overflow-x:hidden;}
 .organization-test-access-status.is-expired{background:#fff5d9;color:#8b6500}
 .organization-test-access-status.is-revoked{background:#fff0ee;color:#b84539}
 .organization-test-access-note{margin:0;color:#8290a8;font-size:12px;line-height:1.5}
+.organization-test-role{display:grid;grid-template-columns:minmax(0, 280px);gap:6px;color:#42536f;font-size:12px;font-weight:700}
+.organization-test-role select{width:100%;min-height:40px;padding:8px 10px;border:1px solid #dce3ed;border-radius:8px;background:#fff;color:#263954;font:inherit}
+.organization-test-role small{color:#8290a8;font-size:11px;font-weight:400;line-height:1.5}
 .organization-test-credentials{display:grid;gap:12px;padding:14px;border:1px solid #d9d2ff;border-radius:11px;background:#f8f7ff}
 .organization-test-credentials>div:first-child strong{color:#443581;font-size:13px}
 .organization-test-credentials>div:first-child p{margin:4px 0 0;color:#71819a;font-size:12px;line-height:1.5}
