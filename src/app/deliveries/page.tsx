@@ -1,7 +1,7 @@
 "use client";
 
 import { ChangeEvent, FormEvent, useCallback, useEffect, useRef, useState } from "react";
-import { ArrowLeft, Check, ClipboardCheck, Plus, Trash2 } from "lucide-react";
+import { ArrowLeft, Check, ClipboardCheck, LoaderCircle, Plus, Trash2 } from "lucide-react";
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/client";
 import { getCurrentOrganizationProfile } from "@/lib/organization-context";
@@ -45,6 +45,7 @@ export default function DeliveriesPage() {
   const [pendingDeliveries, setPendingDeliveries] = useState<PendingDelivery[]>([]);
   const [activePendingLink, setActivePendingLink] = useState<PendingLink | null>(null);
   const [pendingBusyId, setPendingBusyId] = useState("");
+  const [pendingLinkBusyId, setPendingLinkBusyId] = useState("");
   const [pendingFeedback, setPendingFeedback] = useState("");
   const [pendingError, setPendingError] = useState("");
   const [printSnapshot, setPrintSnapshot] = useState<DeliverySnapshot | null>(null);
@@ -55,7 +56,10 @@ export default function DeliveriesPage() {
   const pendingRefreshInFlightRef = useRef(false);
   useEffect(() => {
     if (!activePendingLink) return;
-    const frame = window.requestAnimationFrame(() => activeSignatureRef.current?.scrollIntoView({ behavior: "smooth", block: "center" }));
+    const frame = window.requestAnimationFrame(() => {
+      activeSignatureRef.current?.scrollIntoView({ behavior: "smooth", block: "center" });
+      activeSignatureRef.current?.focus({ preventScroll: true });
+    });
     return () => window.cancelAnimationFrame(frame);
   }, [activePendingLink]);
   function clearLoadedOptions() {
@@ -248,7 +252,7 @@ export default function DeliveriesPage() {
   const selectedEmployee = employees.find((employee) => employee.id === employeeId);
   const hasMissingRequiredVariant = items.some((item) => variantsFor(item.material_id).length > 0 && !item.variant_id);
   async function generatePendingLink(pendingId: string) {
-    setPendingBusyId(pendingId); setPendingError(""); setPendingFeedback("");
+    setPendingBusyId(pendingId); setPendingLinkBusyId(pendingId); setPendingError(""); setPendingFeedback("");
     try {
       const { data, error: invokeError } = await createClient().functions.invoke("create-term-signature-link", { body: { record_type: "pending_delivery", record_id: pendingId } });
       if (invokeError) throw invokeError;
@@ -261,7 +265,7 @@ export default function DeliveriesPage() {
     } catch (caught) {
       setPendingError(friendlyError(caught, "Não foi possível gerar o link de assinatura."));
       return null;
-    } finally { setPendingBusyId(""); }
+    } finally { setPendingBusyId(""); setPendingLinkBusyId(""); }
   }
   async function copyPendingLink(pendingId: string) {
     const link = activePendingLink?.id === pendingId ? activePendingLink : await generatePendingLink(pendingId);
@@ -407,7 +411,7 @@ export default function DeliveriesPage() {
     {error && <FeedbackMessage onRetry={canRetryLoad ? retryLoadOptions : undefined}>{error}</FeedbackMessage>}
     {pendingFeedback && <div className="feedback success-feedback pending-signature-feedback" role="status">{pendingFeedback}</div>}
     {pendingError && <FeedbackMessage>{pendingError}</FeedbackMessage>}
-    {activePendingLink && <section ref={activeSignatureRef} className="panel pending-signature-active" tabIndex={-1}><div><p className="eyebrow">FICHA PRONTA PARA ASSINATURA</p><h2>Envie o link ao colaborador</h2><p>A ficha foi gerada. Compartilhe o link ou imprima o documento; a entrega e a baixa do estoque só serão confirmadas após a assinatura.</p></div><label>Link de assinatura<input value={activePendingLink.url} readOnly onFocus={(event) => event.currentTarget.select()} aria-label="Link de assinatura do colaborador" /></label><small>Uso único · válido até {new Date(activePendingLink.expires_at).toLocaleString("pt-BR")}</small><div className="pending-signature-actions"><button type="button" className="primary-button" onClick={() => void copyPendingLink(activePendingLink.id)}><ClipboardCheck size={15} /> Copiar link para o colaborador</button><button type="button" className="secondary-button" onClick={() => void printDeliverySheet(activePendingLink.snapshot)}>Imprimir ficha para assinatura</button></div></section>}
+     {activePendingLink && <section ref={activeSignatureRef} className="panel pending-signature-active" tabIndex={-1} aria-label="Link de assinatura gerado"><div><p className="eyebrow">FICHA PRONTA PARA ASSINATURA</p><h2>Envie o link ao colaborador</h2><p>A ficha foi gerada. Compartilhe o link ou imprima o documento; a entrega e a baixa do estoque só serão confirmadas após a assinatura.</p></div><label>Link de assinatura<input value={activePendingLink.url} readOnly onFocus={(event) => event.currentTarget.select()} aria-label="Link de assinatura do colaborador" /></label><small>Uso único · válido até {new Date(activePendingLink.expires_at).toLocaleString("pt-BR")}</small><div className="pending-signature-actions"><button type="button" className="primary-button" onClick={() => void copyPendingLink(activePendingLink.id)}><ClipboardCheck size={15} /> Copiar link para o colaborador</button><button type="button" className="secondary-button" onClick={() => void printDeliverySheet(activePendingLink.snapshot)}>Imprimir ficha para assinatura</button></div></section>}
     {pendingDeliveries.length > 0 && <section className="panel pending-deliveries-panel"><div className="panel-header"><div><p className="eyebrow">AGUARDANDO CONFIRMAÇÃO</p><h2>Entregas pendentes de recebimento</h2><p>Confirme a assinatura no ato da entrega; o estoque ainda não foi atualizado.</p></div><span className="pending-count">{pendingDeliveries.length}</span></div><div className="pending-delivery-list">{pendingDeliveries.map((pending) => {
       const employee = pending.employee?.full_name || employees.find((candidate) => candidate.id === pending.employee_id)?.full_name || "Colaborador";
       const canManage = pending.requested_by === currentUserId;
@@ -416,7 +420,7 @@ export default function DeliveriesPage() {
         const variant = variants.find((candidate) => candidate.id === request.variant_id);
         return `${request.quantity}× ${material?.name || "Material"}${variant ? ` · ${variant.size || variant.name}` : ""}`;
       }).join("; ");
-      return <article className="pending-delivery-card" key={pending.id}><div className="pending-delivery-copy"><strong>{employee}</strong><small>{new Date(`${pending.delivered_at}T12:00:00`).toLocaleDateString("pt-BR")} · {reasons.find(([value]) => value === pending.reason)?.[1] || pending.reason}</small><p>{itemSummary}</p><span className="delivery-term-status pending">Aguardando assinatura · recebimento não registrado</span></div><div className="pending-delivery-actions"><button type="button" className="action-button" onClick={() => void copyPendingLink(pending.id)} disabled={Boolean(pendingBusyId)}>{pendingBusyId === pending.id ? "Preparando..." : "Copiar link"}</button><button type="button" className="action-button" onClick={() => void printPendingSheet(pending)} disabled={Boolean(pendingBusyId)}>Imprimir ficha para assinatura</button>{canManage && <label className="action-button upload-term-button">{pendingBusyId === pending.id ? "Enviando..." : "Anexar ficha assinada"}<input type="file" accept="application/pdf,image/jpeg,image/png,image/webp" onChange={(event) => void uploadPhysicalSignature(pending, event)} disabled={Boolean(pendingBusyId)} /></label>}{canManage && <button type="button" className="action-button" onClick={() => void cancelPending(pending.id)} disabled={Boolean(pendingBusyId)}>Cancelar ficha</button>}</div></article>;
+      return <article className="pending-delivery-card" key={pending.id}><div className="pending-delivery-copy"><strong>{employee}</strong><small>{new Date(`${pending.delivered_at}T12:00:00`).toLocaleDateString("pt-BR")} · {reasons.find(([value]) => value === pending.reason)?.[1] || pending.reason}</small><p>{itemSummary}</p><span className="delivery-term-status pending">Aguardando assinatura · recebimento não registrado</span></div><div className="pending-delivery-actions"><button type="button" className="action-button" onClick={() => void copyPendingLink(pending.id)} disabled={Boolean(pendingBusyId)} aria-busy={pendingLinkBusyId === pending.id}>{pendingLinkBusyId === pending.id ? <><LoaderCircle className="spin" size={14} aria-hidden="true" /> Gerando link...</> : "Copiar link"}</button><button type="button" className="action-button" onClick={() => void printPendingSheet(pending)} disabled={Boolean(pendingBusyId)}>Imprimir ficha para assinatura</button>{canManage && <label className="action-button upload-term-button">{pendingBusyId === pending.id ? "Enviando..." : "Anexar ficha assinada"}<input type="file" accept="application/pdf,image/jpeg,image/png,image/webp" onChange={(event) => void uploadPhysicalSignature(pending, event)} disabled={Boolean(pendingBusyId)} /></label>}{canManage && <button type="button" className="action-button" onClick={() => void cancelPending(pending.id)} disabled={Boolean(pendingBusyId)}>Cancelar ficha</button>}</div></article>;
     })}</div></section>}
     {printSnapshot && <DeliveryTermPrintSheet snapshot={printSnapshot} />}
     <section className="panel entry-card delivery-card">
