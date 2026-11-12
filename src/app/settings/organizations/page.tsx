@@ -53,6 +53,12 @@ type OrganizationMember = {
 
 type TestAccessRole = "rh" | "tst" | "user";
 
+type TestAccessBase = {
+  organization_id: string;
+  base_id: string;
+  base_name: string;
+};
+
 type OrganizationTestAccess = {
   organization_id: string;
   user_id: string;
@@ -61,6 +67,7 @@ type OrganizationTestAccess = {
   revoked_at: string | null;
   is_active: boolean;
   role: TestAccessRole;
+  base_ids: string[];
 };
 
 type IssuedTestCredentials = {
@@ -68,6 +75,7 @@ type IssuedTestCredentials = {
   password: string;
   role: TestAccessRole;
   expires_at: string;
+  base_ids: string[];
 };
 
 type TestAccessConfirmation = { organizationId: string; action: "rotate" | "revoke" };
@@ -188,6 +196,8 @@ export default function OrganizationsSettingsPage() {
   const [contractTemplateConfirmationId, setContractTemplateConfirmationId] = useState<string | null>(null);
   const [testAccessByOrganization, setTestAccessByOrganization] = useState<Record<string, OrganizationTestAccess>>({});
   const [testAccessRoleByOrganization, setTestAccessRoleByOrganization] = useState<Record<string, TestAccessRole>>({});
+  const [testAccessBasesByOrganization, setTestAccessBasesByOrganization] = useState<Record<string, TestAccessBase[]>>({});
+  const [testAccessBaseIdsByOrganization, setTestAccessBaseIdsByOrganization] = useState<Record<string, string[]>>({});
   const [testAccessLoading, setTestAccessLoading] = useState(false);
   const [testAccessError, setTestAccessError] = useState("");
   const [testAccessBusyOrganizationId, setTestAccessBusyOrganizationId] = useState<string | null>(null);
@@ -201,10 +211,11 @@ export default function OrganizationsSettingsPage() {
     const client = createClient();
     setContractTemplateLoading(true);
     setTestAccessLoading(true);
-    const [organizationsResult, templateStatusResult, testAccessResult] = await Promise.all([
+    const [organizationsResult, templateStatusResult, testAccessResult, testAccessBasesResult] = await Promise.all([
       client.rpc("list_platform_organizations"),
       client.rpc("list_platform_contract_template_status"),
       client.rpc("list_platform_organization_test_access"),
+      client.rpc("list_platform_organization_test_access_bases"),
     ]);
     const { data, error: loadError } = organizationsResult;
     if (templateStatusResult.error) {
@@ -227,6 +238,18 @@ export default function OrganizationsSettingsPage() {
       const accesses = (testAccessResult.data ?? []) as OrganizationTestAccess[];
       setTestAccessByOrganization(Object.fromEntries(accesses.map((access) => [access.organization_id, access])));
       setTestAccessError("");
+    }
+    if (testAccessBasesResult.error) {
+      setTestAccessBasesByOrganization({});
+      setTestAccessError((current) => current || (testAccessBasesResult.error.code === "PGRST202"
+        ? "A seleção de bases ficará disponível após a migração correspondente do banco."
+        : "Não foi possível consultar as bases para o acesso de teste. Atualize a página e tente novamente."));
+    } else {
+      const bases = (testAccessBasesResult.data ?? []) as TestAccessBase[];
+      setTestAccessBasesByOrganization(bases.reduce<Record<string, TestAccessBase[]>>((grouped, base) => {
+        grouped[base.organization_id] = [...(grouped[base.organization_id] ?? []), base];
+        return grouped;
+      }, {}));
     }
     setTestAccessLoading(false);
     if (loadError) {
@@ -414,6 +437,12 @@ export default function OrganizationsSettingsPage() {
 
   async function manageOrganizationTestAccess(organization: Organization, action: "generate" | "revoke", selectedRole?: TestAccessRole) {
     const role = selectedRole ?? testAccessRoleByOrganization[organization.id] ?? testAccessByOrganization[organization.id]?.role ?? "tst";
+    const activeBaseIds = new Set((testAccessBasesByOrganization[organization.id] ?? []).map((base) => base.base_id));
+    const selectedBaseIds = (testAccessBaseIdsByOrganization[organization.id] ?? testAccessByOrganization[organization.id]?.base_ids ?? []).filter((baseId) => activeBaseIds.has(baseId));
+    if (action === "generate" && role === "tst" && selectedBaseIds.length === 0) {
+      setError("Selecione pelo menos uma base para gerar o acesso TST.");
+      return;
+    }
     setTestAccessBusyOrganizationId(organization.id);
     if (action === "generate") {
       setIssuedTestCredentials((current) => Object.fromEntries(Object.entries(current).filter(([id]) => id !== organization.id)));
@@ -424,7 +453,7 @@ export default function OrganizationsSettingsPage() {
     setSuccess("");
     try {
       const { data, error: requestError } = await createClient().functions.invoke("organization-test-access", {
-        body: { action, organization_id: organization.id, role },
+        body: { action, organization_id: organization.id, role, base_ids: role === "tst" ? selectedBaseIds : [] },
       });
       if (requestError || data?.error) {
         const message = data?.error || "Não foi possível concluir a operação de acesso de teste.";
@@ -433,10 +462,11 @@ export default function OrganizationsSettingsPage() {
         return;
       }
       if (action === "generate") {
-        if (typeof data?.login_name !== "string" || typeof data?.password !== "string" || typeof data?.expires_at !== "string" || data?.role !== role) {
+        if (typeof data?.login_name !== "string" || typeof data?.password !== "string" || typeof data?.expires_at !== "string" || data?.role !== role || !Array.isArray(data?.base_ids)) {
           setError("A conta foi processada, mas não foi possível exibir as credenciais. Tente gerar uma nova senha.");
           return;
         }
+        setTestAccessBaseIdsByOrganization((current) => ({ ...current, [organization.id]: data.base_ids as string[] }));
         setIssuedTestCredentials((current) => ({ ...current, [organization.id]: data as IssuedTestCredentials }));
         setSuccess(data.cleanup_warning
           ? `Acesso temporário de ${organization.name} gerado. ${data.cleanup_warning}`
@@ -589,6 +619,13 @@ export default function OrganizationsSettingsPage() {
             const isApplyingTemplate = contractTemplateApplyingId === organization.id;
             const testAccess = testAccessByOrganization[organization.id];
             const selectedTestRole = testAccessRoleByOrganization[organization.id] ?? testAccess?.role ?? "tst";
+            const availableTestBases = testAccessBasesByOrganization[organization.id] ?? [];
+            const selectedTestBaseIds = (testAccessBaseIdsByOrganization[organization.id] ?? testAccess?.base_ids ?? [])
+              .filter((baseId) => availableTestBases.some((base) => base.base_id === baseId));
+            const activeTestBaseLabels = (testAccess?.base_ids ?? []).flatMap((baseId) => {
+              const base = availableTestBases.find((candidate) => candidate.base_id === baseId);
+              return base ? [base.base_name] : [];
+            });
             const issuedCredentials = issuedTestCredentials[organization.id];
             const isBusyWithTestAccess = testAccessBusyOrganizationId === organization.id;
             const isConfirmingTestAccess = testAccessConfirmation?.organizationId === organization.id;
@@ -660,18 +697,34 @@ export default function OrganizationsSettingsPage() {
                   <div className="organization-section-heading"><div><h3 id={`organization-test-access-${organization.id}`}>Acesso temporário de teste</h3><p>Gere uma conta temporária para conferir o sistema com as páginas da função selecionada. O perfil Administrador não está disponível; o acesso expira em 7 dias.</p></div>{testAccess && <span className={`organization-test-access-status ${testAccess.is_active ? "is-active" : testAccess.revoked_at ? "is-revoked" : "is-expired"}`}>{testAccess.is_active ? "Ativo" : testAccess.revoked_at ? "Revogado" : organization.lifecycle_status === "suspended" ? "Suspenso" : "Expirado"}</span>}</div>
                   {testAccessError && <p className="organization-test-access-note" role="status">{testAccessError}</p>}
                   <label className="organization-test-role">Função para o próximo acesso<select value={selectedTestRole} onChange={(event) => setTestAccessRoleByOrganization((current) => ({ ...current, [organization.id]: event.target.value as TestAccessRole }))} disabled={isBusyWithTestAccess}><option value="rh">RH</option><option value="tst">TST</option><option value="user">Usuário</option></select><small>Menus e páginas seguirão a função escolhida; Administrador não está disponível. A proteção dos dados também depende das políticas do banco.{testAccess?.is_active ? ` A conta ativa continua como ${testAccessRoleLabels[testAccess.role]} até gerar outro acesso.` : ""}</small></label>
-                  {testAccess && <p className="organization-current-invite">Usuário: <strong>{testAccess.login_name}</strong> · Função: <strong>{testAccessRoleLabels[testAccess.role]}</strong> · Válido até {new Date(testAccess.expires_at).toLocaleString("pt-BR")}</p>}
+                  {selectedTestRole === "tst" && <div className="organization-test-base-picker">
+                    <div className="organization-test-base-heading"><strong>Bases liberadas para a conta TST</strong><span>{selectedTestBaseIds.length} selecionada{selectedTestBaseIds.length === 1 ? "" : "s"}</span></div>
+                    {availableTestBases.length > 0
+                      ? <div className="organization-test-base-list">{availableTestBases.map((base) => <label key={base.base_id}><input type="checkbox" checked={selectedTestBaseIds.includes(base.base_id)} onChange={(event) => {
+                        const checked = event.currentTarget.checked;
+                        setTestAccessBaseIdsByOrganization((current) => {
+                          const currentIds = current[organization.id] ?? testAccess?.base_ids ?? [];
+                          const nextIds = checked
+                            ? [...new Set([...currentIds, base.base_id])]
+                            : currentIds.filter((baseId) => baseId !== base.base_id);
+                          return { ...current, [organization.id]: nextIds };
+                        });
+                      }} disabled={isBusyWithTestAccess} /><span>{base.base_name}</span></label>)}</div>
+                      : <p className="organization-test-access-note">Nenhuma base ativa cadastrada para esta organização.</p>}
+                    {availableTestBases.length > 0 && selectedTestBaseIds.length === 0 && <small className="organization-test-base-warning">Selecione pelo menos uma base para gerar o acesso TST.</small>}
+                  </div>}
+                  {testAccess && <p className="organization-current-invite">Usuário: <strong>{testAccess.login_name}</strong> · Função: <strong>{testAccessRoleLabels[testAccess.role]}</strong> · Válido até {new Date(testAccess.expires_at).toLocaleString("pt-BR")}{testAccess.role === "tst" ? ` · Bases: ${activeTestBaseLabels.join(", ") || "nenhuma ativa"}` : ""}</p>}
                   {issuedCredentials && <div className="organization-test-credentials" role="status" aria-live="polite">
                     <div><strong>Guarde a senha temporária agora</strong><p>Por segurança, a senha não é armazenada para consulta futura. Se ela for perdida, gere uma nova; a anterior deixará de funcionar.</p></div>
-                    <dl><div><dt>Usuário</dt><dd>{issuedCredentials.login_name}</dd></div><div><dt>Função</dt><dd>{testAccessRoleLabels[issuedCredentials.role]}</dd></div><div><dt>Senha temporária</dt><dd><code>{issuedCredentials.password}</code></dd></div><div><dt>Expira em</dt><dd>{new Date(issuedCredentials.expires_at).toLocaleString("pt-BR")}</dd></div></dl>
+                    <dl><div><dt>Usuário</dt><dd>{issuedCredentials.login_name}</dd></div><div><dt>Função</dt><dd>{testAccessRoleLabels[issuedCredentials.role]}</dd></div>{issuedCredentials.role === "tst" && <div><dt>Bases liberadas</dt><dd>{issuedCredentials.base_ids.map((baseId) => availableTestBases.find((base) => base.base_id === baseId)?.base_name ?? baseId).join(", ") || "Nenhuma"}</dd></div>}<div><dt>Senha temporária</dt><dd><code>{issuedCredentials.password}</code></dd></div><div><dt>Expira em</dt><dd>{new Date(issuedCredentials.expires_at).toLocaleString("pt-BR")}</dd></div></dl>
                     <button className="secondary-button" type="button" onClick={() => void copyTestCredentials(organization.id)}>{copiedTestCredentialsOrganizationId === organization.id ? <Check size={15} aria-hidden="true" /> : <Copy size={15} aria-hidden="true" />}{copiedTestCredentialsOrganizationId === organization.id ? "Credenciais copiadas" : "Copiar credenciais"}</button>
                   </div>}
                   {isConfirmingTestAccess && <div className="organization-test-access-confirm" role="group" aria-labelledby={`organization-test-access-confirm-${organization.id}`}>
-                    <div><h4 id={`organization-test-access-confirm-${organization.id}`}>{testAccessConfirmation?.action === "revoke" ? "Revogar o acesso de teste?" : "Gerar outro acesso?"}</h4><p>{testAccessConfirmation?.action === "revoke" ? "A conta será removida e sessões existentes perderão acesso aos dados desta organização." : `Será criada uma nova conta com a função ${testAccessRoleLabels[selectedTestRole]}; a conta anterior e suas sessões perderão acesso. O prazo de 7 dias começará novamente.`}</p></div>
-                    <div className="organization-test-access-actions"><button className="secondary-button" type="button" onClick={() => setTestAccessConfirmation(null)} disabled={isBusyWithTestAccess}>Cancelar</button><button className={testAccessConfirmation?.action === "revoke" ? "organization-text-action organization-danger-action" : "primary-button"} type="button" onClick={() => void manageOrganizationTestAccess(organization, testAccessConfirmation?.action === "revoke" ? "revoke" : "generate")} disabled={isBusyWithTestAccess} aria-busy={isBusyWithTestAccess}>{isBusyWithTestAccess ? "Processando..." : testAccessConfirmation?.action === "revoke" ? "Revogar acesso" : "Gerar novo acesso"}</button></div>
+                    <div><h4 id={`organization-test-access-confirm-${organization.id}`}>{testAccessConfirmation?.action === "revoke" ? "Revogar o acesso de teste?" : "Gerar outro acesso?"}</h4><p>{testAccessConfirmation?.action === "revoke" ? "A conta será removida e sessões existentes perderão acesso aos dados desta organização." : `Será criada uma nova conta com a função ${testAccessRoleLabels[selectedTestRole]}${selectedTestRole === "tst" ? ` nas bases ${selectedTestBaseIds.map((baseId) => availableTestBases.find((base) => base.base_id === baseId)?.base_name).filter(Boolean).join(", ") || "nenhuma selecionada"}` : ""}; a conta anterior e suas sessões perderão acesso. O prazo de 7 dias começará novamente.`}</p></div>
+                    <div className="organization-test-access-actions"><button className="secondary-button" type="button" onClick={() => setTestAccessConfirmation(null)} disabled={isBusyWithTestAccess}>Cancelar</button><button className={testAccessConfirmation?.action === "revoke" ? "organization-text-action organization-danger-action" : "primary-button"} type="button" onClick={() => void manageOrganizationTestAccess(organization, testAccessConfirmation?.action === "revoke" ? "revoke" : "generate")} disabled={isBusyWithTestAccess || (testAccessConfirmation?.action !== "revoke" && selectedTestRole === "tst" && selectedTestBaseIds.length === 0)} aria-busy={isBusyWithTestAccess}>{isBusyWithTestAccess ? "Processando..." : testAccessConfirmation?.action === "revoke" ? "Revogar acesso" : "Gerar novo acesso"}</button></div>
                   </div>}
                   <div className="organization-test-access-actions">
-                    <button className="secondary-button" type="button" onClick={() => testAccess?.is_active ? setTestAccessConfirmation({ organizationId: organization.id, action: "rotate" }) : void manageOrganizationTestAccess(organization, "generate")} disabled={organization.lifecycle_status === "suspended" || testAccessLoading || Boolean(testAccessError) || isBusyWithTestAccess} aria-busy={isBusyWithTestAccess}>{isBusyWithTestAccess ? "Processando..." : organization.lifecycle_status === "suspended" ? "Organização suspensa" : testAccess?.is_active ? "Gerar novo acesso" : testAccess ? "Renovar acesso de teste" : "Gerar acesso de teste"}</button>
+                    <button className="secondary-button" type="button" onClick={() => testAccess?.is_active ? setTestAccessConfirmation({ organizationId: organization.id, action: "rotate" }) : void manageOrganizationTestAccess(organization, "generate")} disabled={organization.lifecycle_status === "suspended" || testAccessLoading || Boolean(testAccessError) || isBusyWithTestAccess || (selectedTestRole === "tst" && selectedTestBaseIds.length === 0)} aria-busy={isBusyWithTestAccess}>{isBusyWithTestAccess ? "Processando..." : organization.lifecycle_status === "suspended" ? "Organização suspensa" : testAccess?.is_active ? "Gerar novo acesso" : testAccess ? "Renovar acesso de teste" : "Gerar acesso de teste"}</button>
                     {testAccess && <button className="organization-text-action organization-danger-action" type="button" onClick={() => setTestAccessConfirmation({ organizationId: organization.id, action: "revoke" })} disabled={isBusyWithTestAccess}>{testAccess.revoked_at ? "Tentar remover conta" : "Revogar e remover conta"}</button>}
                   </div>
                 </section>

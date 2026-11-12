@@ -130,13 +130,13 @@ Deno.serve(async (request) => {
     return respond({ error: "Entre novamente para continuar." }, 401, origin);
   }
 
-  let body: { action?: unknown; organization_id?: unknown; role?: unknown };
+  let body: { action?: unknown; organization_id?: unknown; role?: unknown; base_ids?: unknown };
   try {
     const parsed: unknown = await request.json();
     if (!parsed || typeof parsed !== "object") {
       return respond({ error: "Solicitação inválida." }, 400, origin);
     }
-    body = parsed as { action?: unknown; organization_id?: unknown; role?: unknown };
+    body = parsed as { action?: unknown; organization_id?: unknown; role?: unknown; base_ids?: unknown };
   } catch {
     return respond({ error: "Solicitação inválida." }, 400, origin);
   }
@@ -166,6 +166,22 @@ Deno.serve(async (request) => {
   const requestedRole: TestAccessRole = isTestAccessRole(body.role)
     ? body.role
     : "tst";
+  const requestedBaseIds: unknown[] = Array.isArray(body.base_ids) ? body.base_ids : [];
+  const uuidPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+  if (
+    action === "generate" &&
+    ((body.base_ids !== undefined && !Array.isArray(body.base_ids)) ||
+      (requestedRole === "tst" && (requestedBaseIds.length === 0 || !requestedBaseIds.every((id) => typeof id === "string" && uuidPattern.test(id)))) ||
+      (requestedRole !== "tst" && requestedBaseIds.length > 0) ||
+      new Set(requestedBaseIds).size !== requestedBaseIds.length)
+  ) {
+    return respond(
+      { error: "Selecione ao menos uma base válida para o acesso TST." },
+      400,
+      origin,
+    );
+  }
+  const validatedBaseIds = requestedBaseIds as string[];
 
   const auth = { persistSession: false, autoRefreshToken: false };
   const userClient = createClient(supabaseUrl, publishableKey, {
@@ -303,12 +319,17 @@ Deno.serve(async (request) => {
         p_login_name: loginName,
         p_role: requestedRole,
         p_expected_user_id: previousUserId ?? null,
+        p_base_ids: validatedBaseIds,
       },
     );
+    const savedBaseIds: unknown = savedRows?.[0]?.base_ids;
+    const baseScopeMatches = Array.isArray(savedBaseIds) &&
+      savedBaseIds.length === validatedBaseIds.length &&
+      validatedBaseIds.every((baseId) => savedBaseIds.includes(baseId));
     if (
       saveError || !Array.isArray(savedRows) ||
       typeof savedRows[0]?.expires_at !== "string" ||
-      savedRows[0]?.role !== requestedRole
+      savedRows[0]?.role !== requestedRole || !baseScopeMatches
     ) {
       await adminClient.auth.admin.deleteUser(userId);
       console.error("organization test access persistence failed");
@@ -340,6 +361,7 @@ Deno.serve(async (request) => {
         password,
         role: savedRows[0].role,
         expires_at: savedRows[0].expires_at,
+        base_ids: savedRows[0].base_ids,
         cleanup_warning: cleanupWarning,
       },
       200,
