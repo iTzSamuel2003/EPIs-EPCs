@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState, type FormEvent } from "react";
-import { AlertTriangle, CalendarClock, CalendarDays, Check, ChevronDown, CircleHelp, ClipboardList, Download, FileCheck2, FilePlus2, LoaderCircle, Paperclip, Plus, RotateCcw, Search, ShieldCheck, Stethoscope, UserRound, X } from "lucide-react";
+import { AlertTriangle, BarChart3, CalendarClock, CalendarDays, Check, ChevronDown, CircleHelp, ClipboardList, Download, FileCheck2, FilePlus2, Filter, LoaderCircle, MapPin, Paperclip, Plus, RotateCcw, Search, ShieldCheck, Stethoscope, UserRound, X } from "lucide-react";
 import { FeedbackMessage } from "@/components/feedback-message";
 import { createClient } from "@/lib/supabase/client";
 import { getCurrentOrganizationProfile } from "@/lib/organization-context";
@@ -23,6 +23,27 @@ const FITNESS_RESULTS = [
 
 type ExamType = (typeof EXAM_TYPES)[number][0];
 type FitnessResult = (typeof FITNESS_RESULTS)[number][0];
+type AsoDueState = "missing" | "no-date" | "overdue" | "due-0-7" | "due-8-15" | "due-16-30" | "due-31-60" | "ok";
+const DUE_LABELS: Record<AsoDueState, string> = {
+  missing: "Sem ASO",
+  "no-date": "Sem previsão",
+  overdue: "Vencido",
+  "due-0-7": "Até 7 dias",
+  "due-8-15": "8–15 dias",
+  "due-16-30": "16–30 dias",
+  "due-31-60": "31–60 dias",
+  ok: "Acima de 60 dias",
+};
+const DUE_COLORS: Record<AsoDueState, string> = {
+  missing: "#a5adbb",
+  "no-date": "#d4b353",
+  overdue: "#c65c51",
+  "due-0-7": "#e27c45",
+  "due-8-15": "#e9a348",
+  "due-16-30": "#d8bd43",
+  "due-31-60": "#6492ce",
+  ok: "#54a77e",
+};
 type AsoSummary = {
   organization_id: string;
   employee_id: string;
@@ -32,15 +53,13 @@ type AsoSummary = {
   function_name: string | null;
   department: string | null;
   unit: string | null;
+  base_name: string | null;
   employee_status: string;
   aso_id: string | null;
   exam_type: ExamType | null;
   exam_date: string | null;
   next_exam_due_date: string | null;
   fitness_result: FitnessResult | null;
-  clinic_name: string | null;
-  physician_name: string | null;
-  physician_registry: string | null;
   document_path: string | null;
   created_by_name_snapshot: string | null;
   aso_created_at: string | null;
@@ -80,6 +99,14 @@ function formatDateTime(value: string) {
   return new Date(value).toLocaleString("pt-BR", { dateStyle: "short", timeStyle: "short" });
 }
 
+function dueDescription(value: string | null) {
+  if (!value) return "";
+  const days = daysUntilDue(value);
+  if (days < 0) return `Vencido há ${Math.abs(days)} dia${Math.abs(days) === 1 ? "" : "s"}`;
+  if (days === 0) return "Vence hoje";
+  return `Vence em ${days} dia${days === 1 ? "" : "s"}`;
+}
+
 function examLabel(value: string | null) {
   return EXAM_TYPES.find(([key]) => key === value)?.[1] ?? "—";
 }
@@ -88,14 +115,21 @@ function resultLabel(value: string | null) {
   return FITNESS_RESULTS.find(([key]) => key === value)?.[1] ?? "Não informado";
 }
 
-function dueState(row: AsoSummary): "missing" | "no-date" | "overdue" | "soon" | "ok" {
+function daysUntilDue(date: string) {
+  const today = Date.parse(`${localToday()}T00:00:00Z`);
+  const due = Date.parse(`${date.slice(0, 10)}T00:00:00Z`);
+  return Math.round((due - today) / 86_400_000);
+}
+
+function dueState(row: AsoSummary): AsoDueState {
   if (!row.aso_id) return "missing";
   if (!row.next_exam_due_date) return "no-date";
-  const today = localToday();
-  if (row.next_exam_due_date < today) return "overdue";
-  const cutoff = new Date(`${today}T12:00:00`);
-  cutoff.setDate(cutoff.getDate() + 30);
-  if (row.next_exam_due_date <= `${cutoff.getFullYear()}-${String(cutoff.getMonth() + 1).padStart(2, "0")}-${String(cutoff.getDate()).padStart(2, "0")}`) return "soon";
+  const days = daysUntilDue(row.next_exam_due_date);
+  if (days < 0) return "overdue";
+  if (days <= 7) return "due-0-7";
+  if (days <= 15) return "due-8-15";
+  if (days <= 30) return "due-16-30";
+  if (days <= 60) return "due-31-60";
   return "ok";
 }
 
@@ -112,7 +146,7 @@ function employeeFunction(row: Pick<AsoSummary, "function_name" | "job_title">) 
 }
 
 function employmentLabel(status: string) {
-  return status === "terminated" ? "Desligado" : status === "away" ? "Afastado" : "Ativo";
+  return status === "terminated" ? "Desligado" : status === "away" ? "Afastado" : status === "active" ? "Ativo" : status;
 }
 
 export default function AsosPage() {
@@ -120,6 +154,11 @@ export default function AsosPage() {
   const [rows, setRows] = useState<AsoSummary[]>([]);
   const [search, setSearch] = useState("");
   const [filter, setFilter] = useState("all");
+  const [employeeFilter, setEmployeeFilter] = useState("current");
+  const [examFilter, setExamFilter] = useState("all");
+  const [departmentFilter, setDepartmentFilter] = useState("all");
+  const [baseFilter, setBaseFilter] = useState("all");
+  const [lastUpdatedAt, setLastUpdatedAt] = useState<Date | null>(null);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -151,13 +190,27 @@ export default function AsosPage() {
     if (quiet) setRefreshing(true);
     else setLoading(true);
     setError("");
-    const { data, error: queryError } = await createClient()
-      .from("employee_aso_current_status")
-      .select("organization_id,employee_id,registration,full_name,job_title,function_name,department,unit,employee_status,aso_id,exam_type,exam_date,next_exam_due_date,fitness_result,clinic_name,physician_name,physician_registry,document_path,created_by_name_snapshot,aso_created_at")
-      .eq("organization_id", organizationId)
-      .order("full_name", { ascending: true });
+    const supabase = createClient();
+    const [asoResult, employeeBaseResult, baseResult] = await Promise.all([
+      supabase.from("employee_aso_current_status")
+        .select("organization_id,employee_id,registration,full_name,job_title,function_name,department,unit,employee_status,aso_id,exam_type,exam_date,next_exam_due_date,fitness_result,document_path,created_by_name_snapshot,aso_created_at")
+        .eq("organization_id", organizationId)
+        .order("full_name", { ascending: true }),
+      supabase.from("employees").select("id,base_id").eq("organization_id", organizationId),
+      supabase.from("organization_bases").select("id,name").eq("organization_id", organizationId),
+    ]);
+    const queryError = asoResult.error || employeeBaseResult.error || baseResult.error;
     if (queryError) setError("Não foi possível carregar os ASOs. Confirme se a atualização do banco foi aplicada e tente novamente.");
-    else setRows((data ?? []) as AsoSummary[]);
+    else {
+      const baseByEmployee = new Map((employeeBaseResult.data ?? []).map((employee) => [employee.id, employee.base_id]));
+      const baseNames = new Map((baseResult.data ?? []).map((base) => [base.id, base.name]));
+      const rowsWithBase = (asoResult.data ?? []).map((row) => ({
+        ...row,
+        base_name: baseNames.get(baseByEmployee.get(row.employee_id) ?? "") ?? null,
+      }));
+      setRows(rowsWithBase as AsoSummary[]);
+      setLastUpdatedAt(new Date());
+    }
     setLoading(false);
     setRefreshing(false);
   }, [organizationId]);
@@ -184,22 +237,70 @@ export default function AsosPage() {
 
   useEffect(() => { void loadRows(); }, [loadRows]);
 
-  const currentEmployees = useMemo(() => rows.filter((row) => row.employee_status !== "terminated"), [rows]);
-  const counts = useMemo(() => currentEmployees.reduce((result, row) => {
-    result[dueState(row)] += 1;
-    return result;
-  }, { missing: 0, "no-date": 0, overdue: 0, soon: 0, ok: 0 }), [currentEmployees]);
+  const departments = useMemo(() => [...new Set(rows.map((row) => row.department?.trim()).filter((value): value is string => Boolean(value)))].sort((a, b) => a.localeCompare(b, "pt-BR")), [rows]);
+  const bases = useMemo(() => [...new Set(rows.map((row) => row.base_name?.trim()).filter((value): value is string => Boolean(value)))].sort((a, b) => a.localeCompare(b, "pt-BR")), [rows]);
 
-  const filteredRows = useMemo(() => {
+  const analysisRows = useMemo(() => {
     const normalized = search.trim().toLocaleLowerCase("pt-BR");
     return rows.filter((row) => {
-      const state = dueState(row);
-      if (filter !== "all" && state !== filter) return false;
+      if (employeeFilter === "current" && row.employee_status === "terminated") return false;
+      if (employeeFilter !== "all" && employeeFilter !== "current" && row.employee_status !== employeeFilter) return false;
+      if (examFilter !== "all" && row.exam_type !== examFilter) return false;
+      if (departmentFilter !== "all" && row.department !== departmentFilter) return false;
+      if (baseFilter === "unassigned" && row.base_name) return false;
+      if (baseFilter !== "all" && baseFilter !== "unassigned" && row.base_name !== baseFilter) return false;
       if (!normalized) return true;
-      return [row.full_name, row.registration, row.function_name, row.job_title, row.department, row.unit]
+      return [row.full_name, row.registration, row.function_name, row.job_title, row.department, row.unit, row.base_name]
         .some((value) => value?.toLocaleLowerCase("pt-BR").includes(normalized));
     });
-  }, [filter, rows, search]);
+  }, [baseFilter, departmentFilter, employeeFilter, examFilter, rows, search]);
+
+  const counts = useMemo(() => analysisRows.reduce<Record<AsoDueState, number>>((result, row) => {
+    result[dueState(row)] += 1;
+    return result;
+  }, { missing: 0, "no-date": 0, overdue: 0, "due-0-7": 0, "due-8-15": 0, "due-16-30": 0, "due-31-60": 0, ok: 0 }), [analysisRows]);
+
+  const filteredRows = useMemo(() => analysisRows.filter((row) => filter === "all" || dueState(row) === filter), [analysisRows, filter]);
+  const donutGradient = useMemo(() => {
+    if (!analysisRows.length) return "conic-gradient(#edf0f5 0deg 360deg)";
+    const states = Object.keys(DUE_LABELS) as AsoDueState[];
+    let cursor = 0;
+    const segments = states.flatMap((state) => {
+      const amount = counts[state];
+      if (!amount) return [];
+      const start = cursor;
+      cursor += (amount / analysisRows.length) * 360;
+      return [`${DUE_COLORS[state]} ${start}deg ${cursor}deg`];
+    });
+    return `conic-gradient(${segments.join(", ")})`;
+  }, [analysisRows.length, counts]);
+
+  const unitSummary = useMemo(() => {
+    const grouped = new Map<string, { total: number; overdue: number; due30: number }>();
+    analysisRows.forEach((row) => {
+      const name = row.base_name?.trim() || "Sem base atribuída";
+      const entry = grouped.get(name) ?? { total: 0, overdue: 0, due30: 0 };
+      entry.total += 1;
+      const state = dueState(row);
+      if (state === "overdue") entry.overdue += 1;
+      if (["due-0-7", "due-8-15", "due-16-30"].includes(state)) entry.due30 += 1;
+      grouped.set(name, entry);
+    });
+    return [...grouped.entries()].map(([name, values]) => ({ name, ...values }))
+      .sort((a, b) => (b.overdue + b.due30) - (a.overdue + a.due30) || a.name.localeCompare(b.name, "pt-BR"))
+      .slice(0, 6);
+  }, [analysisRows]);
+
+  const hasActiveFilters = filter !== "all" || employeeFilter !== "current" || examFilter !== "all" || departmentFilter !== "all" || baseFilter !== "all" || search.trim() !== "";
+
+  function clearFilters() {
+    setSearch("");
+    setFilter("all");
+    setEmployeeFilter("current");
+    setExamFilter("all");
+    setDepartmentFilter("all");
+    setBaseFilter("all");
+  }
 
   function openNewRecord(employeeId = "") {
     if (fileInputRef.current) fileInputRef.current.value = "";
@@ -345,30 +446,50 @@ export default function AsosPage() {
     {error && <FeedbackMessage>{error}</FeedbackMessage>}
     {success && <FeedbackMessage kind="success">{success}</FeedbackMessage>}
 
-    <section className="asos-metrics" aria-label="Resumo dos ASOs">
-      <article><small>Ativos e afastados</small><strong>{currentEmployees.length}</strong><span>Base atual para acompanhamento</span></article>
-      <article className={counts.overdue ? "is-warning" : ""}><small>Data recomendada vencida</small><strong>{counts.overdue}</strong><span>Requer acompanhamento do RH</span></article>
-      <article className={counts.soon ? "is-attention" : ""}><small>Próximos 30 dias</small><strong>{counts.soon}</strong><span>Conforme a data registrada</span></article>
-      <article><small>Sem ASO registrado</small><strong>{counts.missing}</strong><span>Para conferir o cadastro</span></article>
+    <section className="asos-metrics" aria-label="Resumo dos ASOs filtrados">
+      <article><small>Colaboradores no filtro</small><strong>{analysisRows.length}</strong><span>Ativos e afastados por padrão</span></article>
+      <article className={counts.overdue ? "is-warning" : ""}><small>Vencidos</small><strong>{counts.overdue}</strong><span>Precisam de acompanhamento</span></article>
+      <article className={counts["due-0-7"] + counts["due-8-15"] + counts["due-16-30"] ? "is-attention" : ""}><small>Vencem em até 30 dias</small><strong>{counts["due-0-7"] + counts["due-8-15"] + counts["due-16-30"]}</strong><span>Planeje o próximo exame</span></article>
+      <article><small>Sem ASO ou previsão</small><strong>{counts.missing + counts["no-date"]}</strong><span>Verifique os registros</span></article>
+    </section>
+
+    <section className="panel asos-analytics" aria-label="Análise de vencimentos de ASO">
+      <div className="asos-analytics-heading"><div><span className="asos-section-icon"><BarChart3 size={17} /></span><div><h2>Visão de vencimentos</h2><p>Distribuição dos exames mais recentes não cancelados, considerando os filtros selecionados.</p></div></div><span className="asos-updated">{lastUpdatedAt ? `Atualizado em ${formatDateTime(lastUpdatedAt.toISOString())}` : "Aguardando dados"}</span></div>
+      <div className="asos-analytics-grid">
+        <div className="asos-distribution">
+          <div className="asos-donut" role="img" aria-label={`Distribuição de vencimentos para ${analysisRows.length} colaboradores`} style={{ background: donutGradient }}><div><strong>{analysisRows.length}</strong><span>colaboradores</span></div></div>
+          <div className="asos-donut-legend">{(Object.keys(DUE_LABELS) as AsoDueState[]).map((state) => <div key={state}><span style={{ backgroundColor: DUE_COLORS[state] }} /><span>{DUE_LABELS[state]}</span><strong>{counts[state]}</strong></div>)}</div>
+        </div>
+        <div className="asos-unit-summary"><div className="asos-unit-summary-heading"><MapPin size={16} /><h3>Resumo por base operacional</h3></div>
+          {unitSummary.length ? <div className="asos-unit-table-wrap"><table><thead><tr><th>Base</th><th>Vencidos</th><th>Até 30 dias</th><th>Total</th></tr></thead><tbody>{unitSummary.map((unit) => <tr key={unit.name}><td>{unit.name}</td><td className={unit.overdue ? "is-warning" : ""}>{unit.overdue}</td><td className={unit.due30 ? "is-attention" : ""}>{unit.due30}</td><td>{unit.total}</td></tr>)}</tbody></table></div> : <p className="asos-unit-empty">Nenhuma base encontrada para os filtros atuais.</p>}
+        </div>
+      </div>
     </section>
 
     <section className="panel asos-list-panel">
-      <div className="asos-list-heading"><div><h2>Acompanhamento por colaborador</h2><p>Exibe o exame mais recente não cancelado; use “Histórico” para consultar registros anteriores.</p></div><button className="text-action" type="button" onClick={() => void loadRows(true)} disabled={refreshing || loading}><RotateCcw size={14} className={refreshing ? "spin" : ""} /> Atualizar</button></div>
+      <div className="asos-list-heading"><div><h2>Detalhamento por colaborador</h2><p>{filteredRows.length} de {analysisRows.length} colaboradores · exame mais recente não cancelado; use “Histórico” para consultar registros anteriores.</p></div><button className="text-action" type="button" onClick={() => void loadRows(true)} disabled={refreshing || loading}><RotateCcw size={14} className={refreshing ? "spin" : ""} /> Atualizar</button></div>
+      <div className="asos-expiry-filters" aria-label="Filtrar por vencimento">
+        <button type="button" className={filter === "all" ? "is-selected" : ""} aria-pressed={filter === "all"} onClick={() => setFilter("all")}><span>Todos</span><strong>{analysisRows.length}</strong></button>
+        {(Object.keys(DUE_LABELS) as AsoDueState[]).map((state) => <button type="button" key={state} className={filter === state ? "is-selected" : ""} aria-pressed={filter === state} onClick={() => setFilter(filter === state ? "all" : state)}><span><i style={{ backgroundColor: DUE_COLORS[state] }} />{DUE_LABELS[state]}</span><strong>{counts[state]}</strong></button>)}
+      </div>
       <div className="asos-filters">
-        <label className="asos-search"><Search size={16} /><input type="search" value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Buscar por colaborador, matrícula, função ou unidade" /></label>
-        <label className="asos-status-filter"><span>Situação</span><select value={filter} onChange={(event) => setFilter(event.target.value)}><option value="all">Todas</option><option value="overdue">Data vencida</option><option value="soon">Próximos 30 dias</option><option value="ok">Em acompanhamento</option><option value="no-date">Sem próxima data</option><option value="missing">Sem ASO registrado</option></select><ChevronDown size={14} aria-hidden="true" /></label>
+        <label className="asos-search"><Search size={16} /><input type="search" value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Buscar por colaborador, matrícula, função ou base" /></label>
+        <label className="asos-status-filter"><span>Vínculo</span><select value={employeeFilter} onChange={(event) => setEmployeeFilter(event.target.value)}><option value="current">Ativos e afastados</option><option value="active">Ativos</option><option value="away">Afastados</option><option value="terminated">Desligados</option><option value="all">Todos</option></select><ChevronDown size={14} aria-hidden="true" /></label>
+        <label className="asos-status-filter"><span>Tipo de exame</span><select value={examFilter} onChange={(event) => setExamFilter(event.target.value)}><option value="all">Todos</option>{EXAM_TYPES.map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select><ChevronDown size={14} aria-hidden="true" /></label>
+        <label className="asos-status-filter"><span>Setor / contrato</span><select value={departmentFilter} onChange={(event) => setDepartmentFilter(event.target.value)}><option value="all">Todos</option>{departments.map((department) => <option key={department} value={department}>{department}</option>)}</select><ChevronDown size={14} aria-hidden="true" /></label>
+        <label className="asos-status-filter"><span>Base operacional</span><select value={baseFilter} onChange={(event) => setBaseFilter(event.target.value)}><option value="all">Todas</option><option value="unassigned">Sem base atribuída</option>{bases.map((base) => <option key={base} value={base}>{base}</option>)}</select><ChevronDown size={14} aria-hidden="true" /></label>
+        {hasActiveFilters && <button className="asos-clear-filters" type="button" onClick={clearFilters}><Filter size={14} /> Limpar filtros</button>}
       </div>
       {loading ? <div className="asos-state"><LoaderCircle size={21} className="spin" /> Carregando ASOs...</div>
         : filteredRows.length === 0 ? <div className="asos-empty"><Stethoscope size={26} /><strong>Nenhum colaborador encontrado</strong><span>Confira os filtros ou registre o primeiro ASO do colaborador.</span></div>
           : <div className="asos-table-wrap"><table className="asos-table"><thead><tr><th>Colaborador</th><th>Exame mais recente</th><th>Próxima data recomendada</th><th>Situação</th><th>Documento</th><th>Ações</th></tr></thead><tbody>
             {filteredRows.map((row) => {
               const state = dueState(row);
-              const stateLabels = { missing: "Sem ASO", "no-date": "Sem data prevista", overdue: "Data vencida", soon: "Até 30 dias", ok: "Em acompanhamento" };
               return <tr key={row.employee_id}>
-                <td><div className="asos-person"><span className="asos-avatar"><UserRound size={16} /></span><span><strong>{row.full_name}</strong><small>{row.registration ? `Matrícula ${row.registration}` : "Sem matrícula"} · {employeeFunction(row)}</small><small className={`asos-employee-status employee-${row.employee_status}`}>{employmentLabel(row.employee_status)}</small>{(row.department || row.unit) && <small>{[row.department, row.unit].filter(Boolean).join(" · ")}</small>}</span></div></td>
+                <td><div className="asos-person"><span className="asos-avatar"><UserRound size={16} /></span><span><strong>{row.full_name}</strong><small>{row.registration ? `Matrícula ${row.registration}` : "Sem matrícula"} · {employeeFunction(row)}</small><small className={`asos-employee-status employee-${row.employee_status}`}>{employmentLabel(row.employee_status)}</small><small>{[row.department, row.base_name || "Sem base atribuída"].filter(Boolean).join(" · ")}</small></span></div></td>
                 <td>{row.aso_id ? <><strong className="asos-cell-primary">{examLabel(row.exam_type)}</strong><small className="asos-cell-secondary">{formatDate(row.exam_date)} · {resultLabel(row.fitness_result)}</small></> : <span className="asos-muted">Sem registro</span>}</td>
-                <td>{row.next_exam_due_date ? formatDate(row.next_exam_due_date) : <span className="asos-muted">Não informada</span>}</td>
-                <td><span className={`asos-status-pill status-${state}`}>{state === "overdue" ? <AlertTriangle size={13} /> : state === "ok" ? <Check size={13} /> : <CalendarClock size={13} />}{stateLabels[state]}</span></td>
+                <td>{row.next_exam_due_date ? <><strong className="asos-cell-primary">{formatDate(row.next_exam_due_date)}</strong><small className="asos-cell-secondary">{dueDescription(row.next_exam_due_date)}</small></> : <span className="asos-muted">Não informada</span>}</td>
+                <td><span className={`asos-status-pill status-${state}`}>{state === "overdue" ? <AlertTriangle size={13} /> : state === "ok" ? <Check size={13} /> : <CalendarClock size={13} />}{DUE_LABELS[state]}</span></td>
                 <td>{row.document_path ? <span className="asos-document-state"><FileCheck2 size={14} /> Anexado</span> : row.aso_id ? <span className="asos-muted">Pendente</span> : "—"}</td>
                 <td><div className="asos-row-actions"><button className="text-action" type="button" onClick={() => void loadHistory(row)}><ClipboardList size={14} /> Histórico</button><button className="text-action" type="button" onClick={() => openNewRecord(row.employee_id)}><Plus size={14} /> Novo ASO</button></div></td>
               </tr>;
