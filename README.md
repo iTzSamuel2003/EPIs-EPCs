@@ -35,4 +35,4 @@ Preencha `NEXT_PUBLIC_SUPABASE_URL` e `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY` no 
 
 ## Pendências técnicas
 
-- [ ] Revisar o relatório de vulnerabilidades do `npm ci` de 21/10/2026 (10 ocorrências: 1 crítica, 8 altas e 1 baixa), executar `npm audit`, avaliar atualizações compatíveis e validar lint/build. Nenhuma dependência foi atualizada naquela publicação.
+- [ ] Revisar os 7 alertas moderados de `npm audit` em dependências de desenvolvimento (cadeia do `@typescript-eslint`/`minimatch`), identificados em 13/11/2026. `npm audit --omit=dev` não reportou vulnerabilidades de produção. Não houve atualização automática de dependências.

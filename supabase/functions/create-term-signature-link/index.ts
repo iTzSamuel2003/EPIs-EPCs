@@ -204,12 +204,14 @@ const secretKeys = Deno.env.get("SUPABASE_SECRET_KEYS");
 const serviceKey = (secretKeys ? JSON.parse(secretKeys).default : "") || Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") || Deno.env.get("SUPABASE_SECRET_KEY") || "";
 const admin = createClient(supabaseUrl, serviceKey, { auth: { autoRefreshToken: false, persistSession: false } });
 
-async function organizationIsActive(organizationId: string) {
+async function organizationLifecycleStatus(organizationId: string) {
   const { data, error } = await admin.from("organizations")
     .select("lifecycle_status")
     .eq("id", organizationId)
     .maybeSingle();
-  return !error && data?.lifecycle_status === "active";
+  return !error && typeof data?.lifecycle_status === "string"
+    ? data.lifecycle_status
+    : null;
 }
 
 Deno.serve(async (request) => {
@@ -269,10 +271,30 @@ Deno.serve(async (request) => {
       : profileData?.full_name,
     organization: managementContext
       ? { name: managementContext.organization_name, logo_url: managementContext.organization_logo_url, cnpj: null, address: null, phone: null }
-      : profileData?.organization,
+      : profileData && "organization" in profileData
+      ? profileData.organization
+      : null,
   };
   if (profileError || !profile.organization_id) return respond({ error: "Não foi possível identificar a organização." }, 403, origin);
-  if (!(await organizationIsActive(String(profile.organization_id)))) return respond({ error: "A organização está temporariamente indisponível." }, 403, origin);
+  const organizationId = String(profile.organization_id);
+  const lifecycleStatus = await organizationLifecycleStatus(organizationId);
+  let hasActiveTestAccess = false;
+  if (
+    lifecycleStatus !== null &&
+    lifecycleStatus !== "active" &&
+    !managementContext &&
+    profileData?.organization_id === organizationId
+  ) {
+    // This RPC is bound to auth.uid() and treats only a currently valid test
+    // access for the caller's own organization as effectively active.
+    const { data: lifecycleRows, error: lifecycleError } = await userClient.rpc("get_my_organization_lifecycle_status");
+    hasActiveTestAccess = !lifecycleError && Array.isArray(lifecycleRows) && lifecycleRows.some((row) =>
+      row && typeof row === "object" && (row as { lifecycle_status?: unknown }).lifecycle_status === "active"
+    );
+  }
+  if (lifecycleStatus !== "active" && !hasActiveTestAccess) {
+    return respond({ error: "A organização está temporariamente indisponível." }, 403, origin);
+  }
   const requiredPage = recordType === "return" ? "/returns" : recordType === "deduction" || recordType === "witness" ? "/discounts" : "/deliveries";
   let pagePaths: unknown = null;
   const transactionQuery = userClient.from(table).select(select).eq("id", recordId).maybeSingle();
