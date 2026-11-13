@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { AlertTriangle, ArrowUpRight, Boxes, CalendarClock, Check, ClipboardList, LoaderCircle, PackageCheck, Users, Wallet } from "lucide-react";
+import { AlertTriangle, ArrowUpRight, Boxes, CalendarClock, Cake, Check, ClipboardList, LoaderCircle, PackageCheck, Users, Wallet } from "lucide-react";
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/client";
 import { useCurrentUser } from "@/components/app-shell";
@@ -11,6 +11,7 @@ import { FeedbackMessage } from "@/components/feedback-message";
 type Material = { id: string; name: string; internal_code: string; type: string; minimum_stock: number; unit: string };
 type Lot = { id: string; material_id: string; available_quantity: number; received_quantity: number; unit_cost: number; expires_at: string | null; material: Material | null };
 type Delivery = { id: string; delivered_at: string; reason: string; employee: { full_name: string; registration: string | null } | null; delivery_items: Array<{ quantity: number; material: { name: string; unit: string } | null }> };
+type EmployeeMilestone = { employee_id: string; employee_name: string; milestone_type: "birthday" | "service_anniversary"; milestone_date: string; years_of_service: number | null; days_until: number };
 type StockRow = { material: Material; quantity: number; value: number; receivedQuantity: number; receivedValue: number };
 
 const reasons: Record<string, string> = { admission: "Admissão", periodic_change: "Troca periódica", damaged: "Dano", lost: "Extravio", role_change: "Alteração de função", replacement: "Substituição", other: "Outro" };
@@ -18,11 +19,12 @@ function money(value: number) { return `R$ ${value.toFixed(2).replace(".", ",")}
 function date(value: string) { const parsed = value.length === 10 ? new Date(`${value}T00:00:00`) : new Date(value); return parsed.toLocaleDateString("pt-BR"); }
 
 export default function Home() {
-  const { name: currentUserName, isTestAccess } = useCurrentUser();
+  const { name: currentUserName, isTestAccess, role } = useCurrentUser();
   const [materials, setMaterials] = useState<Material[]>([]);
   const [lots, setLots] = useState<Lot[]>([]);
   const [employees, setEmployees] = useState(0);
   const [deliveries, setDeliveries] = useState<Delivery[]>([]);
+  const [employeeMilestones, setEmployeeMilestones] = useState<EmployeeMilestone[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [alertDays, setAlertDays] = useState(30);
@@ -71,8 +73,20 @@ export default function Home() {
     events.forEach((eventName) => window.addEventListener(eventName, refresh));
     return () => events.forEach((eventName) => window.removeEventListener(eventName, refresh));
   }, []);
+  useEffect(() => {
+    let active = true;
+    if (role !== "rh" && role !== "admin") {
+      setEmployeeMilestones([]);
+      return () => { active = false; };
+    }
+    void createClient().rpc("get_hr_employee_milestone_alerts", { p_days_ahead: 30 }).then(({ data, error: milestoneError }) => {
+      if (!active) return;
+      setEmployeeMilestones(milestoneError ? [] : (data ?? []) as EmployeeMilestone[]);
+    });
+    return () => { active = false; };
+  }, [role, reloadKey]);
   const stock = useMemo(() => { const result = new Map<string, StockRow>(); materials.forEach((material) => result.set(material.id, { material, quantity: 0, value: 0, receivedQuantity: 0, receivedValue: 0 })); lots.forEach((lot) => { const material = lot.material ?? materials.find((item) => item.id === lot.material_id); if (!material) return; const row = result.get(lot.material_id) ?? { material, quantity: 0, value: 0, receivedQuantity: 0, receivedValue: 0 }; const availableQuantity = Number(lot.available_quantity); const receivedQuantity = Number(lot.received_quantity); const unitCost = Number(lot.unit_cost); row.quantity += availableQuantity; row.value += availableQuantity * unitCost; row.receivedQuantity += receivedQuantity; row.receivedValue += receivedQuantity * unitCost; result.set(lot.material_id, row); }); return [...result.values()].sort((a, b) => a.material.name.localeCompare(b.material.name, "pt-BR")); }, [materials, lots]);
-  const acquired = lots.reduce((sum, lot) => sum + Number(lot.received_quantity) * Number(lot.unit_cost), 0); const currentValue = lots.reduce((sum, lot) => sum + Number(lot.available_quantity) * Number(lot.unit_cost), 0); const outOfStock = stock.filter((row) => row.quantity === 0); const lowStock = stock.filter((row) => row.quantity > 0 && Number(row.material.minimum_stock) > 0 && row.quantity < Number(row.material.minimum_stock)); const expiring = lots.filter((lot) => Number(lot.available_quantity) > 0 && lot.expires_at && new Date(`${lot.expires_at}T00:00:00`).getTime() <= Date.now() + alertDays * 86400000); const forecast = stock.reduce((sum, row) => sum + Math.max(0, Number(row.material.minimum_stock) - row.quantity) * (row.receivedQuantity ? row.receivedValue / row.receivedQuantity : 0), 0); const hasAlerts = outOfStock.length > 0 || lowStock.length > 0 || expiring.length > 0;
+  const acquired = lots.reduce((sum, lot) => sum + Number(lot.received_quantity) * Number(lot.unit_cost), 0); const currentValue = lots.reduce((sum, lot) => sum + Number(lot.available_quantity) * Number(lot.unit_cost), 0); const outOfStock = stock.filter((row) => row.quantity === 0); const lowStock = stock.filter((row) => row.quantity > 0 && Number(row.material.minimum_stock) > 0 && row.quantity < Number(row.material.minimum_stock)); const expiring = lots.filter((lot) => Number(lot.available_quantity) > 0 && lot.expires_at && new Date(`${lot.expires_at}T00:00:00`).getTime() <= Date.now() + alertDays * 86400000); const forecast = stock.reduce((sum, row) => sum + Math.max(0, Number(row.material.minimum_stock) - row.quantity) * (row.receivedQuantity ? row.receivedValue / row.receivedQuantity : 0), 0); const hasAlerts = outOfStock.length > 0 || lowStock.length > 0 || expiring.length > 0 || employeeMilestones.length > 0;
   if (loading) return <main className="page-content dashboard-page"><div className="module-loading"><LoaderCircle className="spin" size={22} /> Carregando Dashboard...</div></main>;
   const greetingName = currentUserName.trim().split(/\s+/)[0] || "Usuário";
 
@@ -100,6 +114,7 @@ export default function Home() {
             {outOfStock.length > 0 && <StockAlertGroup title="Itens sem estoque" rows={outOfStock} critical />}
             {lowStock.length > 0 && <StockAlertGroup title="Itens com estoque baixo" rows={lowStock} />}
             {expiring.length > 0 && <details className="dashboard-alert-group"><summary><span><strong>Validades próximas</strong><small>{expiring.length} lote(s) precisam de atenção</small></span><span className="alert-group-chevron">⌄</span></summary><div className="alert-group-list">{expiring.slice(0, 5).map((lot) => <Link className="alert-item" href="/validities?filter=urgent" key={`${lot.material_id}-${lot.expires_at}`}><div className="alert-icon calendar"><CalendarClock size={17} /></div><div><strong>Validade próxima</strong><p>{lot.material?.name} · vence em {date(lot.expires_at as string)}</p></div></Link>)}</div></details>}
+            {employeeMilestones.length > 0 && <details className="dashboard-alert-group"><summary><span><strong>Aniversários e tempo de serviço</strong><small>{employeeMilestones.length} marco(s) nos próximos 30 dias</small></span><span className="alert-group-chevron">⌄</span></summary><div className="alert-group-list">{employeeMilestones.slice(0, 8).map((milestone) => <Link className="alert-item" href={`/employees/${milestone.employee_id}/edit`} key={`${milestone.employee_id}-${milestone.milestone_type}-${milestone.milestone_date}`}><div className="alert-icon calendar">{milestone.milestone_type === "birthday" ? <Cake size={17} /> : <CalendarClock size={17} />}</div><div><strong>{milestone.milestone_type === "birthday" ? "Aniversário" : `${milestone.years_of_service} ${milestone.years_of_service === 1 ? "ano" : "anos"} de empresa`}</strong><p>{milestone.employee_name} · {milestone.days_until === 0 ? "hoje" : `em ${milestone.days_until} dia(s)`} · {date(milestone.milestone_date)}</p></div></Link>)}</div></details>}
             {!hasAlerts && <div className="empty-state"><Check size={24} /><strong>Nenhum alerta pendente</strong><span>O estoque e as validades estão dentro dos parâmetros.</span></div>}
           </div>
           <Link className="view-all" href="/validities">Ver todos os alertas <ArrowUpRight size={15} /></Link>

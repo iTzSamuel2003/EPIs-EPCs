@@ -9,6 +9,7 @@ import { createClient } from "@/lib/supabase/client";
 import { getCurrentOrganizationProfile } from "@/lib/organization-context";
 import { friendlyError } from "@/lib/ui-feedback";
 import { useCurrentUser } from "@/components/app-shell";
+import { emptyEmployeeHrPrivateData, EmployeeHrPrivateFields, type EmployeeHrPrivateData } from "@/components/employee-hr-private-fields";
 
 type Employee = { id: string; registration: string | null; full_name: string; cpf?: string; job_title: string | null; function_name: string | null; function_classification: string | null; department: string | null; unit: string | null; admission_date?: string | null; termination_date?: string | null; phone?: string | null; email?: string | null; status: "active" | "away" | "terminated"; notes?: string | null; shirt_size?: string | null; pants_size?: string | null; shoe_size?: string | null; helmet_size?: string | null; glove_size?: string | null };
 type EmployeeForm = { registration: string; full_name: string; cpf: string; cargo_funcao: string; function_classification: string; department: string; unit: string; admission_date: string; phone: string; email: string; status: "active" | "away" | "terminated"; notes: string };
@@ -50,6 +51,7 @@ export default function EmployeesPage() {
   const [bases, setBases] = useState<OperationalBase[]>([]);
   const [functionTemplates, setFunctionTemplates] = useState<FunctionTemplate[]>([]);
   const [form, setForm] = useState<EmployeeForm>(emptyForm);
+  const [privateData, setPrivateData] = useState<EmployeeHrPrivateData>(emptyEmployeeHrPrivateData);
   const [query, setQuery] = useState("");
   const [showSensitiveData, setShowSensitiveData] = useState(false);
   const [statusFilter, setStatusFilter] = useState("all");
@@ -118,6 +120,10 @@ export default function EmployeesPage() {
     return () => { mountedRef.current = false; };
   }, [loadEmployees]);
 
+  useEffect(() => {
+    if (!showForm) setPrivateData(emptyEmployeeHrPrivateData);
+  }, [showForm]);
+
   const normalizedQuery = normalizeSearch(query);
   const showCpf = canRevealSensitiveData && showSensitiveData;
   const filtered = employees.filter((employee) => normalizeSearch(`${employee.full_name} ${employee.registration ?? ""} ${showCpf ? employee.cpf ?? "" : ""} ${employee.department ?? ""} ${employee.function_name ?? ""} ${employee.function_classification ?? ""}`).includes(normalizedQuery) && (statusFilter === "all" || employee.status === statusFilter));
@@ -127,6 +133,7 @@ export default function EmployeesPage() {
   useEffect(() => { setPage(1); }, [query, statusFilter]);
   useEffect(() => { setPage((current) => Math.min(current, pageCount)); }, [pageCount]);
   function update(field: keyof EmployeeForm, value: string) { setForm((current) => ({ ...current, [field]: value })); }
+  function updatePrivateData(field: keyof EmployeeHrPrivateData, value: string) { setPrivateData((current) => ({ ...current, [field]: value })); }
 
   async function saveEmployee(event: FormEvent) {
     event.preventDefault();
@@ -145,6 +152,10 @@ export default function EmployeesPage() {
       setError("Informe uma data de admissão válida e não futura.");
       return;
     }
+    if (privateData.birth_date && (!isValidDateValue(privateData.birth_date) || privateData.birth_date > new Date().toISOString().slice(0, 10))) {
+      setError("Informe uma data de nascimento válida e não futura.");
+      return;
+    }
     setSaving(true);
     try {
       const typedClassification = form.cargo_funcao.match(/\s+(VI|V|IV|III|II|I)$/i)?.[1]?.toUpperCase() ?? "";
@@ -155,7 +166,7 @@ export default function EmployeesPage() {
       const { data: profile, error: profileError } = await getCurrentOrganizationProfile(supabase, auth.user.id, auth.user.user_metadata?.full_name);
       if (profileError) throw profileError;
       if (!profile?.organization_id) throw new Error("Não foi possível identificar a organização do usuário.");
-      const { error: insertError } = await supabase.rpc("create_hr_employee", {
+      const { error: insertError } = await supabase.rpc("create_hr_employee_with_private_data", {
         p_registration: form.registration.trim() || null,
         p_full_name: form.full_name.trim(),
         p_cpf: form.cpf.trim(),
@@ -168,6 +179,16 @@ export default function EmployeesPage() {
         p_email: form.email.trim() || null,
         p_status: form.status,
         p_notes: form.notes.trim() || null,
+        p_birth_date: privateData.birth_date || null,
+        p_address: privateData.address.trim() || null,
+        p_pis: privateData.pis.trim() || null,
+        p_bank_name: privateData.bank_name.trim() || null,
+        p_bank_account: privateData.bank_account.trim() || null,
+        p_bank_branch: privateData.bank_branch.trim() || null,
+        p_marital_status: privateData.marital_status || null,
+        p_dependents: privateData.dependents.trim() || null,
+        p_emergency_contact_name: privateData.emergency_contact_name.trim() || null,
+        p_emergency_contact_phone: privateData.emergency_contact_phone.trim() || null,
       });
       if (insertError) throw insertError;
       setSuccess("Funcionário cadastrado com sucesso."); setForm(emptyForm); setShowForm(false); await loadEmployees();
@@ -208,6 +229,6 @@ export default function EmployeesPage() {
         </div>
       )}
     </section>
-    {showForm && <div className="modal-backdrop"><section className="modal-card employee-create-modal" role="dialog" aria-modal="true" aria-label="Cadastro de funcionário"><div className="modal-header"><div><p className="eyebrow">NOVO CADASTRO</p><h2>Cadastrar funcionário</h2></div><button type="button" className="close-modal" onClick={() => setShowForm(false)} aria-label="Fechar"><X size={19} /></button></div><form className="material-form" onSubmit={saveEmployee}><div className="form-section-title"><h2>Dados principais</h2><p>Preencha os mesmos dados disponíveis na edição do colaborador.</p></div><div className="form-grid three"><label>Matrícula<input value={form.registration} onChange={(event) => update("registration", event.target.value)} placeholder="Preencher posteriormente" /></label><label>Nome completo<input value={form.full_name} onChange={(event) => update("full_name", event.target.value)} placeholder="Nome do funcionário" required /></label><label>CPF<input value={form.cpf} onChange={(event) => update("cpf", event.target.value)} placeholder="000.000.000-00" required /></label></div><div className="form-grid three"><label>Função<select value={form.cargo_funcao} onChange={(event) => update("cargo_funcao", event.target.value)}><option value="">Selecione a função</option>{functionTemplates.map((template) => <option key={template.id} value={template.name}>{functionLabel(template.name)}</option>)}</select></label><label>Classificação<select value={form.function_classification} onChange={(event) => update("function_classification", event.target.value)}><option value="">Sem classificação</option>{classificationOptions.map((classification) => <option key={classification} value={classification}>{classification}</option>)}</select></label><label>Setor<input value={form.department} onChange={(event) => update("department", event.target.value)} placeholder="Setor" /></label></div><div className="form-section-title"><h2>Base e contato</h2><p>A base define a localização operacional e o estoque utilizado pelo colaborador.</p></div><div className="form-grid three"><label>Base operacional<select value={form.unit} onChange={(event) => update("unit", event.target.value)}><option value="">Sem base atribuída</option>{bases.filter((base) => base.is_active).map((base) => <option key={base.id} value={base.name}>{base.name}</option>)}</select></label><label>Data de admissão<input type="date" value={form.admission_date} onChange={(event) => update("admission_date", event.target.value)} /></label><label>Telefone<input value={form.phone} onChange={(event) => update("phone", event.target.value)} placeholder="(00) 00000-0000" /></label></div><div className="form-grid two"><label>E-mail<input type="email" value={form.email} onChange={(event) => update("email", event.target.value)} placeholder="funcionario@empresa.com" /></label><label>Status<select value={form.status} onChange={(event) => update("status", event.target.value)}><option value="active">Ativo</option><option value="away">Afastado</option><option value="terminated">Desligado</option></select></label></div><label>Observações<textarea value={form.notes} onChange={(event) => update("notes", event.target.value)} placeholder="Observações internas" rows={3} /></label>{error && <p className="login-error">{error}</p>}<div className="modal-actions"><button type="button" className="secondary-button" onClick={() => setShowForm(false)}>Cancelar</button><button className="primary-button" disabled={saving}>{saving ? "Salvando..." : "Cadastrar funcionário"}<Plus size={16} /></button></div></form></section></div>}
+    {showForm && <div className="modal-backdrop"><section className="modal-card employee-create-modal" role="dialog" aria-modal="true" aria-label="Cadastro de funcionário"><div className="modal-header"><div><p className="eyebrow">NOVO CADASTRO</p><h2>Cadastrar funcionário</h2></div><button type="button" className="close-modal" onClick={() => setShowForm(false)} aria-label="Fechar"><X size={19} /></button></div><form className="material-form" onSubmit={saveEmployee}><div className="form-section-title"><h2>Dados principais</h2><p>Preencha os mesmos dados disponíveis na edição do colaborador.</p></div><div className="form-grid three"><label>Matrícula<input value={form.registration} onChange={(event) => update("registration", event.target.value)} placeholder="Preencher posteriormente" /></label><label>Nome completo<input value={form.full_name} onChange={(event) => update("full_name", event.target.value)} placeholder="Nome do funcionário" required /></label><label>CPF<input value={form.cpf} onChange={(event) => update("cpf", event.target.value)} placeholder="000.000.000-00" required /></label></div><div className="form-grid three"><label>Função<select value={form.cargo_funcao} onChange={(event) => update("cargo_funcao", event.target.value)}><option value="">Selecione a função</option>{functionTemplates.map((template) => <option key={template.id} value={template.name}>{functionLabel(template.name)}</option>)}</select></label><label>Classificação<select value={form.function_classification} onChange={(event) => update("function_classification", event.target.value)}><option value="">Sem classificação</option>{classificationOptions.map((classification) => <option key={classification} value={classification}>{classification}</option>)}</select></label><label>Setor<input value={form.department} onChange={(event) => update("department", event.target.value)} placeholder="Setor" /></label></div><div className="form-section-title"><h2>Base e contato</h2><p>A base define a localização operacional e o estoque utilizado pelo colaborador.</p></div><div className="form-grid three"><label>Base operacional<select value={form.unit} onChange={(event) => update("unit", event.target.value)}><option value="">Sem base atribuída</option>{bases.filter((base) => base.is_active).map((base) => <option key={base.id} value={base.name}>{base.name}</option>)}</select></label><label>Data de admissão<input type="date" value={form.admission_date} onChange={(event) => update("admission_date", event.target.value)} /></label><label>Telefone<input value={form.phone} onChange={(event) => update("phone", event.target.value)} placeholder="(00) 00000-0000" /></label></div><div className="form-grid two"><label>E-mail<input type="email" value={form.email} onChange={(event) => update("email", event.target.value)} placeholder="funcionario@empresa.com" /></label><label>Status<select value={form.status} onChange={(event) => update("status", event.target.value)}><option value="active">Ativo</option><option value="away">Afastado</option><option value="terminated">Desligado</option></select></label></div><label>Observações<textarea value={form.notes} onChange={(event) => update("notes", event.target.value)} placeholder="Observações internas" rows={3} /></label>{canRevealSensitiveData && <EmployeeHrPrivateFields value={privateData} onChange={updatePrivateData} />}{error && <p className="login-error">{error}</p>}<div className="modal-actions"><button type="button" className="secondary-button" onClick={() => setShowForm(false)}>Cancelar</button><button className="primary-button" disabled={saving}>{saving ? "Salvando..." : "Cadastrar funcionário"}<Plus size={16} /></button></div></form></section></div>}
   </main>;
 }
