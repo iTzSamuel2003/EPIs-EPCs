@@ -5890,3 +5890,61 @@ html,body{max-width:100%;overflow-x:hidden}
 
 .brand.brand-with-custom-logo .brand-mark.brand-mark-custom{position:relative;display:block;width:92px;height:40px;flex:0 0 92px;overflow:hidden;border:0;border-radius:0;background:transparent;box-shadow:none}
 .brand.brand-with-custom-logo .brand-mark.brand-mark-custom img{position:static;display:block;width:100%;height:100%;max-width:100%;object-fit:contain;object-position:left center}
+
+.stock-header-actions{display:flex;align-items:center;justify-content:flex-end;flex-wrap:wrap;gap:9px}
+.stock-header-actions .secondary-button,.stock-header-actions .primary-button{display:inline-flex;align-items:center;justify-content:center;gap:8px;min-height:42px;white-space:nowrap}
+.inventory-count-dialog{z-index:80}
+.inventory-count-dialog-card{width:min(100%,1260px);max-height:calc(100dvh - 40px);padding:22px;}
+.inventory-count-dialog-card .modal-header{margin-bottom:14px}
+.inventory-count-dialog-card .modal-header>div{display:grid;gap:6px}
+.inventory-count-dialog-card .modal-header .eyebrow{margin:0}
+.inventory-count-dialog-card .modal-header h2{margin:0;font-family:'Plus Jakarta Sans';font-size:20px}
+.inventory-count-dialog-card .modal-header p:last-child{margin:0;color:#8994a8;font-size:12px}
+.inventory-count-actions{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:15px;padding-bottom:14px;border-bottom:1px solid #edf0f5;color:#8994a8;font-size:11px}
+.inventory-count-actions>div{display:flex;gap:8px}
+.inventory-count-actions button{display:inline-flex;align-items:center;justify-content:center;gap:7px;min-height:38px}
+.inventory-count-print{padding:10px;background:#fff;color:#26334d}
+.inventory-print-header{display:flex;justify-content:space-between;align-items:flex-start;gap:18px;padding-bottom:12px;border-bottom:3px solid #d2cc00}
+.inventory-print-header>div:first-child{display:grid;gap:5px}
+.inventory-print-header>div:first-child>span{color:#78849a;font-size:9px;font-weight:700;letter-spacing:.08em}
+.inventory-print-header h1{margin:0;font-size:19px;letter-spacing:.01em}
+.inventory-print-meta{display:grid;gap:5px;text-align:right;font-size:11px}
+.inventory-print-info{display:flex;justify-content:space-between;gap:20px;margin:13px 0;font-size:10px}
+.inventory-count-table{width:100%;border-collapse:collapse;table-layout:fixed}
+.inventory-count-table th,.inventory-count-table td{padding:8px 7px;border:1px solid #aeb5c0;text-align:left;vertical-align:middle;font-size:10px}
+.inventory-count-table th{background:#f2efca;color:#26334d;font-size:9px;font-weight:800}
+.inventory-count-table th:nth-child(1){width:36%}
+.inventory-count-table th:nth-child(2){width:9%}
+.inventory-count-table th:nth-child(3){width:13%}
+.inventory-count-table th:nth-child(4){width:16%}
+.inventory-count-table th:nth-child(5){width:11%}
+.inventory-count-table th:nth-child(6){width:15%}
+.inventory-count-table td{overflow-wrap:anywhere;word-break:normal}
+.inventory-count-table td strong{display:block}
+.inventory-count-table td strong{font-size:10px;line-height:1.35}
+.inventory-write-line{display:block;width:100%;height:20px;border-bottom:1px solid #aeb5c0}
+.inventory-print-footer{display:flex;justify-content:space-between;gap:16px;margin-top:14px;padding-top:9px;border-top:1px solid #aeb5c0;color:#536078;font-size:9px}
+@media(max-width:760px){.stock-header-actions{width:100%;justify-content:stretch}.stock-header-actions>*{flex:1 1 180px}.inventory-count-actions{align-items:stretch;flex-direction:column}.inventory-count-actions>div{display:grid;grid-template-columns:1fr 1fr}.inventory-count-actions button{padding-inline:9px}.inventory-count-dialog-card{padding:17px 12px}.inventory-count-print{min-width:760px}.inventory-count-dialog-card{overflow:auto}.inventory-print-header h1{font-size:16px}}
+@media print{
+  @page{size:A4 landscape;margin:9mm;}
+  body.printing-inventory-count *{visibility:hidden!important;}
+  body.printing-inventory-count .inventory-count-dialog,body.printing-inventory-count .inventory-count-dialog *{visibility:visible!important;}
+  body.printing-inventory-count .inventory-count-dialog{position:static!important;display:block!important;overflow:visible!important;padding:0!important;background:transparent!important;}
+  body.printing-inventory-count .inventory-count-dialog-card{position:static!important;display:block!important;width:auto!important;max-width:none!important;max-height:none!important;overflow:visible!important;margin:0!important;padding:0!important;border:0!important;border-radius:0!important;box-shadow:none!important;}
+  body.printing-inventory-count .inventory-count-controls{display:none!important;}
+  body.printing-inventory-count .inventory-count-print{display:block!important;position:static!important;width:100%!important;min-width:0!important;margin:0!important;padding:0!important;overflow:visible!important;background:#fff!important;color:#26334d!important;font:9pt/1.35 Arial,Helvetica,sans-serif;-webkit-print-color-adjust:exact;print-color-adjust:exact;}
+  .inventory-print-header{padding-bottom:8px;}
+  .inventory-print-header h1{font-size:15pt;}
+  .inventory-print-header>div:first-child>span{font-size:7pt;}
+  .inventory-print-meta,.inventory-print-info{font-size:8pt;}
+  .inventory-print-info{margin:9px 0;}
+  .inventory-count-table{display:table!important;width:100%!important;table-layout:fixed!important;}
+  .inventory-count-table thead{display:table-header-group!important;}
+  .inventory-count-table tbody{display:table-row-group!important;}
+  .inventory-count-table tr{display:table-row!important;break-inside:avoid;page-break-inside:avoid;}
+  .inventory-count-table th,.inventory-count-table td{display:table-cell!important;padding:3px 4px;font-size:7.5pt;}
+  .inventory-count-table th{font-size:7pt;}
+  .inventory-count-table td strong{font-size:7.5pt;}
+  .inventory-write-line{height:8mm;}
+  .inventory-print-footer{margin-top:10px;padding-top:7px;font-size:7.5pt;}
+}

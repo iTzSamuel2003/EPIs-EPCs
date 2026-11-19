@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
-import { ArrowDownAZ, ArrowUpAZ, Boxes, LoaderCircle, Search } from "lucide-react";
+import { ArrowDownAZ, ArrowUpAZ, Boxes, ClipboardList, LoaderCircle, Printer, Search, X } from "lucide-react";
 import Link from "next/link";
 import { FeedbackMessage } from "@/components/feedback-message";
 import { BaseSelect } from "@/components/base-select";
@@ -12,6 +12,7 @@ import { useBaseContext } from "@/lib/use-base-context";
 type StockMaterial = { id: string; internal_code: string; name: string; type: "EPI" | "EPC" | "FERRAMENTAL"; unit: string; minimum_stock: number; location: string | null; status: "active" | "inactive"; ca_required: boolean; test_required: boolean; report_required: boolean };
 type StockBalance = { totalQuantity: number; availableQuantity: number; totalCost: number; availableCost: number };
 type VariantBalance = { id: string; label: string; totalQuantity: number; availableQuantity: number };
+type StockVariant = { id: string; material_id: string; name: string; size: string | null; active: boolean };
 type StockLot = { id: string; base_id: string; material_id: string; variant_id: string | null; lot_number: string; received_quantity: number; available_quantity: number; entry_date: string; unit_cost: number | null; ca_number: string | null; ca_expires_at: string | null; test_number: string | null; test_performed_at: string | null; test_expires_at: string | null; test_report_number: string | null };
 type CaCertificate = { ca_number: string; valid_until: string | null; status: string | null };
 
@@ -35,6 +36,7 @@ function caSituation(lot: StockLot, certificate?: CaCertificate) {
 export default function StockPage() {
   const { accessibleBases, selectedBaseId, chooseBase, loading: basesLoading, error: basesError } = useBaseContext();
   const [materials, setMaterials] = useState<StockMaterial[]>([]);
+  const [inventoryMaterials, setInventoryMaterials] = useState<StockMaterial[]>([]);
   const [balances, setBalances] = useState<Record<string, StockBalance>>({});
   const [variantBalances, setVariantBalances] = useState<Record<string, VariantBalance[]>>({});
   const [lotsByMaterial, setLotsByMaterial] = useState<Record<string, StockLot[]>>({});
@@ -45,6 +47,7 @@ export default function StockPage() {
   const [ascending, setAscending] = useState(true);
   const [page, setPage] = useState(1);
   const [loading, setLoading] = useState(true);
+  const [showInventorySheet, setShowInventorySheet] = useState(false);
   const [error, setError] = useState("");
   const mountedRef = useRef(true);
   const loadVersion = useRef(0);
@@ -54,6 +57,7 @@ export default function StockPage() {
     if (!selectedBaseId) { setLoading(false); return; }
     if (mountedRef.current) { setLoading(true); setError(""); }
     setMaterials([]);
+    setInventoryMaterials([]);
     setBalances({});
     setVariantBalances({});
     setLotsByMaterial({});
@@ -62,7 +66,7 @@ export default function StockPage() {
       const supabase = createClient();
       const lotQuery = supabase.from("material_lots").select("id,base_id,material_id,variant_id,lot_number,received_quantity,available_quantity,entry_date,ca_number,ca_expires_at,test_number,test_performed_at,test_expires_at,test_report_number,unit_cost").eq("base_id", selectedBaseId);
       const [{ data, error: materialError }, { data: lots, error: lotError }, { data: variants, error: variantError }, { data: inTransit, error: transferError }] = await Promise.all([
-        supabase.from("materials").select("id,internal_code,name,type,unit,minimum_stock,location,status,ca_required,test_required,report_required").eq("status", "active").order("name"),
+        supabase.from("materials").select("id,internal_code,name,type,unit,minimum_stock,location,status,ca_required,test_required,report_required").is("merged_into_material_id", null).order("name"),
         lotQuery,
         supabase.from("material_variants").select("id,material_id,name,size,active").eq("active", true).order("size"),
         supabase.rpc("get_pending_stock_transfer_quantities", { p_base_id: selectedBaseId }),
@@ -78,8 +82,11 @@ export default function StockPage() {
         if (!mountedRef.current || version !== loadVersion.current) return;
         setCaCertificates((certificates ?? []).reduce<Record<string, CaCertificate>>((result, certificate) => { result[certificate.ca_number] = certificate as CaCertificate; return result; }, {}));
       }
+      const materialRows = (data ?? []) as StockMaterial[];
+      const variantRows = (variants ?? []) as StockVariant[];
       setLotsByMaterial(lotRows.reduce<Record<string, StockLot[]>>((result, lot) => { result[lot.material_id] = [...(result[lot.material_id] ?? []), lot]; return result; }, {}));
-      setMaterials((data ?? []) as StockMaterial[]);
+      setInventoryMaterials(materialRows);
+      setMaterials(materialRows.filter((item) => item.status === "active"));
       setBalances(lotRows.reduce<Record<string, StockBalance>>((result, lot) => {
         const totalQuantity = Math.max(Number(lot.available_quantity), Number(lot.received_quantity) - (inTransitByLot[lot.id] ?? 0));
         const availableQuantity = Number(lot.available_quantity);
@@ -92,9 +99,9 @@ export default function StockPage() {
         };
         return result;
       }, {}));
-      const variantMap = (variants ?? []).reduce<Record<string, VariantBalance>>((result, variant) => { result[variant.id] = { id: variant.id, label: variant.size || variant.name, totalQuantity: 0, availableQuantity: 0 }; return result; }, {});
+      const variantMap = variantRows.reduce<Record<string, VariantBalance>>((result, variant) => { result[variant.id] = { id: variant.id, label: variant.size || variant.name, totalQuantity: 0, availableQuantity: 0 }; return result; }, {});
       lotRows.forEach((lot) => { if (lot.variant_id && variantMap[lot.variant_id]) { variantMap[lot.variant_id].totalQuantity += Math.max(Number(lot.available_quantity), Number(lot.received_quantity) - (inTransitByLot[lot.id] ?? 0)); variantMap[lot.variant_id].availableQuantity += Number(lot.available_quantity); } });
-      setVariantBalances((variants ?? []).reduce<Record<string, VariantBalance[]>>((result, variant) => { result[variant.material_id] = [...(result[variant.material_id] ?? []), variantMap[variant.id]]; return result; }, {}));
+      setVariantBalances(variantRows.reduce<Record<string, VariantBalance[]>>((result, variant) => { result[variant.material_id] = [...(result[variant.material_id] ?? []), variantMap[variant.id]]; return result; }, {}));
     } catch (caught) {
       if (mountedRef.current && version === loadVersion.current) setError(friendlyError(caught, "Não foi possível carregar o estoque."));
     } finally {
@@ -131,9 +138,26 @@ export default function StockPage() {
   const normalCount = materials.filter((item) => stockSituation(balances[item.id]?.availableQuantity ?? 0, Number(item.minimum_stock)) === "normal").length;
   const lowCount = materials.filter((item) => stockSituation(balances[item.id]?.availableQuantity ?? 0, Number(item.minimum_stock)) === "low").length;
   const emptyCount = materials.filter((item) => stockSituation(balances[item.id]?.availableQuantity ?? 0, Number(item.minimum_stock)) === "empty").length;
+  const inventoryCountRows = useMemo(() => inventoryMaterials.map((material) => ({
+    key: material.id,
+    material,
+    systemQuantity: balances[material.id]?.availableQuantity ?? 0,
+  })).sort((a, b) => a.material.name.localeCompare(b.material.name, "pt-BR")), [inventoryMaterials, balances]);
+
+  function closeInventorySheet() {
+    setShowInventorySheet(false);
+    document.body.classList.remove("printing-inventory-count");
+  }
+
+  function printInventorySheet() {
+    document.body.classList.add("printing-inventory-count");
+    const cleanup = () => document.body.classList.remove("printing-inventory-count");
+    window.addEventListener("afterprint", cleanup, { once: true });
+    window.requestAnimationFrame(() => window.print());
+  }
 
   return <main className="module-shell">
-    <header className="module-header"><div><p className="eyebrow">CONTROLE OPERACIONAL</p><h1>Estoque</h1><p className="module-subtitle">Acompanhe saldos consolidados por material, lote e variação.</p></div><Link className="primary-button" href="/entries">Registrar entrada</Link></header>
+    <header className="module-header"><div><p className="eyebrow">CONTROLE OPERACIONAL</p><h1>Estoque</h1><p className="module-subtitle">Acompanhe saldos consolidados por material, lote e variação.</p></div><div className="stock-header-actions"><button className="secondary-button" type="button" onClick={() => setShowInventorySheet(true)} disabled={loading || !selectedBaseId || Boolean(error || basesError)}><ClipboardList size={16} /> Lista para contagem</button><Link className="primary-button" href="/entries">Registrar entrada</Link></div></header>
     {(error || basesError) && <FeedbackMessage onRetry={retryLoad}>{error || basesError}</FeedbackMessage>}
     <section className="module-toolbar"><div className="module-search"><Search size={17} /><input aria-label="Buscar material ou código" value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Buscar material ou código" /></div><BaseSelect bases={accessibleBases} value={selectedBaseId} onChange={chooseBase} /><select aria-label="Filtrar estoque por situação" value={filter} onChange={(event) => setFilter(event.target.value)}><option value="all">Todas as situações</option><option value="normal">Normal</option><option value="low">Estoque baixo</option><option value="empty">Sem estoque</option></select></section>
     {!loading && <section className="module-summary"><div><strong>{materials.length}</strong><span>materiais</span></div><div><strong>{normalCount}</strong><span>estoque normal</span></div><div><strong>{lowCount}</strong><span>estoque baixo</span></div><div><strong>{emptyCount}</strong><span>sem estoque</span></div></section>}
@@ -164,5 +188,25 @@ export default function StockPage() {
       {rows.length > pageSize && <nav className="pagination-controls" aria-label="Paginação"><button className="secondary-button" onClick={() => setPage((current) => Math.max(1, current - 1))} disabled={page === 1}>Anterior</button><span aria-live="polite">Mostrando {(page - 1) * pageSize + 1}–{Math.min(page * pageSize, rows.length)} de {rows.length} · Página {page} de {pageCount}</span><button className="secondary-button" onClick={() => setPage((current) => Math.min(pageCount, current + 1))} disabled={page === pageCount}>Próxima</button></nav>}
       {!rows.length && <div className="empty-state"><Boxes size={27} /><strong>Nenhum material encontrado</strong><span>Cadastre materiais ou ajuste os filtros.</span></div>}</div>}
     </section>
+    {showInventorySheet && <div className="modal-backdrop inventory-count-dialog" onMouseDown={(event) => { if (event.target === event.currentTarget) closeInventorySheet(); }}>
+      <section className="modal-card inventory-count-dialog-card" role="dialog" aria-modal="true" aria-labelledby="inventory-count-title">
+        <div className="inventory-count-controls">
+          <div className="modal-header"><div><p className="eyebrow">INVENTÁRIO FÍSICO</p><h2 id="inventory-count-title">Lista de contagem de materiais</h2><p>Confira o saldo do sistema e registre a contagem física no papel.</p></div><button className="close-modal" type="button" aria-label="Fechar lista de contagem" onClick={closeInventorySheet}><X size={18} /></button></div>
+          <div className="inventory-count-actions"><span>{inventoryCountRows.length} linhas · saldo agrupado por material, incluindo materiais inativos e variações</span><div><button className="secondary-button" type="button" onClick={closeInventorySheet}>Fechar</button><button className="primary-button" type="button" onClick={printInventorySheet}><Printer size={16} /> Imprimir lista</button></div></div>
+        </div>
+        <div className="inventory-count-print">
+          <header className="inventory-print-header"><div><span>CONTROLE DE ESTOQUE</span><h1>LISTA DE CONTAGEM DE MATERIAIS</h1></div><div className="inventory-print-meta"><strong>Base: {accessibleBases.find((base) => base.id === selectedBaseId)?.name ?? "Base selecionada"}</strong><span>Data: {new Date().toLocaleDateString("pt-BR")}</span></div></header>
+          <div className="inventory-print-info"><span>Conferente: __________________________________________</span><span>Período / observação: __________________________________________</span></div>
+          <table className="inventory-count-table"><thead><tr><th>Material</th><th>Tipo</th><th>Saldo no sistema</th><th>Contagem física</th><th>Diferença</th><th>Observações</th></tr></thead><tbody>
+            {inventoryCountRows.map((row) => <tr key={row.key}>
+              <td><strong>{row.material.name}{row.material.status === "inactive" ? " · INATIVO" : ""}</strong></td>
+              <td>{row.material.type}</td><td>{row.systemQuantity} {row.material.unit}</td><td><span className="inventory-write-line" /></td><td><span className="inventory-write-line" /></td><td><span className="inventory-write-line" /></td>
+            </tr>)}
+            {!inventoryCountRows.length && <tr><td colSpan={6}>Nenhum material cadastrado para listar.</td></tr>}
+          </tbody></table>
+          <footer className="inventory-print-footer"><span>Total de linhas: {inventoryCountRows.length}</span><span>Assinatura do conferente: ______________________________________________</span></footer>
+        </div>
+      </section>
+    </div>}
   </main>;
 }
