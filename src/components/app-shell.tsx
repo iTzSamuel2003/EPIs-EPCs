@@ -100,7 +100,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
     setMobileMenu(false);
   }, [pathname]);
   useEffect(() => {
-    if (publicRoute || !allowedPaths || pathname === "/login" || organizationAccess === "blocked") return;
+    if (publicRoute || !allowedPaths || pathname === "/login" || organizationAccess !== "ready") return;
     const protectedPath = pathname === "/portal-qr" ? "/settings" : pathname;
     const tstEmployeeRoute = currentUserRole === "tst" && protectedPath.startsWith("/employees")
       ? protectedPath === "/employees" || /^\/employees\/[^/]+\/profile$/.test(protectedPath)
@@ -169,12 +169,32 @@ export function AppShell({ children }: { children: React.ReactNode }) {
         return;
       }
       setIsPlatformAdmin(platformAdmin === true);
-      const { data: profile, error: profileError } = await supabase.from("profiles").select("full_name,role,organization_id").eq("id", data.user.id).maybeSingle();
+      const { data: initialProfile, error: profileError } = await supabase.from("profiles").select("full_name,role,organization_id").eq("id", data.user.id).maybeSingle();
       if (cancelled) return;
       if (profileError) {
         setOrganizationAccessError("Não foi possível verificar o vínculo desta conta. Atualize a página ou tente novamente.");
         setOrganizationAccess("error");
         return;
+      }
+      let profile = initialProfile;
+      if (!profile?.organization_id && platformAdmin !== true) {
+        const metadata = data.user.user_metadata as Record<string, unknown> | undefined;
+        const fullNameCandidate = [profile?.full_name, metadata?.full_name].find((candidate) => typeof candidate === "string" && candidate.trim());
+        const fullName = typeof fullNameCandidate === "string" ? fullNameCandidate.trim() : "";
+        if (data.user.email_confirmed_at && fullName) {
+          const { error: inviteAcceptanceError } = await supabase.rpc("accept_my_pending_organization_invitation", { p_full_name: fullName });
+          if (cancelled) return;
+          if (!inviteAcceptanceError) {
+            const { data: acceptedProfile, error: acceptedProfileError } = await supabase.from("profiles").select("full_name,role,organization_id").eq("id", data.user.id).maybeSingle();
+            if (cancelled) return;
+            if (acceptedProfileError) {
+              setOrganizationAccessError("O convite foi aceito, mas não foi possível carregar o perfil. Atualize a página.");
+              setOrganizationAccess("error");
+              return;
+            }
+            profile = acceptedProfile;
+          }
+        }
       }
       if (!profile?.organization_id) {
         const metadata = data.user.user_metadata as Record<string, unknown> | undefined;
