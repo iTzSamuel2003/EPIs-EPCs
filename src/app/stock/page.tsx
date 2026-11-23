@@ -138,11 +138,24 @@ export default function StockPage() {
   const normalCount = materials.filter((item) => stockSituation(balances[item.id]?.availableQuantity ?? 0, Number(item.minimum_stock)) === "normal").length;
   const lowCount = materials.filter((item) => stockSituation(balances[item.id]?.availableQuantity ?? 0, Number(item.minimum_stock)) === "low").length;
   const emptyCount = materials.filter((item) => stockSituation(balances[item.id]?.availableQuantity ?? 0, Number(item.minimum_stock)) === "empty").length;
-  const inventoryCountRows = useMemo(() => inventoryMaterials.map((material) => ({
-    key: material.id,
-    material,
-    systemQuantity: balances[material.id]?.availableQuantity ?? 0,
-  })).sort((a, b) => a.material.name.localeCompare(b.material.name, "pt-BR")), [inventoryMaterials, balances]);
+  const inventoryCountRows = useMemo(() => {
+    const grouped = new Map<string, { material: StockMaterial; systemQuantity: number }>();
+    inventoryMaterials.forEach((material) => {
+      const normalizedName = normalize(material.name).replace(/\s+/g, " ");
+      const normalizedUnit = normalize(material.unit).replace(/\s+/g, " ");
+      const key = `${normalizedName}|${material.type}|${normalizedUnit}`;
+      const existing = grouped.get(key);
+      if (existing) {
+        existing.systemQuantity += balances[material.id]?.availableQuantity ?? 0;
+        if (existing.material.status === "inactive" && material.status === "active") existing.material = material;
+        return;
+      }
+      grouped.set(key, { material, systemQuantity: balances[material.id]?.availableQuantity ?? 0 });
+    });
+    return [...grouped.entries()]
+      .map(([key, row]) => ({ key, ...row }))
+      .sort((a, b) => a.material.name.localeCompare(b.material.name, "pt-BR"));
+  }, [inventoryMaterials, balances]);
 
   function closeInventorySheet() {
     setShowInventorySheet(false);
