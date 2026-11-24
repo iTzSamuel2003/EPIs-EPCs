@@ -17,7 +17,7 @@ const roleLabel: Record<Role, string> = { admin: "Administrador", rh: "RH", tst:
 const roleDescription: Record<ManagedRole, string> = { rh: "Rotinas de pessoal, entregas e acompanhamento dos colaboradores.", tst: "Materiais, estoque, ensaios e rotinas de segurança.", user: "Acesso básico ao painel e à central de ajuda." };
 const pageGroups = [
   { label: "Visão geral", paths: ["/"] },
-  { label: "Cadastros", paths: ["/materials", "/employees", "/teams", "/units", "/variants", "/function-templates"] },
+  { label: "Cadastros", paths: ["/bases", "/materials", "/employees", "/teams", "/units", "/variants", "/function-templates"] },
   { label: "Operações", paths: ["/entries", "/deliveries", "/returns", "/discounts", "/requests", "/stock", "/validities"] },
   { label: "Recursos Humanos", paths: ["/attendance", "/employee-history", "/asos"] },
   { label: "Conformidade", paths: ["/ca", "/contract-requirements", "/tests", "/training-compliance", "/compliance"] },
